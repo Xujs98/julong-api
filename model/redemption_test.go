@@ -179,3 +179,120 @@ func TestRedeemConcurrentSingleSuccess(t *testing.T) {
 	require.NoError(t, DB.First(&user, "id = ?", userId).Error)
 	assert.Equal(t, 300, user.Quota, "quota must be credited exactly once")
 }
+
+func setupAgentRedeemFixture(t *testing.T, creatorRole int, creatorIsAgent bool) (agentId int, key string) {
+	t.Helper()
+	require.NoError(t, DB.AutoMigrate(&User{}, &Redemption{}))
+	require.NoError(t, DB.Session(&gorm.Session{AllowGlobalUpdate: true}).Unscoped().Delete(&Redemption{}).Error)
+	require.NoError(t, DB.Exec("DELETE FROM users").Error)
+	require.NoError(t, DB.Exec("DELETE FROM logs").Error)
+	t.Cleanup(func() {
+		require.NoError(t, DB.Session(&gorm.Session{AllowGlobalUpdate: true}).Unscoped().Delete(&Redemption{}).Error)
+		DB.Exec("DELETE FROM users")
+		DB.Exec("DELETE FROM logs")
+	})
+
+	creator := &User{
+		Username: "creator",
+		Password: "password",
+		Status:   common.UserStatusEnabled,
+		Role:     creatorRole,
+		IsAgent:  creatorIsAgent,
+		AffCode:  "creator-aff",
+	}
+	require.NoError(t, DB.Create(creator).Error)
+
+	agent := &User{
+		Username: "redeem-agent",
+		Password: "password",
+		Status:   common.UserStatusEnabled,
+		Role:     common.RoleCommonUser,
+		IsAgent:  true,
+		Quota:    0,
+		AffCode:  "agent-aff",
+	}
+	require.NoError(t, DB.Create(agent).Error)
+
+	key = "20000000000000000000000000000001"
+	redemption := &Redemption{
+		UserId:      creator.Id,
+		Name:        "agent-redeem-test",
+		Key:         key,
+		Status:      common.RedemptionCodeStatusEnabled,
+		Quota:       700,
+		CreatedTime: common.GetTimestamp(),
+	}
+	require.NoError(t, DB.Create(redemption).Error)
+	return agent.Id, key
+}
+
+func TestAgentCanRedeemAdminGeneratedCode(t *testing.T) {
+	agentId, key := setupAgentRedeemFixture(t, common.RoleAdminUser, false)
+
+	quota, err := Redeem(key, agentId)
+	require.NoError(t, err)
+	assert.Equal(t, 700, quota)
+
+	var agent User
+	require.NoError(t, DB.First(&agent, "id = ?", agentId).Error)
+	assert.Equal(t, 700, agent.Quota)
+}
+
+func TestAgentCannotRedeemAgentGeneratedCode(t *testing.T) {
+	agentId, key := setupAgentRedeemFixture(t, common.RoleCommonUser, true)
+
+	_, err := Redeem(key, agentId)
+	require.Error(t, err)
+
+	var agent User
+	require.NoError(t, DB.First(&agent, "id = ?", agentId).Error)
+	assert.Equal(t, 0, agent.Quota)
+
+	var redemption Redemption
+	require.NoError(t, DB.First(&redemption, "key = ?", key).Error)
+	assert.Equal(t, common.RedemptionCodeStatusEnabled, redemption.Status)
+	assert.Equal(t, 0, redemption.UsedUserId)
+}
+
+func TestAgentCannotRedeemSelfGeneratedCode(t *testing.T) {
+	require.NoError(t, DB.AutoMigrate(&User{}, &Redemption{}))
+	require.NoError(t, DB.Session(&gorm.Session{AllowGlobalUpdate: true}).Unscoped().Delete(&Redemption{}).Error)
+	require.NoError(t, DB.Exec("DELETE FROM users").Error)
+	require.NoError(t, DB.Exec("DELETE FROM logs").Error)
+	t.Cleanup(func() {
+		require.NoError(t, DB.Session(&gorm.Session{AllowGlobalUpdate: true}).Unscoped().Delete(&Redemption{}).Error)
+		DB.Exec("DELETE FROM users")
+		DB.Exec("DELETE FROM logs")
+	})
+
+	agent := &User{
+		Username: "self-agent",
+		Password: "password",
+		Status:   common.UserStatusEnabled,
+		Role:     common.RoleCommonUser,
+		IsAgent:  true,
+		Quota:    0,
+		AffCode:  "self-agent-aff",
+	}
+	require.NoError(t, DB.Create(agent).Error)
+
+	key := "30000000000000000000000000000001"
+	redemption := &Redemption{
+		UserId:      agent.Id,
+		Name:        "self-generated",
+		Key:         key,
+		Status:      common.RedemptionCodeStatusEnabled,
+		Quota:       900,
+		CreatedTime: common.GetTimestamp(),
+	}
+	require.NoError(t, DB.Create(redemption).Error)
+
+	_, err := Redeem(key, agent.Id)
+	require.Error(t, err)
+
+	require.NoError(t, DB.First(agent, "id = ?", agent.Id).Error)
+	assert.Equal(t, 0, agent.Quota)
+	require.NoError(t, DB.First(redemption, "id = ?", redemption.Id).Error)
+	assert.Equal(t, common.RedemptionCodeStatusEnabled, redemption.Status)
+	assert.Equal(t, 0, redemption.UsedUserId)
+}

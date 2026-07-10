@@ -12,18 +12,56 @@ import (
 )
 
 type Redemption struct {
-	Id           int            `json:"id"`
-	UserId       int            `json:"user_id"`
-	Key          string         `json:"key" gorm:"type:char(32);uniqueIndex"`
-	Status       int            `json:"status" gorm:"default:1"`
-	Name         string         `json:"name" gorm:"index"`
-	Quota        int            `json:"quota" gorm:"default:100"`
-	CreatedTime  int64          `json:"created_time" gorm:"bigint"`
-	RedeemedTime int64          `json:"redeemed_time" gorm:"bigint"`
-	Count        int            `json:"count" gorm:"-:all"` // only for api request
-	UsedUserId   int            `json:"used_user_id"`
-	DeletedAt    gorm.DeletedAt `gorm:"index"`
-	ExpiredTime  int64          `json:"expired_time" gorm:"bigint"` // 过期时间，0 表示不过期
+	Id                 int            `json:"id"`
+	UserId             int            `json:"user_id"`
+	Key                string         `json:"key" gorm:"type:char(32);uniqueIndex"`
+	Status             int            `json:"status" gorm:"default:1"`
+	Name               string         `json:"name" gorm:"index"`
+	Quota              int            `json:"quota" gorm:"default:100"`
+	CreatedTime        int64          `json:"created_time" gorm:"bigint"`
+	RedeemedTime       int64          `json:"redeemed_time" gorm:"bigint"`
+	Count              int            `json:"count" gorm:"-:all"` // only for api request
+	UsedUserId         int            `json:"used_user_id"`
+	DeletedAt          gorm.DeletedAt `gorm:"index"`
+	ExpiredTime        int64          `json:"expired_time" gorm:"bigint"` // 过期时间，0 表示不过期
+	CreatorUsername    string         `json:"creator_username,omitempty" gorm:"-:all"`
+	CreatorDisplayName string         `json:"creator_display_name,omitempty" gorm:"-:all"`
+	CreatorRole        int            `json:"creator_role,omitempty" gorm:"-:all"`
+}
+
+func populateRedemptionCreators(redemptions []*Redemption) {
+	userIds := make([]int, 0)
+	seen := make(map[int]bool)
+	for _, redemption := range redemptions {
+		if redemption == nil || redemption.UserId <= 0 || seen[redemption.UserId] {
+			continue
+		}
+		seen[redemption.UserId] = true
+		userIds = append(userIds, redemption.UserId)
+	}
+	if len(userIds) == 0 {
+		return
+	}
+
+	var users []User
+	if err := DB.Select("id", "username", "display_name", "role").Where("id IN ?", userIds).Find(&users).Error; err != nil {
+		common.SysError("failed to populate redemption creators: " + err.Error())
+		return
+	}
+	userMap := make(map[int]User, len(users))
+	for _, user := range users {
+		userMap[user.Id] = user
+	}
+	for _, redemption := range redemptions {
+		if redemption == nil {
+			continue
+		}
+		if user, ok := userMap[redemption.UserId]; ok {
+			redemption.CreatorUsername = user.Username
+			redemption.CreatorDisplayName = user.DisplayName
+			redemption.CreatorRole = user.Role
+		}
+	}
 }
 
 func GetAllRedemptions(startIdx int, num int) (redemptions []*Redemption, total int64, err error) {
@@ -58,11 +96,11 @@ func GetRedemptionsByUser(userId int, startIdx int, num int) (redemptions []*Red
 		tx.Rollback()
 		return nil, 0, err
 	}
-
 	// 提交事务
 	if err = tx.Commit().Error; err != nil {
 		return nil, 0, err
 	}
+	populateRedemptionCreators(redemptions)
 
 	return redemptions, total, nil
 }
@@ -130,10 +168,10 @@ func SearchRedemptionsByUser(userId int, keyword string, status string, startIdx
 		tx.Rollback()
 		return nil, 0, err
 	}
-
 	if err = tx.Commit().Error; err != nil {
 		return nil, 0, err
 	}
+	populateRedemptionCreators(redemptions)
 
 	return redemptions, total, nil
 }
@@ -145,6 +183,9 @@ func GetRedemptionById(id int) (*Redemption, error) {
 	redemption := Redemption{Id: id}
 	var err error = nil
 	err = DB.First(&redemption, "id = ?", id).Error
+	if err == nil {
+		populateRedemptionCreators([]*Redemption{&redemption})
+	}
 	return &redemption, err
 }
 
@@ -172,6 +213,22 @@ func Redeem(key string, userId int) (quota int, err error) {
 		}
 		if redemption.ExpiredTime != 0 && redemption.ExpiredTime < common.GetTimestamp() {
 			return errors.New("该兑换码已过期")
+		}
+		var redeemer User
+		if err := tx.Select("id", "is_agent").First(&redeemer, "id = ?", userId).Error; err != nil {
+			return err
+		}
+		if redeemer.IsAgent {
+			var creator User
+			if redemption.UserId <= 0 {
+				return errors.New("代理用户只能使用管理员或 root 生成的兑换码")
+			}
+			if err := tx.Select("id", "role").First(&creator, "id = ?", redemption.UserId).Error; err != nil {
+				return err
+			}
+			if creator.Role < common.RoleAdminUser {
+				return errors.New("代理用户只能使用管理员或 root 生成的兑换码")
+			}
 		}
 		// Compare-and-swap on status: only the transaction that flips
 		// enabled -> used may credit quota, so a concurrent redeem of the

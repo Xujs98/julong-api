@@ -171,6 +171,54 @@ export function useRedemptionsColumns(): ColumnDef<Redemption>[] {
       size: 120,
     },
     {
+      accessorKey: 'creator_username',
+      header: t('Created By'),
+      meta: { mobileHidden: true },
+      cell: ({ row }) => {
+        const redemption = row.original
+        const username = redemption.creator_username
+        const displayName = redemption.creator_display_name
+        const label = displayName || username
+
+        if (!label) {
+          return (
+            <StatusBadge
+              label={t('User {{id}}', { id: redemption.user_id })}
+              variant='neutral'
+              copyable={false}
+              className='-ml-1.5'
+            />
+          )
+        }
+
+        return (
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <StatusBadge
+                  label={label}
+                  variant='neutral'
+                  copyable={false}
+                  className='cursor-help'
+                />
+              }
+            ></TooltipTrigger>
+            <TooltipContent>
+              <div className='space-y-1 text-xs'>
+                <div>
+                  {t('User ID:')} {redemption.user_id}
+                </div>
+                <div>
+                  {t('Username:')} {username}
+                </div>
+              </div>
+            </TooltipContent>
+          </Tooltip>
+        )
+      },
+      size: 150,
+    },
+    {
       accessorKey: 'created_time',
       header: t('Created'),
       meta: { mobileHidden: true },

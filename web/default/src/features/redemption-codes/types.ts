@@ -33,6 +33,9 @@ export const redemptionSchema = z.object({
   redeemed_time: z.number(),
   expired_time: z.number(), // 0 for never expires
   used_user_id: z.number(),
+  creator_username: z.string().optional(),
+  creator_display_name: z.string().optional(),
+  creator_role: z.number().optional(),
 })
 
 export type Redemption = z.infer<typeof redemptionSchema>

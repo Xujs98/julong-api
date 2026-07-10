@@ -125,6 +125,31 @@ export const getRedemptionsColumns = ({
       },
     },
     {
+      title: t('生成者'),
+      dataIndex: 'creator_username',
+      render: (text, record) => {
+        const name = record.creator_display_name || text;
+        if (!name) {
+          return (
+            <Tag color='grey' shape='circle'>
+              {record.user_id ? `${t('用户ID')} ${record.user_id}` : t('无')}
+            </Tag>
+          );
+        }
+        return (
+          <Popover
+            content={`${t('用户ID')}: ${record.user_id}`}
+            style={{ padding: 12 }}
+            position='top'
+          >
+            <Tag color='blue' shape='circle'>
+              {name}
+            </Tag>
+          </Popover>
+        );
+      },
+    },
+    {
       title: t('过期时间'),
       dataIndex: 'expired_time',
       render: (text) => {
