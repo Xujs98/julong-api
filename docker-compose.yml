@@ -16,10 +16,7 @@ name: julong-api
 
 services:
   julong-api:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: julong-api:local
+    image: xujs98/julong-api:latest
     container_name: julong-api
     restart: always
     command: --log-dir /app/logs
