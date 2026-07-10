@@ -16,7 +16,7 @@ name: julong-api
 
 services:
   julong-api:
-    image: xujs98/julong-api:latest
+    image: qq1371446705/julong-api:latest
     container_name: julong-api
     restart: always
     command: --log-dir /app/logs
