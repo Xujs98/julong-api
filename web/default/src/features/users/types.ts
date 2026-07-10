@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { z } from 'zod'
 
 import type { AdminPermissionMatrix } from '@/lib/admin-permissions'
+import type { Redemption } from '@/features/redemption-codes/types'
 
 // ============================================================================
 // User Schema & Types
@@ -51,6 +52,11 @@ export const userSchema = z.object({
   aff_quota: z.number().optional(),
   aff_history_quota: z.number().optional(),
   inviter_id: z.number().optional(),
+  is_agent: z.boolean().optional(),
+  agent_discount: z.number().optional(),
+  agent_topup_link: z.string().optional(),
+  agent_id: z.number().optional(),
+  agent_username: z.string().optional(),
   linux_do_id: z.string().optional(),
   status: userStatusSchema,
   role: userRoleSchema,
@@ -111,6 +117,9 @@ export interface UserFormData {
   quota?: number // Only used when updating user
   group?: string // Only used when updating user
   remark?: string // Only used when updating user
+  is_agent?: boolean
+  agent_discount?: number
+  agent_topup_link?: string
   admin_permissions?: AdminPermissionMatrix
 }
 
@@ -135,4 +144,10 @@ export interface ManageUserQuotaPayload {
 // Dialog Types
 // ============================================================================
 
-export type UsersDialogType = 'create' | 'update' | 'delete'
+export interface AgentDetailData {
+  agent: User
+  users: User[]
+  redemptions: Redemption[]
+}
+
+export type UsersDialogType = 'create' | 'update' | 'delete' | 'agent-detail'

@@ -42,6 +42,7 @@ import {
 } from '../constants'
 import type { User } from '../types'
 import { DataTableRowActions } from './data-table-row-actions'
+import { useUsers } from './users-provider'
 
 function getQuotaProgressColor(percentage: number): string {
   if (percentage <= 10) return '[&_[data-slot=progress-indicator]]:bg-rose-500'
@@ -51,6 +52,7 @@ function getQuotaProgressColor(percentage: number): string {
 
 export function useUsersColumns(): ColumnDef<User>[] {
   const { t } = useTranslation()
+  const { setOpen, setCurrentRow } = useUsers()
   return [
     {
       id: 'select',
@@ -127,6 +129,38 @@ export function useUsersColumns(): ColumnDef<User>[] {
       enableHiding: false,
       size: 220,
       meta: { mobileTitle: true },
+    },
+    {
+      id: 'agent',
+      header: t('Agent'),
+      cell: ({ row }) => {
+        const user = row.original
+        return (
+          <div className='flex flex-col gap-1'>
+            {user.is_agent ? (
+              <button
+                type='button'
+                className='text-success w-fit min-w-[2.5rem] cursor-pointer whitespace-nowrap text-left text-sm font-medium'
+                onClick={() => {
+                  setCurrentRow(user)
+                  setOpen('agent-detail')
+                }}
+              >
+                {t('Agent')}
+              </button>
+            ) : (
+              <span className='text-muted-foreground text-xs'>-</span>
+            )}
+            {user.agent_username && (
+              <span className='text-muted-foreground text-xs'>
+                {t('Belongs to')}: {user.agent_username}
+              </span>
+            )}
+          </div>
+        )
+      },
+      enableSorting: false,
+      size: 140,
     },
     {
       accessorKey: 'status',

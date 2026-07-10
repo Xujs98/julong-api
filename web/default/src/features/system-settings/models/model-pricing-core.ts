@@ -33,6 +33,7 @@ export const createModelPricingSchema = (t: (key: string) => string) =>
     imageRatio: z.string().optional(),
     audioRatio: z.string().optional(),
     audioCompletionRatio: z.string().optional(),
+    allowSubscriptionDeduction: z.boolean().optional(),
   })
 
 export type ModelPricingFormValues = z.infer<
@@ -59,6 +60,7 @@ export type ModelRatioData = {
   imageRatio?: string
   audioRatio?: string
   audioCompletionRatio?: string
+  allowSubscriptionDeduction?: boolean
   billingMode?: PricingMode
   billingExpr?: string
   requestRuleExpr?: string
@@ -236,6 +238,11 @@ export function buildPreviewRows(
         key: 'price',
         label: 'ModelPrice',
         value: values.price || t('Empty'),
+      },
+      {
+        key: 'allowSubscriptionDeduction',
+        label: t('Allow subscription deduction'),
+        value: values.allowSubscriptionDeduction ? t('Enabled') : t('Disabled'),
       },
     ]
   }

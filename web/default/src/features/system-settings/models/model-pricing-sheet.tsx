@@ -48,6 +48,7 @@ import {
   FormMessage,
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
+import { Switch } from '@/components/ui/switch'
 import {
   InputGroup,
   InputGroupAddon,
@@ -62,6 +63,8 @@ import {
 } from '@/components/ui/sheet'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { cn } from '@/lib/utils'
+
+import { safeJsonParse } from '../utils/json-parser'
 
 import {
   EMPTY_LANE_ENABLED,
@@ -89,6 +92,7 @@ type ModelPricingSheetProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   editData?: ModelRatioData | null
+  perRequestSubscriptionAllowed?: string
   onSave?: () => void | Promise<void>
   isSaving?: boolean
 }
@@ -108,7 +112,7 @@ export const ModelPricingSheet = forwardRef<
   ModelPricingEditorPanelHandle,
   ModelPricingSheetProps
 >(function ModelPricingSheet(
-  { open, onOpenChange, editData, onSave, isSaving },
+  { open, onOpenChange, editData, perRequestSubscriptionAllowed, onSave, isSaving },
   ref
 ) {
   const { t } = useTranslation()
@@ -128,6 +132,7 @@ export const ModelPricingSheet = forwardRef<
         <ModelPricingEditorPanel
           ref={ref}
           editData={editData}
+          perRequestSubscriptionAllowed={perRequestSubscriptionAllowed}
           onSave={onSave}
           isSaving={isSaving}
           className='h-full rounded-none border-0'
@@ -141,7 +146,7 @@ export const ModelPricingEditorPanel = forwardRef<
   ModelPricingEditorPanelHandle,
   ModelPricingEditorPanelProps
 >(function ModelPricingEditorPanel(
-  { editData, className, onSave, isSaving },
+  { editData, perRequestSubscriptionAllowed, className, onSave, isSaving },
   ref
 ) {
   const { t } = useTranslation()
@@ -170,6 +175,7 @@ export const ModelPricingEditorPanel = forwardRef<
       imageRatio: '',
       audioRatio: '',
       audioCompletionRatio: '',
+      allowSubscriptionDeduction: false,
     },
   })
 
@@ -177,6 +183,10 @@ export const ModelPricingEditorPanel = forwardRef<
     const nextLaneState = createInitialLaneState(editData)
 
     if (editData) {
+      const allowedMap = safeJsonParse<Record<string, boolean>>(
+        perRequestSubscriptionAllowed,
+        { fallback: {}, silent: true }
+      )
       form.reset({
         name: editData.name,
         price: editData.price || '',
@@ -187,6 +197,7 @@ export const ModelPricingEditorPanel = forwardRef<
         imageRatio: editData.imageRatio || '',
         audioRatio: editData.audioRatio || '',
         audioCompletionRatio: editData.audioCompletionRatio || '',
+        allowSubscriptionDeduction: Boolean(allowedMap[editData.name]),
       })
       setPricingMode(
         editData.billingMode === 'tiered_expr'
@@ -208,6 +219,7 @@ export const ModelPricingEditorPanel = forwardRef<
         imageRatio: '',
         audioRatio: '',
         audioCompletionRatio: '',
+        allowSubscriptionDeduction: false,
       })
       setPricingMode('per-token')
       setBillingExpr('')
@@ -218,7 +230,7 @@ export const ModelPricingEditorPanel = forwardRef<
     setLanePrices(nextLaneState.prices)
     setLaneEnabled(nextLaneState.enabled)
     setEditorReloadToken((token) => token + 1)
-  }, [editData, form])
+  }, [editData, form, perRequestSubscriptionAllowed])
 
   const setFormValue = (field: keyof ModelPricingFormValues, value: string) => {
     form.setValue(field, value, {
@@ -451,6 +463,9 @@ export const ModelPricingEditorPanel = forwardRef<
         imageRatio: values.imageRatio || '',
         audioRatio: values.audioRatio || '',
         audioCompletionRatio: values.audioCompletionRatio || '',
+        allowSubscriptionDeduction: Boolean(
+          values.allowSubscriptionDeduction
+        ),
       }
 
       if (pricingMode === 'tiered_expr') {
@@ -602,6 +617,36 @@ export const ModelPricingEditorPanel = forwardRef<
                     <FieldGroup className='gap-5'>
                       <FormField
                         control={form.control}
+                        name='allowSubscriptionDeduction'
+                        render={({ field }) => (
+                          <FormItem className='contents'>
+                            <Field
+                              orientation='horizontal'
+                              className='rounded-lg border bg-muted/20 p-3'
+                            >
+                              <div className='min-w-0 flex-1 space-y-1'>
+                                <FieldLabel>
+                                  {t('Allow subscription deduction')}
+                                </FieldLabel>
+                                <FieldDescription>
+                                  {t(
+                                    'When enabled, subscription quota can pay for this per-request model. Otherwise wallet balance is charged.'
+                                  )}
+                                </FieldDescription>
+                              </div>
+                              <FormControl>
+                                <Switch
+                                  checked={Boolean(field.value)}
+                                  onCheckedChange={field.onChange}
+                                />
+                              </FormControl>
+                            </Field>
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
                         name='price'
                         render={({ field }) => (
                           <FormItem className='contents'>
@@ -636,6 +681,7 @@ export const ModelPricingEditorPanel = forwardRef<
                           </FormItem>
                         )}
                       />
+
                     </FieldGroup>
                   </TabsContent>
 

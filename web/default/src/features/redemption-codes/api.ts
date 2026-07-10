@@ -98,3 +98,12 @@ export async function deleteInvalidRedemptions(): Promise<ApiResponse<number>> {
   const res = await api.delete('/api/redemption/invalid')
   return res.data
 }
+
+export async function updateAgentTopUpLink(
+  agentTopUpLink: string
+): Promise<ApiResponse<{ agent_topup_link: string }>> {
+  const res = await api.put('/api/user/agent/topup-link', {
+    agent_topup_link: agentTopUpLink,
+  })
+  return res.data
+}

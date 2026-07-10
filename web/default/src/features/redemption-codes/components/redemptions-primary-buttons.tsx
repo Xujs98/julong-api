@@ -17,23 +17,38 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { Plus, Trash2 } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { ROLE } from '@/lib/roles'
+import { useAuthStore } from '@/stores/auth-store'
 
-import { deleteInvalidRedemptions } from '../api'
+import { deleteInvalidRedemptions, updateAgentTopUpLink } from '../api'
 import { ERROR_MESSAGES } from '../constants'
 import { useRedemptions } from './redemptions-provider'
 
 export function RedemptionsPrimaryButtons() {
   const { t } = useTranslation()
+  const currentUser = useAuthStore((s) => s.auth.user)
+  const setUser = useAuthStore((s) => s.auth.setUser)
+  const isAdmin = (currentUser?.role ?? 0) >= ROLE.ADMIN
+  const isAgent = currentUser?.is_agent === true
   const { setOpen, triggerRefresh } = useRedemptions()
   const [showDeleteInvalidConfirm, setShowDeleteInvalidConfirm] =
     useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [agentTopUpLink, setAgentTopUpLink] = useState(
+    currentUser?.agent_topup_link || ''
+  )
+  const [isSavingLink, setIsSavingLink] = useState(false)
+
+  useEffect(() => {
+    setAgentTopUpLink(currentUser?.agent_topup_link || '')
+  }, [currentUser?.agent_topup_link])
 
   const handleDeleteInvalid = async () => {
     setIsDeleting(true)
@@ -56,17 +71,57 @@ export function RedemptionsPrimaryButtons() {
     }
   }
 
+  const handleSaveAgentLink = async () => {
+    setIsSavingLink(true)
+    try {
+      const result = await updateAgentTopUpLink(agentTopUpLink)
+      if (result.success) {
+        if (currentUser) {
+          setUser({
+            ...currentUser,
+            agent_topup_link: result.data?.agent_topup_link || agentTopUpLink,
+          })
+        }
+        toast.success(t('Saved successfully'))
+      } else {
+        toast.error(result.message || t('Update failed'))
+      }
+    } finally {
+      setIsSavingLink(false)
+    }
+  }
+
   return (
     <>
-      <div className='flex flex-wrap gap-2'>
-        <Button
-          size='sm'
-          variant='outline'
-          onClick={() => setShowDeleteInvalidConfirm(true)}
-        >
-          <Trash2 className='text-destructive h-4 w-4' />
-          {t('Delete Invalid')}
-        </Button>
+      <div className='flex flex-wrap items-center gap-2'>
+        {isAgent && (
+          <>
+            <Input
+              className='h-8 w-[280px]'
+              value={agentTopUpLink}
+              onChange={(event) => setAgentTopUpLink(event.target.value)}
+              placeholder={t('Agent top-up link')}
+            />
+            <Button
+              size='sm'
+              variant='outline'
+              onClick={handleSaveAgentLink}
+              disabled={isSavingLink}
+            >
+              {isSavingLink ? t('Saving...') : t('Save changes')}
+            </Button>
+          </>
+        )}
+        {isAdmin && (
+          <Button
+            size='sm'
+            variant='outline'
+            onClick={() => setShowDeleteInvalidConfirm(true)}
+          >
+            <Trash2 className='text-destructive h-4 w-4' />
+            {t('Delete Invalid')}
+          </Button>
+        )}
         <Button size='sm' onClick={() => setOpen('create')}>
           <Plus className='h-4 w-4' />
           {t('Create Code')}

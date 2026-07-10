@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -23,6 +24,10 @@ import (
 
 func GetTopUpInfo(c *gin.Context) {
 	complianceConfirmed := operation_setting.IsPaymentComplianceConfirmed()
+	topUpLink := common.TopUpLink
+	if agent, err := model.GetAgentByInviteeId(c.GetInt("id")); err == nil && strings.TrimSpace(agent.AgentTopUpLink) != "" {
+		topUpLink = strings.TrimSpace(agent.AgentTopUpLink)
+	}
 
 	// 获取支付方式
 	payMethods := operation_setting.PayMethods
@@ -118,7 +123,7 @@ func GetTopUpInfo(c *gin.Context) {
 		"waffo_pancake_min_topup": setting.WaffoPancakeMinTopUp,
 		"amount_options":          operation_setting.GetPaymentSetting().AmountOptions,
 		"discount":                operation_setting.GetPaymentSetting().AmountDiscount,
-		"topup_link":              common.TopUpLink,
+		"topup_link":              topUpLink,
 	}
 	common.ApiSuccess(c, data)
 }

@@ -53,6 +53,7 @@ import {
 import { getCurrencyDisplay, getCurrencyLabel } from '@/lib/currency'
 import { formatQuota, parseQuotaFromDollars } from '@/lib/format'
 import { addTimeToDate } from '@/lib/time'
+import { useAuthStore } from '@/stores/auth-store'
 
 import { createRedemption, updateRedemption, getRedemption } from '../api'
 import { SUCCESS_MESSAGES } from '../constants'
@@ -80,6 +81,7 @@ export function RedemptionsMutateDrawer({
   const { t } = useTranslation()
   const isUpdate = !!currentRow
   const { triggerRefresh } = useRedemptions()
+  const currentUser = useAuthStore((s) => s.auth.user)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   const form = useForm<RedemptionFormValues>({
@@ -162,6 +164,13 @@ export function RedemptionsMutateDrawer({
   const quotaPlaceholder = tokensOnly
     ? t('Enter quota in tokens')
     : t('Enter quota in {{currency}}', { currency: currencyLabel })
+  const quotaValue = parseQuotaFromDollars(form.watch('quota_dollars') || 0)
+  const countValue = form.watch('count') || 1
+  const agentDiscount = currentUser?.agent_discount ?? 100
+  const agentCharge = Math.ceil((quotaValue * countValue * agentDiscount) / 100)
+  const agentBalance = currentUser?.quota ?? 0
+  const isAgentCreate = !isUpdate && currentUser?.is_agent === true
+  const agentBalanceInsufficient = isAgentCreate && agentCharge > agentBalance
 
   return (
     <Sheet
@@ -326,6 +335,25 @@ export function RedemptionsMutateDrawer({
                   )}
                 />
               )}
+
+              {isAgentCreate && (
+                <div className='rounded-md border p-3 text-sm'>
+                  <div className='font-medium'>{t('Agent payment')}</div>
+                  <div className='text-muted-foreground mt-1 space-y-1'>
+                    <div>
+                      {t('Required balance')}: {formatQuota(agentCharge)}
+                    </div>
+                    <div>
+                      {t('Wallet balance')}: {formatQuota(agentBalance)}
+                    </div>
+                  </div>
+                  {agentBalanceInsufficient && (
+                    <div className='text-destructive mt-2 text-xs'>
+                      {t('Insufficient wallet balance')}
+                    </div>
+                  )}
+                </div>
+              )}
             </SideDrawerSection>
           </form>
         </Form>
@@ -333,7 +361,11 @@ export function RedemptionsMutateDrawer({
           <SheetClose render={<Button variant='outline' />}>
             {t('Close')}
           </SheetClose>
-          <Button form='redemption-form' type='submit' disabled={isSubmitting}>
+          <Button
+            form='redemption-form'
+            type='submit'
+            disabled={isSubmitting || agentBalanceInsufficient}
+          >
             {isSubmitting ? t('Saving...') : t('Save changes')}
           </Button>
         </SheetFooter>

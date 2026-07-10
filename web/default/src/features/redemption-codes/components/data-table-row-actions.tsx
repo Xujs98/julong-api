@@ -33,6 +33,8 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
+import { ROLE } from '@/lib/roles'
+import { useAuthStore } from '@/stores/auth-store'
 
 import { updateRedemptionStatus } from '../api'
 import { REDEMPTION_STATUS, SUCCESS_MESSAGES } from '../constants'
@@ -48,6 +50,7 @@ export function DataTableRowActions<TData>({
   row,
 }: DataTableRowActionsProps<TData>) {
   const { t } = useTranslation()
+  const currentUser = useAuthStore((s) => s.auth.user)
   const redemption = redemptionSchema.parse(row.original)
   const { setOpen, setCurrentRow, triggerRefresh } = useRedemptions()
   const isEnabled = redemption.status === REDEMPTION_STATUS.ENABLED
@@ -72,8 +75,13 @@ export function DataTableRowActions<TData>({
     }
   }
 
-  const canEdit = isEnabled && !isExpired
-  const canToggle = !isUsed && !isExpired
+  const isAdmin = (currentUser?.role ?? 0) >= ROLE.ADMIN
+  const canEdit = isAdmin && isEnabled && !isExpired
+  const canToggle = isAdmin && !isUsed && !isExpired
+
+  if (!isAdmin) {
+    return null
+  }
 
   return (
     <div className='-ml-1.5 flex items-center gap-1'>

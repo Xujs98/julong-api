@@ -45,6 +45,11 @@ type User struct {
 	AffQuota         int                        `json:"aff_quota" gorm:"type:int;default:0;column:aff_quota"`           // 邀请剩余额度
 	AffHistoryQuota  int                        `json:"aff_history_quota" gorm:"type:int;default:0;column:aff_history"` // 邀请历史额度
 	InviterId        int                        `json:"inviter_id" gorm:"type:int;column:inviter_id;index"`
+	IsAgent          bool                       `json:"is_agent" gorm:"type:bool;default:false;column:is_agent"`
+	AgentDiscount    int                        `json:"agent_discount" gorm:"type:int;default:100;column:agent_discount"`
+	AgentTopUpLink   string                     `json:"agent_topup_link" gorm:"type:varchar(255);column:agent_topup_link" validate:"max=255"`
+	AgentId          int                        `json:"agent_id,omitempty" gorm:"-:all"`
+	AgentUsername    string                     `json:"agent_username,omitempty" gorm:"-:all"`
 	DeletedAt        gorm.DeletedAt             `gorm:"index"`
 	LinuxDOId        string                     `json:"linux_do_id" gorm:"column:linux_do_id;index"`
 	Setting          string                     `json:"setting" gorm:"type:text;column:setting"`
@@ -317,6 +322,8 @@ func GetAllUsers(pageInfo *common.PageInfo) (users []*User, total int64, err err
 		return nil, 0, err
 	}
 
+	fillAgentInfo(users)
+
 	return users, total, nil
 }
 
@@ -385,6 +392,8 @@ func SearchUsers(keyword string, group string, role *int, status *int, startIdx 
 		return nil, 0, err
 	}
 
+	fillAgentInfo(users)
+
 	return users, total, nil
 }
 
@@ -400,6 +409,64 @@ func GetUserById(id int, selectAll bool) (*User, error) {
 		err = DB.Omit("password", "access_token").First(&user, "id = ?", id).Error
 	}
 	return &user, err
+}
+
+func GetAgentByInviteeId(inviteeId int) (*User, error) {
+	if inviteeId == 0 {
+		return nil, errors.New("id 为空！")
+	}
+	var user User
+	err := DB.Table("users AS invitee").
+		Select("agent.*").
+		Joins("JOIN users AS agent ON agent.id = invitee.inviter_id").
+		Where("invitee.id = ? AND agent.is_agent = ?", inviteeId, true).
+		First(&user).Error
+	return &user, err
+}
+
+func fillAgentInfo(users []*User) {
+	if len(users) == 0 {
+		return
+	}
+	agentIds := make([]int, 0)
+	seen := map[int]bool{}
+	for _, user := range users {
+		if user.InviterId > 0 && !seen[user.InviterId] {
+			seen[user.InviterId] = true
+			agentIds = append(agentIds, user.InviterId)
+		}
+	}
+	if len(agentIds) == 0 {
+		return
+	}
+	var agents []User
+	if err := DB.Select("id", "username").Where("id IN ? AND is_agent = ?", agentIds, true).Find(&agents).Error; err != nil {
+		return
+	}
+	agentById := make(map[int]User, len(agents))
+	for _, agent := range agents {
+		agentById[agent.Id] = agent
+	}
+	for _, user := range users {
+		if agent, ok := agentById[user.InviterId]; ok {
+			user.AgentId = agent.Id
+			user.AgentUsername = agent.Username
+		}
+	}
+}
+
+func GetUsersByAgent(agentId int, pageInfo *common.PageInfo) (users []*User, total int64, err error) {
+	if agentId == 0 {
+		return nil, 0, errors.New("无效的代理用户")
+	}
+	query := DB.Model(&User{}).Where("inviter_id = ?", agentId)
+	if err = query.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	err = query.Order("id desc").Limit(pageInfo.GetPageSize()).Offset(pageInfo.GetStartIdx()).
+		Select("id", "username", "display_name", "quota", "used_quota", "request_count", "status", "group", "created_at", "last_login_at", "inviter_id").
+		Find(&users).Error
+	return users, total, err
 }
 
 func GetUserIdByAffCode(affCode string) (int, error) {
@@ -688,10 +755,13 @@ func (user *User) EditWithTx(tx *gorm.DB, updatePassword bool) error {
 
 	newUser := *user
 	updates := map[string]interface{}{
-		"username":     newUser.Username,
-		"display_name": newUser.DisplayName,
-		"group":        newUser.Group,
-		"remark":       newUser.Remark,
+		"username":         newUser.Username,
+		"display_name":     newUser.DisplayName,
+		"group":            newUser.Group,
+		"remark":           newUser.Remark,
+		"is_agent":         newUser.IsAgent,
+		"agent_discount":   newUser.AgentDiscount,
+		"agent_topup_link": newUser.AgentTopUpLink,
 	}
 	if updatePassword {
 		updates["password"] = newUser.Password

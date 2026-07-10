@@ -27,7 +27,10 @@ type Redemption struct {
 }
 
 func GetAllRedemptions(startIdx int, num int) (redemptions []*Redemption, total int64, err error) {
-	// 开始事务
+	return GetRedemptionsByUser(0, startIdx, num)
+}
+
+func GetRedemptionsByUser(userId int, startIdx int, num int) (redemptions []*Redemption, total int64, err error) {
 	tx := DB.Begin()
 	if tx.Error != nil {
 		return nil, 0, tx.Error
@@ -39,14 +42,18 @@ func GetAllRedemptions(startIdx int, num int) (redemptions []*Redemption, total 
 	}()
 
 	// 获取总数
-	err = tx.Model(&Redemption{}).Count(&total).Error
+	query := tx.Model(&Redemption{})
+	if userId > 0 {
+		query = query.Where("user_id = ?", userId)
+	}
+	err = query.Count(&total).Error
 	if err != nil {
 		tx.Rollback()
 		return nil, 0, err
 	}
 
 	// 获取分页数据
-	err = tx.Order("id desc").Limit(num).Offset(startIdx).Find(&redemptions).Error
+	err = query.Order("id desc").Limit(num).Offset(startIdx).Find(&redemptions).Error
 	if err != nil {
 		tx.Rollback()
 		return nil, 0, err
@@ -61,6 +68,10 @@ func GetAllRedemptions(startIdx int, num int) (redemptions []*Redemption, total 
 }
 
 func SearchRedemptions(keyword string, status string, startIdx int, num int) (redemptions []*Redemption, total int64, err error) {
+	return SearchRedemptionsByUser(0, keyword, status, startIdx, num)
+}
+
+func SearchRedemptionsByUser(userId int, keyword string, status string, startIdx int, num int) (redemptions []*Redemption, total int64, err error) {
 	tx := DB.Begin()
 	if tx.Error != nil {
 		return nil, 0, tx.Error
@@ -72,6 +83,9 @@ func SearchRedemptions(keyword string, status string, startIdx int, num int) (re
 	}()
 
 	query := tx.Model(&Redemption{})
+	if userId > 0 {
+		query = query.Where("user_id = ?", userId)
+	}
 
 	if keyword != "" {
 		if id, err := strconv.Atoi(keyword); err == nil {
@@ -189,6 +203,47 @@ func (redemption *Redemption) Insert() error {
 	var err error
 	err = DB.Create(redemption).Error
 	return err
+}
+
+func CreateRedemptionsWithWalletCharge(userId int, redemption Redemption, count int, charge int) ([]string, error) {
+	if userId == 0 {
+		return nil, errors.New("无效的 user id")
+	}
+	if count <= 0 {
+		return nil, errors.New("兑换码数量必须大于 0")
+	}
+	keys := make([]string, 0, count)
+	err := DB.Transaction(func(tx *gorm.DB) error {
+		if charge > 0 {
+			result := tx.Model(&User{}).
+				Where("id = ? AND quota >= ?", userId, charge).
+				Update("quota", gorm.Expr("quota - ?", charge))
+			if result.Error != nil {
+				return result.Error
+			}
+			if result.RowsAffected == 0 {
+				return errors.New("余额不足，无法生成兑换码")
+			}
+		}
+
+		for i := 0; i < count; i++ {
+			key := common.GetUUID()
+			cleanRedemption := Redemption{
+				UserId:      userId,
+				Name:        redemption.Name,
+				Key:         key,
+				CreatedTime: common.GetTimestamp(),
+				Quota:       redemption.Quota,
+				ExpiredTime: redemption.ExpiredTime,
+			}
+			if err := tx.Create(&cleanRedemption).Error; err != nil {
+				return err
+			}
+			keys = append(keys, key)
+		}
+		return nil
+	})
+	return keys, err
 }
 
 func (redemption *Redemption) SelectUpdate() error {

@@ -43,6 +43,7 @@ import {
   FormMessage,
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
+import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
 import {
   Select,
@@ -155,6 +156,7 @@ export function UsersMutateDrawer({
   const selectedRole = form.watch('role')
   const canEditAdminPermissions = currentUser?.role === ROLE.SUPER_ADMIN
   const targetIsAdmin = (selectedRole ?? currentRow?.role ?? 0) >= ROLE.ADMIN
+  const agentEnabled = form.watch('is_agent') === true
 
   const onSubmit = async (data: UserFormValues) => {
     if (!isUpdate) {
@@ -346,6 +348,74 @@ export function UsersMutateDrawer({
                     </FormItem>
                   )}
                 />
+              </SideDrawerSection>
+
+              <SideDrawerSection>
+                <h3 className='text-sm font-medium'>{t('Agent')}</h3>
+                <FormField
+                  control={form.control}
+                  name='is_agent'
+                  render={({ field }) => (
+                    <FormItem className='flex items-center justify-between rounded-md border p-3'>
+                      <div className='space-y-1'>
+                        <FormLabel>{t('Enable agent')}</FormLabel>
+                        <FormDescription>
+                          {t('Agents can create redemption codes with wallet balance.')}
+                        </FormDescription>
+                      </div>
+                      <FormControl>
+                        <Switch checked={field.value === true} onCheckedChange={field.onChange} />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+                {agentEnabled && (
+                  <div className='grid gap-4 sm:grid-cols-2'>
+                    <FormField
+                      control={form.control}
+                      name='agent_discount'
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>{t('Agent discount (%)')}</FormLabel>
+                          <FormControl>
+                            <Input
+                              {...field}
+                              type='number'
+                              min='0'
+                              max='100'
+                              onChange={(e) =>
+                                field.onChange(parseInt(e.target.value, 10) || 0)
+                              }
+                            />
+                          </FormControl>
+                          <FormDescription>
+                            {t('Cost = redemption quota × discount × quantity.')}
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name='agent_topup_link'
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>{t('Agent top-up link')}</FormLabel>
+                          <FormControl>
+                            <Input
+                              {...field}
+                              placeholder='https://pay.example.com/shop/agent'
+                            />
+                          </FormControl>
+                          <FormDescription>
+                            {t('Invited users will see this link in wallet redemption.')}
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                )}
               </SideDrawerSection>
 
               {/* Group & Quota Settings (Update only) */}

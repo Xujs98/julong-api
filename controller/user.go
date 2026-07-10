@@ -153,12 +153,16 @@ func setupLogin(user *model.User, c *gin.Context) {
 		"message": "",
 		"success": true,
 		"data": map[string]any{
-			"id":           user.Id,
-			"username":     user.Username,
-			"display_name": user.DisplayName,
-			"role":         user.Role,
-			"status":       user.Status,
-			"group":        user.Group,
+			"id":               user.Id,
+			"username":         user.Username,
+			"display_name":     user.DisplayName,
+			"role":             user.Role,
+			"status":           user.Status,
+			"group":            user.Group,
+			"quota":            user.Quota,
+			"is_agent":         user.IsAgent,
+			"agent_discount":   user.AgentDiscount,
+			"agent_topup_link": user.AgentTopUpLink,
 		},
 	})
 }
@@ -347,6 +351,18 @@ func canManageTargetRole(myRole int, targetRole int) bool {
 	return myRole == common.RoleRootUser || myRole > targetRole
 }
 
+func normalizeAgentSettings(user *model.User) error {
+	user.AgentTopUpLink = strings.TrimSpace(user.AgentTopUpLink)
+	if user.AgentDiscount < 0 || user.AgentDiscount > 100 {
+		return errors.New("代理折扣必须在 0-100 之间")
+	}
+	if !user.IsAgent {
+		user.AgentDiscount = 100
+		user.AgentTopUpLink = ""
+	}
+	return nil
+}
+
 func GetUser(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
@@ -500,6 +516,9 @@ func GetSelf(c *gin.Context) {
 		"aff_quota":         user.AffQuota,
 		"aff_history_quota": user.AffHistoryQuota,
 		"inviter_id":        user.InviterId,
+		"is_agent":          user.IsAgent,
+		"agent_discount":    user.AgentDiscount,
+		"agent_topup_link":  user.AgentTopUpLink,
 		"linux_do_id":       user.LinuxDOId,
 		"setting":           user.Setting,
 		"stripe_customer":   user.StripeCustomer,
@@ -513,6 +532,116 @@ func GetSelf(c *gin.Context) {
 		"data":    responseData,
 	})
 	return
+}
+
+func GetAgentUsers(c *gin.Context) {
+	agentId := c.GetInt("id")
+	agent, err := model.GetUserById(agentId, false)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	if !agent.IsAgent {
+		common.ApiErrorMsg(c, "只有代理用户可以查看邀请用户")
+		return
+	}
+	pageInfo := common.GetPageQuery(c)
+	users, total, err := model.GetUsersByAgent(agentId, pageInfo)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	items := make([]map[string]interface{}, 0, len(users))
+	for _, user := range users {
+		subs, err := model.GetAllActiveUserSubscriptions(user.Id)
+		if err != nil {
+			subs = []model.SubscriptionSummary{}
+		}
+		items = append(items, map[string]interface{}{
+			"id":            user.Id,
+			"username":      user.Username,
+			"display_name":  user.DisplayName,
+			"quota":         user.Quota,
+			"used_quota":    user.UsedQuota,
+			"request_count": user.RequestCount,
+			"status":        user.Status,
+			"group":         user.Group,
+			"created_at":    user.CreatedAt,
+			"last_login_at": user.LastLoginAt,
+			"subscriptions": subs,
+		})
+	}
+	pageInfo.SetTotal(int(total))
+	pageInfo.SetItems(items)
+	common.ApiSuccess(c, pageInfo)
+}
+
+func AdminGetAgentDetail(c *gin.Context) {
+	agentId, err := strconv.Atoi(c.Param("id"))
+	if err != nil || agentId <= 0 {
+		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
+		return
+	}
+	agent, err := model.GetUserById(agentId, false)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	if !canManageTargetRole(c.GetInt("role"), agent.Role) {
+		common.ApiErrorI18n(c, i18n.MsgUserNoPermissionSameLevel)
+		return
+	}
+	if !agent.IsAgent {
+		common.ApiErrorMsg(c, "该用户不是代理")
+		return
+	}
+	pageInfo := common.PageInfo{PageSize: 100, Page: 1}
+	users, _, err := model.GetUsersByAgent(agentId, &pageInfo)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	redemptions, _, err := model.GetRedemptionsByUser(agentId, 0, 100)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, gin.H{
+		"agent":       agent,
+		"users":       users,
+		"redemptions": redemptions,
+	})
+}
+
+func UpdateAgentTopUpLink(c *gin.Context) {
+	userId := c.GetInt("id")
+	user, err := model.GetUserById(userId, true)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	if !user.IsAgent {
+		common.ApiErrorMsg(c, "只有代理用户可以设置充值链接")
+		return
+	}
+	var req struct {
+		AgentTopUpLink string `json:"agent_topup_link"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	link := strings.TrimSpace(req.AgentTopUpLink)
+	if len(link) > 255 {
+		common.ApiErrorMsg(c, "充值链接不能超过 255 个字符")
+		return
+	}
+	if err := model.DB.Model(user).Update("agent_topup_link", link).Error; err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	_ = model.InvalidateUserCache(userId)
+	common.ApiSuccess(c, gin.H{"agent_topup_link": link})
 }
 
 // 计算用户权限的辅助函数
@@ -661,6 +790,10 @@ func UpdateUser(c *gin.Context) {
 	updatedUser.Username = strings.TrimSpace(updatedUser.Username)
 	if updatedUser.Username == "" {
 		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
+		return
+	}
+	if err := normalizeAgentSettings(&updatedUser); err != nil {
+		common.ApiError(c, err)
 		return
 	}
 	if updatedUser.Password == "" {
@@ -967,6 +1100,10 @@ func CreateUser(c *gin.Context) {
 	if user.DisplayName == "" {
 		user.DisplayName = user.Username
 	}
+	if err := normalizeAgentSettings(&user); err != nil {
+		common.ApiError(c, err)
+		return
+	}
 	myRole := c.GetInt("role")
 	if user.Role >= myRole {
 		common.ApiErrorI18n(c, i18n.MsgUserCannotCreateHigherLevel)
@@ -974,10 +1111,13 @@ func CreateUser(c *gin.Context) {
 	}
 	// Even for admin users, we cannot fully trust them!
 	cleanUser := model.User{
-		Username:    user.Username,
-		Password:    user.Password,
-		DisplayName: user.DisplayName,
-		Role:        user.Role, // 保持管理员设置的角色
+		Username:       user.Username,
+		Password:       user.Password,
+		DisplayName:    user.DisplayName,
+		Role:           user.Role, // 保持管理员设置的角色
+		IsAgent:        user.IsAgent,
+		AgentDiscount:  user.AgentDiscount,
+		AgentTopUpLink: user.AgentTopUpLink,
 	}
 	authzTouched := false
 	if err := model.DB.Transaction(func(tx *gorm.DB) error {

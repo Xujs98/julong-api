@@ -32,6 +32,7 @@ export type ModelPricingSnapshotInput = {
   audioCompletionRatio: string
   billingMode: string
   billingExpr: string
+  perRequestSubscriptionAllowed: string
 }
 
 export type ModelPricingSnapshot = {
@@ -47,6 +48,7 @@ export type ModelPricingSnapshot = {
   billingMode?: string
   billingExpr?: string
   requestRuleExpr?: string
+  allowSubscriptionDeduction?: boolean
   hasConflict: boolean
 }
 
@@ -168,6 +170,7 @@ export const buildModelSnapshots = ({
   audioCompletionRatio,
   billingMode,
   billingExpr,
+  perRequestSubscriptionAllowed,
 }: ModelPricingSnapshotInput): ModelPricingSnapshot[] => {
   const priceMap = safeJsonParse<Record<string, number>>(modelPrice, {
     fallback: {},
@@ -209,6 +212,13 @@ export const buildModelSnapshots = ({
     fallback: {},
     context: 'billing expression',
   })
+  const perRequestSubscriptionAllowedMap = safeJsonParse<Record<string, boolean>>(
+    perRequestSubscriptionAllowed,
+    {
+      fallback: {},
+      context: 'per-request subscription deduction',
+    }
+  )
 
   const modelNames = new Set([
     ...Object.keys(priceMap),
@@ -221,6 +231,7 @@ export const buildModelSnapshots = ({
     ...Object.keys(audioCompletionMap),
     ...Object.keys(billingModeMap),
     ...Object.keys(billingExprMap),
+    ...Object.keys(perRequestSubscriptionAllowedMap),
   ])
 
   return Array.from(modelNames).map((name) => {
@@ -243,6 +254,9 @@ export const buildModelSnapshots = ({
         billingMode: 'tiered_expr',
         billingExpr: pureExpr,
         requestRuleExpr,
+        allowSubscriptionDeduction: Boolean(
+          perRequestSubscriptionAllowedMap[name]
+        ),
         price,
         ratio,
         cacheRatio: cache,
@@ -266,6 +280,9 @@ export const buildModelSnapshots = ({
       audioRatio: audio,
       audioCompletionRatio: audioCompletion,
       billingMode: price !== '' ? 'per-request' : 'per-token',
+      allowSubscriptionDeduction: Boolean(
+        perRequestSubscriptionAllowedMap[name]
+      ),
       hasConflict:
         price !== '' &&
         (ratio !== '' ||
@@ -293,5 +310,6 @@ export const getSnapshotSignature = (snapshot?: ModelPricingSnapshot) => {
     billingMode: snapshot.billingMode || 'per-token',
     billingExpr: snapshot.billingExpr || '',
     requestRuleExpr: snapshot.requestRuleExpr || '',
+    allowSubscriptionDeduction: Boolean(snapshot.allowSubscriptionDeduction),
   })
 }

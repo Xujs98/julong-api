@@ -75,6 +75,7 @@ type ModelRatioVisualEditorProps = {
   savedAudioCompletionRatio: string
   savedBillingMode: string
   savedBillingExpr: string
+  savedPerRequestSubscriptionAllowed: string
   modelPrice: string
   modelRatio: string
   cacheRatio: string
@@ -85,6 +86,7 @@ type ModelRatioVisualEditorProps = {
   audioCompletionRatio: string
   billingMode: string
   billingExpr: string
+  perRequestSubscriptionAllowed: string
   onChange: (field: string, value: string) => void
   onSave: () => void | Promise<void>
   isSaving: boolean
@@ -111,6 +113,7 @@ const ModelRatioVisualEditorComponent = forwardRef<
     savedAudioCompletionRatio,
     savedBillingMode,
     savedBillingExpr,
+    savedPerRequestSubscriptionAllowed,
     modelPrice,
     modelRatio,
     cacheRatio,
@@ -121,6 +124,7 @@ const ModelRatioVisualEditorComponent = forwardRef<
     audioCompletionRatio,
     billingMode,
     billingExpr,
+    perRequestSubscriptionAllowed,
     onChange,
     onSave,
     isSaving,
@@ -192,6 +196,7 @@ const ModelRatioVisualEditorComponent = forwardRef<
       audioCompletionRatio: savedAudioCompletionRatio,
       billingMode: savedBillingMode,
       billingExpr: savedBillingExpr,
+      perRequestSubscriptionAllowed: savedPerRequestSubscriptionAllowed,
     })
     const draftRows = buildModelSnapshots({
       modelPrice,
@@ -204,6 +209,7 @@ const ModelRatioVisualEditorComponent = forwardRef<
       audioCompletionRatio,
       billingMode,
       billingExpr,
+      perRequestSubscriptionAllowed,
     })
 
     const savedByName = new Map(savedRows.map((row) => [row.name, row]))
@@ -214,7 +220,7 @@ const ModelRatioVisualEditorComponent = forwardRef<
       .map((name) => {
         const saved = savedByName.get(name)
         const draft = draftByName.get(name)
-        const displayed = saved ?? draft
+        const displayed = draft ?? saved
         const savedSignature = getSnapshotSignature(saved)
         const draftSignature = getSnapshotSignature(draft)
 
@@ -240,6 +246,7 @@ const ModelRatioVisualEditorComponent = forwardRef<
     savedAudioCompletionRatio,
     savedBillingMode,
     savedBillingExpr,
+    savedPerRequestSubscriptionAllowed,
     modelPrice,
     modelRatio,
     cacheRatio,
@@ -250,6 +257,7 @@ const ModelRatioVisualEditorComponent = forwardRef<
     audioCompletionRatio,
     billingMode,
     billingExpr,
+    perRequestSubscriptionAllowed,
   ])
 
   const modeCounts = useMemo(
@@ -276,6 +284,10 @@ const ModelRatioVisualEditorComponent = forwardRef<
   const handleEdit = useCallback(
     (model: ModelRow) => {
       const editableModel = model.draft ?? model.saved ?? model
+      const latestSubscriptionAllowed = safeJsonParse<Record<string, boolean>>(
+        perRequestSubscriptionAllowed,
+        { fallback: {}, silent: true }
+      )
       setEditData({
         name: editableModel.name,
         price: editableModel.price,
@@ -294,11 +306,14 @@ const ModelRatioVisualEditorComponent = forwardRef<
               : 'per-token',
         billingExpr: editableModel.billingExpr,
         requestRuleExpr: editableModel.requestRuleExpr,
+        allowSubscriptionDeduction: Boolean(
+          latestSubscriptionAllowed[editableModel.name]
+        ),
       })
       setEditorOpen(true)
       if (isMobile) setSheetOpen(true)
     },
-    [isMobile]
+    [isMobile, perRequestSubscriptionAllowed]
   )
 
   const handleAdd = useCallback(() => {
@@ -364,6 +379,9 @@ const ModelRatioVisualEditorComponent = forwardRef<
         billingExpr,
         { fallback: {}, silent: true }
       )
+      const perRequestSubscriptionAllowedMap = safeJsonParse<
+        Record<string, boolean>
+      >(perRequestSubscriptionAllowed, { fallback: {}, silent: true })
 
       delete priceMap[name]
       delete ratioMap[name]
@@ -375,6 +393,7 @@ const ModelRatioVisualEditorComponent = forwardRef<
       delete audioCompletionMap[name]
       delete billingModeMap[name]
       delete billingExprMap[name]
+      delete perRequestSubscriptionAllowedMap[name]
 
       onChange('ModelPrice', JSON.stringify(priceMap, null, 2))
       onChange('ModelRatio', JSON.stringify(ratioMap, null, 2))
@@ -395,6 +414,10 @@ const ModelRatioVisualEditorComponent = forwardRef<
         'billing_setting.billing_expr',
         JSON.stringify(billingExprMap, null, 2)
       )
+      onChange(
+        'billing_setting.per_request_subscription_allowed',
+        JSON.stringify(perRequestSubscriptionAllowedMap, null, 2)
+      )
 
       if (editData?.name === name) {
         setEditData(null)
@@ -413,6 +436,7 @@ const ModelRatioVisualEditorComponent = forwardRef<
       audioCompletionRatio,
       billingMode,
       billingExpr,
+      perRequestSubscriptionAllowed,
       onChange,
       editData,
     ]
@@ -494,6 +518,10 @@ const ModelRatioVisualEditorComponent = forwardRef<
         { fallback: {}, silent: true }
       )
 
+      const perRequestSubscriptionAllowedMap = safeJsonParse<
+        Record<string, boolean>
+      >(perRequestSubscriptionAllowed, { fallback: {}, silent: true })
+
       const setIfPresent = (
         target: Record<string, number>,
         name: string,
@@ -515,6 +543,7 @@ const ModelRatioVisualEditorComponent = forwardRef<
         delete audioCompletionMap[name]
         delete billingModeMap[name]
         delete billingExprMap[name]
+        delete perRequestSubscriptionAllowedMap[name]
 
         if (data.billingMode === 'tiered_expr') {
           const combined = combineBillingExpr(
@@ -539,6 +568,9 @@ const ModelRatioVisualEditorComponent = forwardRef<
           setIfPresent(audioCompletionMap, name, data.audioCompletionRatio)
         } else if (data.price && data.price !== '') {
           setIfPresent(priceMap, name, data.price)
+          if (data.allowSubscriptionDeduction) {
+            perRequestSubscriptionAllowedMap[name] = true
+          }
         } else {
           setIfPresent(ratioMap, name, data.ratio)
           setIfPresent(cacheMap, name, data.cacheRatio)
@@ -569,6 +601,10 @@ const ModelRatioVisualEditorComponent = forwardRef<
         'billing_setting.billing_expr',
         JSON.stringify(billingExprMap, null, 2)
       )
+      onChange(
+        'billing_setting.per_request_subscription_allowed',
+        JSON.stringify(perRequestSubscriptionAllowedMap, null, 2)
+      )
     },
     [
       modelPrice,
@@ -581,6 +617,7 @@ const ModelRatioVisualEditorComponent = forwardRef<
       audioCompletionRatio,
       billingMode,
       billingExpr,
+      perRequestSubscriptionAllowed,
       onChange,
     ]
   )
@@ -729,6 +766,7 @@ const ModelRatioVisualEditorComponent = forwardRef<
             <ModelPricingEditorPanel
               ref={editorPanelRef}
               editData={editData}
+              perRequestSubscriptionAllowed={perRequestSubscriptionAllowed}
               onSave={onSave}
               isSaving={isSaving}
               className='h-full min-h-0'
@@ -767,6 +805,7 @@ const ModelRatioVisualEditorComponent = forwardRef<
           open={sheetOpen}
           onOpenChange={setSheetOpen}
           editData={editData}
+          perRequestSubscriptionAllowed={perRequestSubscriptionAllowed}
           onSave={onSave}
           isSaving={isSaving}
         />
@@ -790,6 +829,10 @@ export const ModelRatioVisualEditor = memo(
       prevProps.audioCompletionRatio === nextProps.audioCompletionRatio &&
       prevProps.billingMode === nextProps.billingMode &&
       prevProps.billingExpr === nextProps.billingExpr &&
+      prevProps.perRequestSubscriptionAllowed ===
+        nextProps.perRequestSubscriptionAllowed &&
+      prevProps.savedPerRequestSubscriptionAllowed ===
+        nextProps.savedPerRequestSubscriptionAllowed &&
       prevProps.onChange === nextProps.onChange &&
       prevProps.onSave === nextProps.onSave &&
       prevProps.isSaving === nextProps.isSaving

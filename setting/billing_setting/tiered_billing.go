@@ -9,22 +9,25 @@ import (
 )
 
 const (
-	BillingModeRatio      = "ratio"
-	BillingModeTieredExpr = "tiered_expr"
-	BillingModeField      = "billing_mode"
-	BillingExprField      = "billing_expr"
+	BillingModeRatio                   = "ratio"
+	BillingModeTieredExpr              = "tiered_expr"
+	BillingModeField                   = "billing_mode"
+	BillingExprField                   = "billing_expr"
+	PerRequestSubscriptionAllowedField = "per_request_subscription_allowed"
 )
 
 // BillingSetting is managed by config.GlobalConfig.Register.
 // DB keys: billing_setting.billing_mode, billing_setting.billing_expr
 type BillingSetting struct {
-	BillingMode map[string]string `json:"billing_mode"`
-	BillingExpr map[string]string `json:"billing_expr"`
+	BillingMode                   map[string]string `json:"billing_mode"`
+	BillingExpr                   map[string]string `json:"billing_expr"`
+	PerRequestSubscriptionAllowed map[string]bool   `json:"per_request_subscription_allowed"`
 }
 
 var billingSetting = BillingSetting{
-	BillingMode: make(map[string]string),
-	BillingExpr: make(map[string]string),
+	BillingMode:                   make(map[string]string),
+	BillingExpr:                   make(map[string]string),
+	PerRequestSubscriptionAllowed: make(map[string]bool),
 }
 
 func init() {
@@ -55,6 +58,14 @@ func GetBillingExprCopy() map[string]string {
 	return lo.Assign(billingSetting.BillingExpr)
 }
 
+func IsPerRequestSubscriptionAllowed(model string) bool {
+	return billingSetting.PerRequestSubscriptionAllowed[model]
+}
+
+func GetPerRequestSubscriptionAllowedCopy() map[string]bool {
+	return lo.Assign(billingSetting.PerRequestSubscriptionAllowed)
+}
+
 func GetPricingSyncData(base map[string]any) map[string]any {
 	extra := make(map[string]any, 2)
 	if modes := GetBillingModeCopy(); len(modes) > 0 {
@@ -62,6 +73,9 @@ func GetPricingSyncData(base map[string]any) map[string]any {
 	}
 	if exprs := GetBillingExprCopy(); len(exprs) > 0 {
 		extra[BillingExprField] = exprs
+	}
+	if allowed := GetPerRequestSubscriptionAllowedCopy(); len(allowed) > 0 {
+		extra[PerRequestSubscriptionAllowedField] = allowed
 	}
 	return lo.Assign(base, extra)
 }

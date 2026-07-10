@@ -28,6 +28,7 @@ import type {
   ManageUserAction,
   ManageUserQuotaPayload,
   ApiResponse,
+  AgentDetailData,
 } from './types'
 
 // ============================================================================
@@ -161,6 +162,13 @@ export async function getPermissionCatalog(): Promise<PermissionCatalog> {
     resources: res.data?.data?.resources ?? [],
     roles: res.data?.data?.roles ?? [],
   }
+}
+
+export async function getAgentDetail(
+  userId: number
+): Promise<ApiResponse<AgentDetailData>> {
+  const res = await api.get(`/api/user/agent-detail/${userId}`)
+  return res.data
 }
 
 // ============================================================================
