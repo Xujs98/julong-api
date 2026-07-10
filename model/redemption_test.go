@@ -296,3 +296,84 @@ func TestAgentCannotRedeemSelfGeneratedCode(t *testing.T) {
 	assert.Equal(t, common.RedemptionCodeStatusEnabled, redemption.Status)
 	assert.Equal(t, 0, redemption.UsedUserId)
 }
+
+func TestDeleteAgentRedemptionRefundsRecordedCharge(t *testing.T) {
+	require.NoError(t, DB.AutoMigrate(&User{}, &Redemption{}))
+	require.NoError(t, DB.Session(&gorm.Session{AllowGlobalUpdate: true}).Unscoped().Delete(&Redemption{}).Error)
+	require.NoError(t, DB.Exec("DELETE FROM users").Error)
+	require.NoError(t, DB.Exec("DELETE FROM logs").Error)
+	t.Cleanup(func() {
+		require.NoError(t, DB.Session(&gorm.Session{AllowGlobalUpdate: true}).Unscoped().Delete(&Redemption{}).Error)
+		DB.Exec("DELETE FROM users")
+		DB.Exec("DELETE FROM logs")
+	})
+
+	agent := &User{
+		Username:      "refund-agent",
+		Password:      "password",
+		Status:        common.UserStatusEnabled,
+		Role:          common.RoleCommonUser,
+		IsAgent:       true,
+		AgentDiscount: 20,
+		Quota:         1000,
+		AffCode:       "refund-agent-aff",
+	}
+	require.NoError(t, DB.Create(agent).Error)
+
+	keys, err := CreateRedemptionsWithWalletCharge(agent.Id, Redemption{
+		Name:  "refund-test",
+		Quota: 1000,
+	}, 3, 601)
+	require.NoError(t, err)
+	require.Len(t, keys, 3)
+
+	require.NoError(t, DB.First(agent, "id = ?", agent.Id).Error)
+	assert.Equal(t, 399, agent.Quota)
+
+	var redemption Redemption
+	require.NoError(t, DB.First(&redemption, "key = ?", keys[0]).Error)
+	assert.Equal(t, 201, redemption.AgentCharge)
+
+	require.NoError(t, DeleteRedemptionById(redemption.Id))
+	require.NoError(t, DB.First(agent, "id = ?", agent.Id).Error)
+	assert.Equal(t, 600, agent.Quota)
+}
+
+func TestDeleteUsedAgentRedemptionDoesNotRefund(t *testing.T) {
+	require.NoError(t, DB.AutoMigrate(&User{}, &Redemption{}))
+	require.NoError(t, DB.Session(&gorm.Session{AllowGlobalUpdate: true}).Unscoped().Delete(&Redemption{}).Error)
+	require.NoError(t, DB.Exec("DELETE FROM users").Error)
+	require.NoError(t, DB.Exec("DELETE FROM logs").Error)
+	t.Cleanup(func() {
+		require.NoError(t, DB.Session(&gorm.Session{AllowGlobalUpdate: true}).Unscoped().Delete(&Redemption{}).Error)
+		DB.Exec("DELETE FROM users")
+		DB.Exec("DELETE FROM logs")
+	})
+
+	agent := &User{
+		Username:      "used-refund-agent",
+		Password:      "password",
+		Status:        common.UserStatusEnabled,
+		Role:          common.RoleCommonUser,
+		IsAgent:       true,
+		AgentDiscount: 30,
+		Quota:         0,
+		AffCode:       "used-refund-agent-aff",
+	}
+	require.NoError(t, DB.Create(agent).Error)
+	redemption := &Redemption{
+		UserId:      agent.Id,
+		Name:        "used-agent-code",
+		Key:         "40000000000000000000000000000001",
+		Status:      common.RedemptionCodeStatusUsed,
+		Quota:       1000,
+		AgentCharge: 300,
+		CreatedTime: common.GetTimestamp(),
+		UsedUserId:  99,
+	}
+	require.NoError(t, DB.Create(redemption).Error)
+
+	require.NoError(t, DeleteRedemptionById(redemption.Id))
+	require.NoError(t, DB.First(agent, "id = ?", agent.Id).Error)
+	assert.Equal(t, 0, agent.Quota)
+}

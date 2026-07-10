@@ -63,6 +63,8 @@ const EditRedemptionModal = (props) => {
   const isMobile = useIsMobile();
   const formApiRef = useRef(null);
   const [showQuotaInput, setShowQuotaInput] = useState(false);
+  const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+  const isAgentCreate = !isEdit && currentUser?.is_agent === true;
 
   const getInitValues = () => ({
     name: '',
@@ -119,7 +121,7 @@ const EditRedemptionModal = (props) => {
       return;
     }
     localInputs.name = name;
-    if (!localInputs.expired_time) {
+    if (isAgentCreate || !localInputs.expired_time) {
       localInputs.expired_time = 0;
     } else {
       localInputs.expired_time = Math.floor(
@@ -264,16 +266,18 @@ const EditRedemptionModal = (props) => {
                         showClear
                       />
                     </Col>
-                    <Col span={24}>
-                      <Form.DatePicker
-                        field='expired_time'
-                        label={t('过期时间')}
-                        type='dateTime'
-                        placeholder={t('选择过期时间（可选，留空为永久）')}
-                        style={{ width: '100%' }}
-                        showClear
-                      />
-                    </Col>
+                    {!isAgentCreate && (
+                      <Col span={24}>
+                        <Form.DatePicker
+                          field='expired_time'
+                          label={t('过期时间')}
+                          type='dateTime'
+                          placeholder={t('选择过期时间（可选，留空为永久）')}
+                          style={{ width: '100%' }}
+                          showClear
+                        />
+                      </Col>
+                    )}
                   </Row>
                 </Card>
 

@@ -159,6 +159,10 @@ func AddRedemption(c *gin.Context) {
 			common.ApiErrorMsg(c, "只有代理用户可以生成兑换码")
 			return
 		}
+		if redemption.ExpiredTime != 0 {
+			common.ApiErrorMsg(c, "代理生成兑换码不允许设置过期时间")
+			return
+		}
 		if user.AgentDiscount < 0 || user.AgentDiscount > 100 {
 			common.ApiErrorMsg(c, "代理折扣配置无效")
 			return

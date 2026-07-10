@@ -24,6 +24,7 @@ type Redemption struct {
 	UsedUserId         int            `json:"used_user_id"`
 	DeletedAt          gorm.DeletedAt `gorm:"index"`
 	ExpiredTime        int64          `json:"expired_time" gorm:"bigint"` // 过期时间，0 表示不过期
+	AgentCharge        int            `json:"agent_charge" gorm:"default:0"`
 	CreatorUsername    string         `json:"creator_username,omitempty" gorm:"-:all"`
 	CreatorDisplayName string         `json:"creator_display_name,omitempty" gorm:"-:all"`
 	CreatorRole        int            `json:"creator_role,omitempty" gorm:"-:all"`
@@ -283,8 +284,18 @@ func CreateRedemptionsWithWalletCharge(userId int, redemption Redemption, count 
 			}
 		}
 
+		baseAgentCharge := 0
+		agentChargeRemainder := 0
+		if charge > 0 {
+			baseAgentCharge = charge / count
+			agentChargeRemainder = charge % count
+		}
 		for i := 0; i < count; i++ {
 			key := common.GetUUID()
+			agentCharge := baseAgentCharge
+			if i < agentChargeRemainder {
+				agentCharge++
+			}
 			cleanRedemption := Redemption{
 				UserId:      userId,
 				Name:        redemption.Name,
@@ -292,6 +303,7 @@ func CreateRedemptionsWithWalletCharge(userId int, redemption Redemption, count 
 				CreatedTime: common.GetTimestamp(),
 				Quota:       redemption.Quota,
 				ExpiredTime: redemption.ExpiredTime,
+				AgentCharge: agentCharge,
 			}
 			if err := tx.Create(&cleanRedemption).Error; err != nil {
 				return err
@@ -311,7 +323,7 @@ func (redemption *Redemption) SelectUpdate() error {
 // Update Make sure your token's fields is completed, because this will update non-zero values
 func (redemption *Redemption) Update() error {
 	var err error
-	err = DB.Model(redemption).Select("name", "status", "quota", "redeemed_time", "expired_time").Updates(redemption).Error
+	err = DB.Model(redemption).Select("name", "status", "quota", "redeemed_time", "expired_time", "agent_charge").Updates(redemption).Error
 	return err
 }
 
@@ -325,16 +337,69 @@ func DeleteRedemptionById(id int) (err error) {
 	if id == 0 {
 		return errors.New("id 为空！")
 	}
-	redemption := Redemption{Id: id}
-	err = DB.Where(redemption).First(&redemption).Error
-	if err != nil {
-		return err
-	}
-	return redemption.Delete()
+	return DB.Transaction(func(tx *gorm.DB) error {
+		redemption := Redemption{Id: id}
+		if err := tx.Where(redemption).First(&redemption).Error; err != nil {
+			return err
+		}
+		if err := refundAgentRedemptionCharge(tx, &redemption); err != nil {
+			return err
+		}
+		return tx.Delete(&redemption).Error
+	})
 }
 
 func DeleteInvalidRedemptions() (int64, error) {
 	now := common.GetTimestamp()
-	result := DB.Where("status IN ? OR (status = ? AND expired_time != 0 AND expired_time < ?)", []int{common.RedemptionCodeStatusUsed, common.RedemptionCodeStatusDisabled}, common.RedemptionCodeStatusEnabled, now).Delete(&Redemption{})
-	return result.RowsAffected, result.Error
+	var rowsAffected int64
+	err := DB.Transaction(func(tx *gorm.DB) error {
+		var redemptions []Redemption
+		if err := tx.Where(
+			"status IN ? OR (status = ? AND expired_time != 0 AND expired_time < ?)",
+			[]int{common.RedemptionCodeStatusUsed, common.RedemptionCodeStatusDisabled},
+			common.RedemptionCodeStatusEnabled,
+			now,
+		).Find(&redemptions).Error; err != nil {
+			return err
+		}
+		if len(redemptions) == 0 {
+			return nil
+		}
+		for i := range redemptions {
+			if err := refundAgentRedemptionCharge(tx, &redemptions[i]); err != nil {
+				return err
+			}
+		}
+		result := tx.Delete(&redemptions)
+		rowsAffected = result.RowsAffected
+		return result.Error
+	})
+	return rowsAffected, err
+}
+
+func refundAgentRedemptionCharge(tx *gorm.DB, redemption *Redemption) error {
+	if redemption == nil || redemption.UserId <= 0 || redemption.Status == common.RedemptionCodeStatusUsed {
+		return nil
+	}
+	var creator User
+	if err := tx.Select("id", "is_agent", "agent_discount").First(&creator, "id = ?", redemption.UserId).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil
+		}
+		return err
+	}
+	if !creator.IsAgent {
+		return nil
+	}
+	refund := redemption.AgentCharge
+	if refund <= 0 {
+		refund = int((int64(redemption.Quota)*int64(creator.AgentDiscount) + 99) / 100)
+	}
+	if refund <= 0 {
+		return nil
+	}
+	if err := tx.Model(&User{}).Where("id = ?", creator.Id).Update("quota", gorm.Expr("quota + ?", refund)).Error; err != nil {
+		return err
+	}
+	return tx.Model(redemption).Update("agent_charge", 0).Error
 }
