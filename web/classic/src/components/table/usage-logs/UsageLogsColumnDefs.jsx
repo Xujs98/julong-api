@@ -428,6 +428,11 @@ function getUsageLogDetailSummary(record, text, billingDisplayMode, t) {
   const other = getLogOther(record.other);
 
   if (record.type === 6) {
+    if (other?.op?.action === 'agent_redemption_refund') {
+      return {
+        segments: [{ text: t('代理兑换码退款'), tone: 'primary' }],
+      };
+    }
     return {
       segments: [{ text: t('异步任务退款'), tone: 'primary' }],
     };

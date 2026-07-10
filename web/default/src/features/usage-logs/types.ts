@@ -209,6 +209,10 @@ export interface LogOtherData {
   is_task?: boolean
   task_id?: string
   reason?: string
+  redemption_id?: number
+  redemption_name?: string
+  redemption_quota?: number
+  refund_quota?: number
   // Subscription billing fields
   subscription_plan_id?: string
   subscription_plan_title?: string

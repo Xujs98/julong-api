@@ -337,6 +337,16 @@ func TestDeleteAgentRedemptionRefundsRecordedCharge(t *testing.T) {
 	require.NoError(t, DeleteRedemptionById(redemption.Id))
 	require.NoError(t, DB.First(agent, "id = ?", agent.Id).Error)
 	assert.Equal(t, 600, agent.Quota)
+
+	var log Log
+	require.NoError(t, LOG_DB.Where("user_id = ? AND type = ?", agent.Id, LogTypeRefund).First(&log).Error)
+	assert.Equal(t, agent.Id, log.UserId)
+	assert.Equal(t, "refund-agent", log.Username)
+	assert.Equal(t, 201, log.Quota)
+	assert.Contains(t, log.Content, "代理兑换码退款")
+	assert.Contains(t, log.Content, "兑换码ID")
+	assert.Contains(t, log.Other, "agent_redemption_refund")
+	assert.Contains(t, log.Other, "\"refund_quota\":201")
 }
 
 func TestDeleteUsedAgentRedemptionDoesNotRefund(t *testing.T) {
@@ -376,4 +386,8 @@ func TestDeleteUsedAgentRedemptionDoesNotRefund(t *testing.T) {
 	require.NoError(t, DeleteRedemptionById(redemption.Id))
 	require.NoError(t, DB.First(agent, "id = ?", agent.Id).Error)
 	assert.Equal(t, 0, agent.Quota)
+
+	var count int64
+	require.NoError(t, LOG_DB.Model(&Log{}).Where("user_id = ? AND type = ?", agent.Id, LogTypeRefund).Count(&count).Error)
+	assert.Equal(t, int64(0), count)
 }

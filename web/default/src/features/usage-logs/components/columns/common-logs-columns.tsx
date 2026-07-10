@@ -133,6 +133,16 @@ function buildTypeDetailSegments(
   }
 
   if (log.type === 6) {
+    if (other?.op?.action === 'agent_redemption_refund') {
+      const segments: DetailSegment[] = [{ text: t('Agent redemption refund') }]
+      if (other.refund_quota != null) {
+        segments.push({
+          text: `${t('Refund amount')}: ${formatLogQuota(other.refund_quota)}`,
+          muted: true,
+        })
+      }
+      return segments
+    }
     return [{ text: t('Async task refund') }]
   }
 

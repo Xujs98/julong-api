@@ -510,6 +510,32 @@ export const useLogsData = () => {
         }
       }
       if (logs[i].type === 6) {
+        if (other?.op?.action === 'agent_redemption_refund') {
+          if (other?.redemption_id) {
+            expandDataLocal.push({
+              key: t('兑换码ID'),
+              value: other.redemption_id,
+            });
+          }
+          if (other?.redemption_name) {
+            expandDataLocal.push({
+              key: t('兑换码名称'),
+              value: other.redemption_name,
+            });
+          }
+          if (other?.redemption_quota != null) {
+            expandDataLocal.push({
+              key: t('兑换码额度'),
+              value: renderQuota(other.redemption_quota),
+            });
+          }
+          if (other?.refund_quota != null) {
+            expandDataLocal.push({
+              key: t('退款金额'),
+              value: renderQuota(other.refund_quota),
+            });
+          }
+        }
         if (other?.task_id) {
           expandDataLocal.push({
             key: t('任务ID'),

@@ -788,7 +788,42 @@ export function DetailsDialog(props: DetailsDialogProps) {
         )}
 
         {/* Refund details (type=6) */}
-        {isRefund && other && (other.task_id || other.reason) && (
+        {isRefund && other?.op?.action === 'agent_redemption_refund' && (
+          <DetailSection label={t('Agent redemption refund')}>
+            {other.redemption_id != null && (
+              <DetailRow
+                label={t('Redemption code ID')}
+                value={other.redemption_id}
+                mono
+              />
+            )}
+            {other.redemption_name && (
+              <DetailRow
+                label={t('Redemption code name')}
+                value={other.redemption_name}
+              />
+            )}
+            {other.redemption_quota != null && (
+              <DetailRow
+                label={t('Redemption quota')}
+                value={formatLogQuota(other.redemption_quota)}
+                mono
+              />
+            )}
+            {other.refund_quota != null && (
+              <DetailRow
+                label={t('Refund amount')}
+                value={formatLogQuota(other.refund_quota)}
+                mono
+              />
+            )}
+          </DetailSection>
+        )}
+
+        {isRefund &&
+          other &&
+          other?.op?.action !== 'agent_redemption_refund' &&
+          (other.task_id || other.reason) && (
           <DetailSection label={t('Refund Details')}>
             {other.task_id && (
               <DetailRow label={t('Task ID')} value={other.task_id} mono />

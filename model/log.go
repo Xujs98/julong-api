@@ -159,6 +159,37 @@ func RecordLog(userId int, logType int, content string) {
 	}
 }
 
+func RecordAgentRedemptionRefundLog(userId int, redemption *Redemption, refund int) {
+	if userId <= 0 || redemption == nil || refund <= 0 {
+		return
+	}
+	username, _ := GetUsernameById(userId, false)
+	other := map[string]interface{}{
+		"op": buildOpField("agent_redemption_refund", map[string]interface{}{
+			"redemption_id":    redemption.Id,
+			"redemption_name":  redemption.Name,
+			"redemption_quota": redemption.Quota,
+			"refund_quota":     refund,
+		}),
+		"redemption_id":    redemption.Id,
+		"redemption_name":  redemption.Name,
+		"redemption_quota": redemption.Quota,
+		"refund_quota":     refund,
+	}
+	log := &Log{
+		UserId:    userId,
+		Username:  username,
+		CreatedAt: common.GetTimestamp(),
+		Type:      LogTypeRefund,
+		Content:   fmt.Sprintf("代理兑换码退款 %s，兑换码ID %d", logger.LogQuota(refund), redemption.Id),
+		Quota:     refund,
+		Other:     common.MapToJsonStr(other),
+	}
+	if err := createLog(log); err != nil {
+		common.SysLog("failed to record agent redemption refund log: " + err.Error())
+	}
+}
+
 // RecordLogWithAdminInfo 记录操作日志，并将管理员相关信息存入 Other.admin_info，
 func RecordLogWithAdminInfo(userId int, logType int, content string, adminInfo map[string]interface{}) {
 	if logType == LogTypeConsume && !common.LogConsumeEnabled {
