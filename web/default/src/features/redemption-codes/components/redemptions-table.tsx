@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useQuery } from '@tanstack/react-query'
 import { getRouteApi } from '@tanstack/react-router'
+import { Plus } from 'lucide-react'
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -28,6 +29,7 @@ import {
   DataTablePage,
   useDataTable,
 } from '@/components/data-table'
+import { Button } from '@/components/ui/button'
 import { useMediaQuery } from '@/hooks'
 import { useTableUrlState } from '@/hooks/use-table-url-state'
 
@@ -55,7 +57,7 @@ function isDisabledRedemptionRow(redemption: Redemption) {
 export function RedemptionsTable() {
   const { t } = useTranslation()
   const columns = useRedemptionsColumns()
-  const { refreshTrigger } = useRedemptions()
+  const { refreshTrigger, setOpen } = useRedemptions()
   const isMobile = useMediaQuery('(max-width: 640px)')
 
   const {
@@ -166,6 +168,12 @@ export function RedemptionsTable() {
       emptyDescription={t(
         'No redemption codes available. Create your first redemption code to get started.'
       )}
+      emptyAction={
+        <Button className='w-full sm:w-auto' onClick={() => setOpen('create')}>
+          <Plus className='h-4 w-4' />
+          {t('Create Code')}
+        </Button>
+      }
       skeletonKeyPrefix='redemptions-skeleton'
       applyHeaderSize
       toolbarProps={{

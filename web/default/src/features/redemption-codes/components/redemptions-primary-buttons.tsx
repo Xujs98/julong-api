@@ -93,11 +93,11 @@ export function RedemptionsPrimaryButtons() {
 
   return (
     <>
-      <div className='flex flex-wrap items-center gap-2'>
+      <div className='flex w-[calc(100vw-1.5rem)] max-w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center sm:justify-end'>
         {isAgent && (
-          <>
+          <div className='grid w-full grid-cols-[minmax(0,1fr)_auto] gap-2 sm:flex sm:w-auto sm:items-center'>
             <Input
-              className='h-8 w-[280px]'
+              className='h-9 min-w-0 sm:h-8 sm:w-[280px]'
               value={agentTopUpLink}
               onChange={(event) => setAgentTopUpLink(event.target.value)}
               placeholder={t('Agent top-up link')}
@@ -105,27 +105,35 @@ export function RedemptionsPrimaryButtons() {
             <Button
               size='sm'
               variant='outline'
+              className='h-9 whitespace-nowrap sm:h-8'
               onClick={handleSaveAgentLink}
               disabled={isSavingLink}
             >
               {isSavingLink ? t('Saving...') : t('Save changes')}
             </Button>
-          </>
+          </div>
         )}
-        {isAdmin && (
+        <div className='grid w-full grid-cols-1 gap-2 sm:flex sm:w-auto sm:items-center'>
+          {isAdmin && (
+            <Button
+              size='sm'
+              variant='outline'
+              className='h-9 w-full whitespace-nowrap sm:h-8 sm:w-auto'
+              onClick={() => setShowDeleteInvalidConfirm(true)}
+            >
+              <Trash2 className='text-destructive h-4 w-4' />
+              {t('Delete Invalid')}
+            </Button>
+          )}
           <Button
             size='sm'
-            variant='outline'
-            onClick={() => setShowDeleteInvalidConfirm(true)}
+            className='h-9 w-full whitespace-nowrap sm:h-8 sm:w-auto'
+            onClick={() => setOpen('create')}
           >
-            <Trash2 className='text-destructive h-4 w-4' />
-            {t('Delete Invalid')}
+            <Plus className='h-4 w-4' />
+            {t('Create Code')}
           </Button>
-        )}
-        <Button size='sm' onClick={() => setOpen('create')}>
-          <Plus className='h-4 w-4' />
-          {t('Create Code')}
-        </Button>
+        </div>
       </div>
 
       <ConfirmDialog
