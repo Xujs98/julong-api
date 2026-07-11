@@ -26,6 +26,7 @@ import { UsersMutateDrawer } from './components/users-mutate-drawer'
 import { UsersPrimaryButtons } from './components/users-primary-buttons'
 import { UsersProvider, useUsers } from './components/users-provider'
 import { UsersTable } from './components/users-table'
+import { UserDetailDialog } from './components/user-detail-dialog'
 
 function UsersContent() {
   const { t } = useTranslation()
@@ -50,6 +51,7 @@ function UsersContent() {
       />
       <UsersDeleteDialog />
       <AgentDetailDialog />
+      <UserDetailDialog />
     </>
   )
 }

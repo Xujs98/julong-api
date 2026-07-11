@@ -29,6 +29,7 @@ import type {
   ManageUserQuotaPayload,
   ApiResponse,
   AgentDetailData,
+  UserUsageSummary,
 } from './types'
 
 // ============================================================================
@@ -168,6 +169,13 @@ export async function getAgentDetail(
   userId: number
 ): Promise<ApiResponse<AgentDetailData>> {
   const res = await api.get(`/api/user/agent-detail/${userId}`)
+  return res.data
+}
+
+export async function getUserUsageSummary(
+  userId: number
+): Promise<ApiResponse<UserUsageSummary>> {
+  const res = await api.get(`/api/user/${userId}/usage-summary`)
   return res.data
 }
 

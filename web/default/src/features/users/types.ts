@@ -150,4 +150,13 @@ export interface AgentDetailData {
   redemptions: Redemption[]
 }
 
-export type UsersDialogType = 'create' | 'update' | 'delete' | 'agent-detail'
+export interface UserUsageSummary {
+  total_tokens: number
+}
+
+export type UsersDialogType =
+  | 'create'
+  | 'update'
+  | 'delete'
+  | 'agent-detail'
+  | 'user-detail'

@@ -33,6 +33,7 @@ import {
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
+import { formatQuota } from '@/lib/format'
 
 import {
   SettingsForm,
@@ -50,6 +51,11 @@ const schema = z.object({
 })
 
 type Values = z.infer<typeof schema>
+type QuotaInputValue = number | ''
+
+function formatQuotaInputValue(value: QuotaInputValue): string {
+  return formatQuota(value === '' ? 0 : value)
+}
 
 export function CheckinSettingsSection({
   defaultValues,
@@ -162,7 +168,12 @@ export function CheckinSettingsSection({
                       />
                     </FormControl>
                     <FormDescription>
-                      {t('Minimum quota amount awarded for check-in')}
+                      {t(
+                        'Minimum quota amount awarded for check-in ({{formattedQuota}})',
+                        {
+                          formattedQuota: formatQuotaInputValue(field.value),
+                        }
+                      )}
                     </FormDescription>
                     <FormMessage />
                   </FormItem>
@@ -184,7 +195,12 @@ export function CheckinSettingsSection({
                       />
                     </FormControl>
                     <FormDescription>
-                      {t('Maximum quota amount awarded for check-in')}
+                      {t(
+                        'Maximum quota amount awarded for check-in ({{formattedQuota}})',
+                        {
+                          formattedQuota: formatQuotaInputValue(field.value),
+                        }
+                      )}
                     </FormDescription>
                     <FormMessage />
                   </FormItem>

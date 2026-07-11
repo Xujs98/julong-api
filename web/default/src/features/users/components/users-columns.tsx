@@ -95,6 +95,7 @@ export function useUsersColumns(): ColumnDef<User>[] {
       accessorKey: 'username',
       header: t('Username'),
       cell: ({ row }) => {
+        const user = row.original
         const username = row.getValue('username') as string
         const displayName = row.original.display_name
         const remark = row.original.remark
@@ -102,9 +103,16 @@ export function useUsersColumns(): ColumnDef<User>[] {
         return (
           <div className='flex min-w-[160px] flex-col gap-1'>
             <div className='flex items-center gap-2'>
-              <LongText className='max-w-[140px] font-medium'>
+              <button
+                type='button'
+                className='text-primary hover:text-primary/80 max-w-[140px] cursor-pointer truncate text-left font-medium underline-offset-4 hover:underline'
+                onClick={() => {
+                  setCurrentRow(user)
+                  setOpen('user-detail')
+                }}
+              >
                 {username}
-              </LongText>
+              </button>
               {remark && (
                 <Tooltip>
                   <TooltipTrigger

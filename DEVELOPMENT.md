@@ -1,0 +1,770 @@
+# Julong-API 开发文档
+
+最后更新：2026-07-11
+
+本文档是本二开项目的强制开发记录。以后新增、修改或删除任何 API、组件、数据模型、配置项、路由、数据库行为或部署行为时，必须在同一次改动中同步更新本文档，并在“变更日志”中新增记录。
+
+## 维护规则
+
+- 当前代码是唯一事实来源。如果本文档和代码不一致，必须先按当前代码修正文档，再继续开发。
+- 每次 API 变更必须同步更新 API 清单、请求/响应说明、权限说明和变更日志。
+- 每次前端组件、页面、交互变更必须同步更新组件清单或对应功能模块说明。
+- 每次数据库模型、字段或迁移行为变更必须同步更新数据模型和迁移注意事项。
+- 前端 i18n 语言包禁止手动直接编辑。新增或修改翻译必须通过临时脚本 `web/default/scripts/add-missing-keys.mjs` 写入，然后运行 `bun run i18n:sync`，最后删除临时脚本。
+- `web/default/src/routeTree.gen.ts` 是 TanStack Router 工具链/typecheck 生成文件。除非生成不可用且改动完全机械明确，否则不要手动编辑。
+- 当前项目名为 Julong-API / 矩龙-API。除非保留上游 import path、包名或兼容代码确有必要，不要新增面向用户的 `new-api` 文案。
+
+## 项目状态
+
+| 模块 | 状态 | 说明 |
+| --- | --- | --- |
+| 后端 Gin API | 进行中 | 保留上游核心功能，并叠加 Julong 二开功能。本地后端通常监听 `:3000`。 |
+| 默认前端 UI | 进行中 | React 19 + Rsbuild + TanStack Router，代码在 `web/default`。本地开发服务通常是 `:5173`。 |
+| Classic 前端 | 上游已有 | Dockerfile 仍会构建，但不是当前主要二开目标。 |
+| Docker 部署 | 进行中 | `docker-compose.yml` 使用 `qq1371446705/julong-api:latest`，包含 Postgres、Redis，宿主端口 `3388`。 |
+| 代理功能 | 已实现，仍需持续 QA | 代理折扣、代理生成兑换码、代理所属用户、代理充值链接、退款日志等。 |
+| 错误反馈工单 | 已实现 | 500 页面跳转 `/error-report`，管理员/root 在 `/error-reports` 查看。 |
+| 用户详情弹窗 | 已实现 | 后台用户列表点击用户名可查看基本信息、最近使用日志、总消耗 token。 |
+| 兑换码搜索 | 已实现 | 后台兑换码支持按兑换码 key、生成者用户名/显示名、名称、ID、状态搜索。 |
+| 签到额度预览 | 已实现 | 计费与支付中的签到奖励输入框显示格式化额度预览。 |
+| 文档纪律 | 新增 | 以后每次代码改动都必须同步维护本文档。 |
+
+## 仓库结构
+
+| 路径 | 用途 | 关键依赖 | 状态 |
+| --- | --- | --- | --- |
+| `main.go` | 进程入口、嵌入前端资源、初始化路由和后台任务 | `router`、`model`、`common`、`service` | 活跃 |
+| `router/` | Gin 路由注册：管理 API、Relay API、Dashboard、Video、前端静态资源 | `controller`、`middleware`、`relay` | 活跃 |
+| `controller/` | HTTP handler、参数校验、响应封装 | `model`、`service`、`common`、`setting` | 活跃 |
+| `model/` | GORM 模型、数据库迁移、持久化辅助函数 | `gorm`、`common`、`setting` | 活跃 |
+| `middleware/` | 鉴权、CORS、限流、请求 ID、请求体清理、审计 | `common`、`model`、`service/authz` | 活跃 |
+| `service/` | 业务逻辑：Relay、计费、订阅、任务、OAuth、token 计数 | `relay`、`model`、各 provider SDK | 活跃 |
+| `relay/` | OpenAI/Anthropic/Gemini/MJ/task 兼容网关逻辑 | channel adapters、billing helpers | 活跃 |
+| `setting/` | 运行时配置分组和默认设置 | `model.Option`、环境变量 | 活跃 |
+| `common/` | 公共工具、数据库初始化、额度计算、分页、API 响应工具 | stdlib、Redis、GORM | 活跃 |
+| `web/default/` | 主 React 前端 | React、Rsbuild、TanStack Router/Query/Table、Tailwind、shadcn 风格组件 | 活跃 |
+| `web/classic/` | Classic 主题前端 | Vite/React 旧栈 | 上游已有 |
+| `docker-compose.yml` | 生产风格 Compose 部署 | Postgres、Redis、镜像 `qq1371446705/julong-api:latest` | 活跃 |
+| `docker-compose.dev.yml` | 本地后端构建的开发 Compose | Postgres、Redis、Dockerfile.dev | 需要品牌名清理 |
+| `Dockerfile` | 多阶段构建 default/classic 前端和 Go 二进制 | Bun、Go、Debian runtime | 活跃 |
+
+## 技术栈
+
+### 后端
+
+- 语言：Go，模块名仍为 `github.com/QuantumNous/new-api`，`go 1.25.1`。
+- HTTP 框架：Gin。
+- ORM：GORM。
+- 数据库：
+  - 主库：默认 SQLite；通过 `SQL_DSN` 可使用 MySQL/PostgreSQL。
+  - 日志库：默认跟随主库；可通过 `LOG_SQL_DSN` 使用独立数据库或 ClickHouse。
+  - Redis：可选，通过 `REDIS_CONN_STRING` 启用。
+- 鉴权：
+  - Dashboard 使用 session 鉴权。
+  - 管理 API 和部分接口支持 access token 鉴权。
+  - `/v1`、`/mj`、task/video relay 路由使用 API key token 鉴权。
+  - 角色常量来自 `common`：普通用户、管理员、root。
+- 计费：
+  - 额度以整数 quota 单位存储。
+  - 前端显示通过 `web/default/src/lib/format.ts` 和货币显示设置格式化。
+  - 余额和订阅额度并存；按次计费模型可以配置是否允许订阅额度抵扣。
+
+### 前端
+
+- 工作区：`web/`。
+- 主应用：`web/default`。
+- 包管理/运行时：Bun。本机已知 Bun 路径：`/Users/xujs/.nvm/versions/node/v24.13.0/bin/bun`。
+- 框架：React 19。
+- 路由：TanStack Router，文件路由位于 `web/default/src/routes`。
+- 数据请求：TanStack Query + Axios 封装 `web/default/src/lib/api.ts`。
+- 表格：TanStack Table + 共享表格系统 `web/default/src/components/data-table`。
+- 样式：Tailwind CSS 4、Base UI、本地 shadcn 风格 primitives。
+- i18n：`react-i18next`，语言文件位于 `web/default/src/i18n/locales`。
+
+## 本地开发
+
+### 后端
+
+```bash
+go run main.go
+```
+
+默认本地行为：
+
+- HTTP 监听 `http://localhost:3000`。
+- 未设置 `SQL_DSN` 时使用 SQLite 文件 `one-api.db`。
+- 未设置 `REDIS_CONN_STRING` 时 Redis 不启用。
+- 启动时会对 `model/main.go` 中列出的模型执行 AutoMigrate。
+
+### 前端
+
+```bash
+cd web/default
+PATH="/Users/xujs/.nvm/versions/node/v24.13.0/bin:$PATH" \
+  /Users/xujs/.nvm/versions/node/v24.13.0/bin/bun run dev
+```
+
+常用开发地址：`http://localhost:5173`。
+
+### 验证命令
+
+```bash
+go test ./...
+cd web/default
+PATH="/Users/xujs/.nvm/versions/node/v24.13.0/bin:$PATH" bun run typecheck
+PATH="/Users/xujs/.nvm/versions/node/v24.13.0/bin:$PATH" bun run i18n:sync
+git diff --check
+```
+
+## 部署
+
+### Docker Compose
+
+当前生产风格 Compose 文件：`docker-compose.yml`。
+
+关键值：
+
+- 项目名：`julong-api`。
+- 应用镜像：`qq1371446705/julong-api:latest`。
+- 应用容器：`julong-api`。
+- 宿主端口：`3388:3000`。
+- Redis 容器：`julong-api-redis`。
+- Postgres 容器：`julong-api-postgres`。
+- 主库 DSN 示例：`postgresql://root:123456@postgres:5432/julong-api`。
+- 数据卷：`./data:/data`、`./logs:/app/logs`、`pg_data`。
+
+生产部署前必须修改 Compose 中所有默认密码。
+
+推荐服务器更新流程：
+
+```bash
+git pull
+docker compose pull
+docker compose up -d
+```
+
+该流程会在镜像或 Compose 变化时重新创建容器。只要不执行 `docker compose down -v` 或手动删除 volume，命名数据库卷中的数据会保留。
+
+## 运行时配置
+
+配置通过 `model.Option` 持久化，由 `controller/option.go` 和前端系统设置页面管理。
+
+| Key 或分组 | 文件 | 用途 | 备注 |
+| --- | --- | --- | --- |
+| `checkin_setting.enabled` | `setting/operation_setting/checkin_setting.go`、`web/default/src/features/system-settings/general/checkin-settings-section.tsx` | 启用每日签到奖励 | 前端已显示格式化额度预览。 |
+| `checkin_setting.min_quota` | 同上 | 随机签到奖励最小额度 | 存储原始 quota 整数。 |
+| `checkin_setting.max_quota` | 同上 | 随机签到奖励最大额度 | 存储原始 quota 整数。 |
+| `QuotaForNewUser` | `quota-settings-section.tsx` | 新用户初始额度 | 使用 `formatQuota` 显示预览。 |
+| `QuotaForInviter` / `QuotaForInvitee` | 同上 | 邀请奖励 | 受支付合规确认约束。 |
+| `SidebarModulesAdmin` | `web/default/src/features/system-settings/maintenance/config.ts` | 控制侧边栏模块显示 | 自定义模块包含 `errorReports`。 |
+| 模型定价订阅抵扣 | `web/default/src/features/system-settings/models/model-pricing-sheet.tsx` 及后端计费设置 | 按次模型是否允许订阅额度抵扣 | 适用于所有模型，不局限于 `gpt-image-2`。 |
+
+## 架构
+
+### 请求流程
+
+1. 客户端访问前端路由或 API。
+2. 前端 Axios 实例 `web/default/src/lib/api.ts` 在可用时从 localStorage 附加 `New-Api-User` 请求头。
+3. Gin 路由组应用中间件：
+   - `middleware.UserAuth()`：登录用户。
+   - `middleware.AdminAuth()`：管理员/root。
+   - `middleware.RootAuth()`：仅 root。
+   - `middleware.TokenAuth()`：Relay API key。
+4. Controller 校验请求并调用 model/service 层。
+5. Dashboard API 通常返回统一业务响应：
+
+```json
+{
+  "success": true,
+  "message": "",
+  "data": {}
+}
+```
+
+Relay API 使用 OpenAI/Anthropic/Gemini 兼容响应和错误结构。
+
+### 前端流程
+
+1. `web/default/src/routes` 下的文件路由渲染 feature 组件。
+2. Feature 的 `api.ts` 调用 `web/default/src/lib/api.ts`。
+3. Feature 表格使用 `DataTablePage` 和 `useTableUrlState` 管理分页、过滤、URL 状态、移动端/桌面端布局。
+4. Mutation 通常使用 `sonner` toast，并触发 provider 中的 refresh 状态。
+5. 管理页面通过 route `beforeLoad` 读取 `useAuthStore` 和 `ROLE` 常量做权限守卫。
+
+## API 清单
+
+除非特别说明，Dashboard API 返回结构如下：
+
+```ts
+type ApiResponse<T> = {
+  success: boolean
+  message?: string
+  data?: T
+}
+```
+
+通用错误处理：
+
+- 鉴权中间件可能因 session/access token 缺失或无效返回 HTTP `401`。
+- 业务校验错误通常返回 HTTP `200` 且 `success:false`。
+- Relay 未找到或不支持的路由返回 OpenAI 兼容错误 JSON。
+- 前端 Axios 默认对 `success:false` 和 HTTP 错误弹 toast，除非请求配置关闭错误处理。
+
+### 公共与系统 API
+
+| 方法 | 路径 | Handler | 用途 | 参数/请求体 | 响应 | 权限 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| GET | `/api/setup` | `controller.GetSetup` | 读取安装/初始化状态 | 无 | setup 元数据 | 公开 | 完成 |
+| POST | `/api/setup` | `controller.PostSetup` | 初始化安装 | setup payload | success | 公开 + body limit | 完成 |
+| GET | `/api/status` | `controller.GetStatus` | 系统状态/健康检查 | 无 | status 对象 | 公开 | 完成 |
+| GET | `/api/uptime/status` | `controller.GetUptimeKumaStatus` | Uptime Kuma 集成 | 无 | uptime 状态 | 公开 | 完成 |
+| GET | `/api/notice` | `controller.GetNotice` | 站点公告 | 无 | 内容 | 公开 | 完成 |
+| GET | `/api/user-agreement` | `controller.GetUserAgreement` | 用户协议 | 无 | markdown/html | 公开 | 完成 |
+| GET | `/api/privacy-policy` | `controller.GetPrivacyPolicy` | 隐私政策 | 无 | markdown/html | 公开 | 完成 |
+| GET | `/api/about` | `controller.GetAbout` | 关于页面内容 | 无 | 内容 | 公开 | 完成 |
+| GET | `/api/home_page_content` | `controller.GetHomePageContent` | 首页内容 | 无 | JSON 内容 | 公开 | 完成 |
+| GET | `/api/pricing` | `controller.GetPricing` | 定价/模型广场数据 | query filters | pricing data | 顶部导航模块权限 | 完成 |
+| GET | `/api/rankings` | `controller.GetRankings` | 排行榜数据 | query filters | ranking data | 顶部导航模块权限 | 完成 |
+| GET | `/api/ratio_config` | `controller.GetRatioConfig` | 暴露给前端的倍率配置 | 无 | ratio object | Critical rate limit | 完成 |
+| GET | `/api/perf-metrics/summary` | `controller.GetPerfMetricsSummary` | 性能指标摘要 | query | summary | pricing 导航 public/user auth | 完成 |
+| GET | `/api/perf-metrics` | `controller.GetPerfMetrics` | 性能指标列表 | query | list | pricing 导航 public/user auth | 完成 |
+
+### 错误反馈 API
+
+| 方法 | 路径 | Handler | 用途 | 参数/请求体 | 响应 | 权限 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| POST | `/api/error-reports` | `controller.SubmitErrorReport` | 从 500 页面提交错误反馈 | JSON `{title,message,page_url,error_status,stack?}` | `ErrorReport` | 公开；通过 `TryUserAuth` 可选记录登录用户；匿名 body limit | 完成 |
+| GET | `/api/error-reports` | `controller.GetErrorReports` | 管理员错误反馈列表 | `p`, `page_size` | `PageInfo<ErrorReport[]>` | 管理员/root | 完成 |
+| GET | `/api/error-reports/` | `controller.GetErrorReports` | 同上，兼容尾斜杠 | `p`, `page_size` | `PageInfo<ErrorReport[]>` | 管理员/root | 完成 |
+| GET | `/api/error-reports/:id` | `controller.GetErrorReport` | 查看单条错误反馈 | path `id` | `ErrorReport` | 管理员/root | 完成 |
+
+调用示例：
+
+```bash
+curl http://localhost:3000/api/error-reports \
+  -H 'Content-Type: application/json' \
+  -d '{"title":"500 on model pricing","message":"Clicked model pricing and got 500","page_url":"http://localhost:5173/system-settings/billing/model-pricing","error_status":500}'
+```
+
+### 认证与用户 API
+
+| 方法 | 路径 | Handler | 用途 | 参数/请求体 | 权限 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- |
+| POST | `/api/user/register` | `controller.Register` | 注册用户 | username/password/email 等 | 公开 + Turnstile/rate limit | 完成 |
+| POST | `/api/user/login` | `controller.Login` | 登录 | credentials | 公开 + Turnstile/rate limit | 完成 |
+| POST | `/api/user/login/2fa` | `controller.Verify2FALogin` | 完成 2FA 登录 | 2FA code | 公开 + rate limit | 完成 |
+| GET | `/api/user/logout` | `controller.Logout` | 登出当前 session | 无 | 公开 | 完成 |
+| GET | `/api/user/groups` | `controller.GetUserGroups` | 用户分组元数据 | 无 | 公开 | 完成 |
+| GET | `/api/user/self` | `controller.GetSelf` | 当前用户信息 | 无 | 用户 | 完成 |
+| PUT | `/api/user/self` | `controller.UpdateSelf` | 更新当前用户资料 | user fields | 用户 + critical rate limit | 完成 |
+| DELETE | `/api/user/self` | `controller.DeleteSelf` | 删除当前用户 | 无 | 用户 | 完成 |
+| GET | `/api/user/token` | `controller.GenerateAccessToken` | 生成管理/用户 access token | 无 | 用户 | 完成 |
+| GET | `/api/user/models` | `controller.GetUserModels` | 用户可用模型 | 无 | 用户 | 完成 |
+| GET | `/api/user/aff` | `controller.GetAffCode` | 邀请码 | 无 | 用户 | 完成 |
+| POST | `/api/user/aff_transfer` | `controller.TransferAffQuota` | 邀请额度转余额 | `{quota}` | 用户 + 合规确认 | 完成 |
+| PUT | `/api/user/setting` | `controller.UpdateUserSetting` | 更新用户设置 JSON | setting payload | 用户 | 完成 |
+| GET | `/api/user/agent/users` | `controller.GetAgentUsers` | 代理所属用户 | 无 | 代理用户 | 完成 |
+| PUT | `/api/user/agent/topup-link` | `controller.UpdateAgentTopUpLink` | 代理自定义充值链接 | `{agent_topup_link}` | 代理用户 | 完成 |
+| GET | `/api/user/checkin` | `controller.GetCheckinStatus` | 读取每日签到状态 | 无 | 用户 | 完成 |
+| POST | `/api/user/checkin` | `controller.DoCheckin` | 执行每日签到 | 无 | 用户 + Turnstile | 完成 |
+
+### 后台用户 API
+
+以下路由均位于 `/api/user` 下，除非特别说明，均需要 `middleware.AdminAuth()`。
+
+| 方法 | 路径 | Handler | 用途 | 参数/请求体 | 响应 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- |
+| GET | `/api/user/` | `controller.GetAllUsers` | 分页用户列表 | `p`, `page_size` | `PageInfo<User[]>` | 完成 |
+| GET | `/api/user/search` | `controller.SearchUsers` | 搜索用户 | `keyword`, `group`, `role`, `status`, `p`, `page_size` | `PageInfo<User[]>` | 完成 |
+| GET | `/api/user/:id` | `controller.GetUser` | 可编辑用户详情 | path `id` | `User` | 完成；同级/更高角色受限 |
+| POST | `/api/user/` | `controller.CreateUser` | 创建用户 | `UserFormData` | `User` | 完成 |
+| PUT | `/api/user/` | `controller.UpdateUser` | 更新用户 | `UserFormData & {id}` | partial `User` | 完成 |
+| DELETE | `/api/user/:id` | `controller.DeleteUser` | 删除用户 | path `id` | success | 完成 |
+| POST | `/api/user/manage` | `controller.ManageUser` | 晋升/降级/启用/禁用/删除/额度调整 | `{id,action,...}` | partial `User` | 完成 |
+| GET | `/api/user/agent-detail/:id` | `controller.AdminGetAgentDetail` | 代理详情弹窗 | path `id` | `{agent,users,redemptions}` | 完成 |
+| GET | `/api/user/:id/usage-summary` | `controller.AdminGetUserUsageSummary` | 用户详情弹窗总 token 消耗 | path `id` | `{total_tokens:number}` | 完成 |
+| GET | `/api/user/topup` | `controller.GetAllTopUps` | 管理员充值列表 | `p`, `page_size` | top-up page | 完成 |
+| POST | `/api/user/topup/complete` | `controller.AdminCompleteTopUp` | 手动完成充值订单 | `{trade_no}` | success | 完成 |
+| GET | `/api/user/:id/oauth/bindings` | `controller.GetUserOAuthBindingsByAdmin` | OAuth 绑定列表 | path `id` | binding list | 完成 |
+| DELETE | `/api/user/:id/oauth/bindings/:provider_id` | `controller.UnbindCustomOAuthByAdmin` | 删除自定义 OAuth 绑定 | path params | success | 完成 |
+| DELETE | `/api/user/:id/bindings/:binding_type` | `controller.AdminClearUserBinding` | 清除内置绑定 | path params | success | 完成 |
+| DELETE | `/api/user/:id/reset_passkey` | `controller.AdminResetPasskey` | 重置 Passkey | path `id` | success | 完成 |
+| GET | `/api/user/2fa/stats` | `controller.Admin2FAStats` | 2FA 统计 | 无 | stats | 完成 |
+| DELETE | `/api/user/:id/2fa` | `controller.AdminDisable2FA` | 禁用用户 2FA | path `id` | success | 完成 |
+
+调用示例：
+
+```bash
+curl 'http://localhost:3000/api/user/1/usage-summary' \
+  -H 'Cookie: <admin-session-cookie>' \
+  -H 'New-Api-User: 1'
+```
+
+### 支付、钱包、订阅 API
+
+| 方法 | 路径 | Handler | 用途 | 权限 | 状态 |
+| --- | --- | --- | --- | --- | --- |
+| GET | `/api/user/topup/info` | `controller.GetTopUpInfo` | 钱包充值配置 | 用户 | 完成 |
+| GET | `/api/user/topup/self` | `controller.GetUserTopUps` | 当前用户充值记录 | 用户 | 完成 |
+| POST | `/api/user/topup` | `controller.TopUp` | 兑换码/充值动作 | 用户 | 完成 |
+| POST | `/api/user/pay` | `controller.RequestEpay` | EPay 支付请求 | 用户 | 完成 |
+| POST | `/api/user/amount` | `controller.RequestAmount` | 计算应付金额 | 用户 | 完成 |
+| POST | `/api/user/stripe/pay` | `controller.RequestStripePay` | Stripe 支付 | 用户 | 完成 |
+| POST | `/api/user/stripe/amount` | `controller.RequestStripeAmount` | Stripe 金额计算 | 用户 | 完成 |
+| POST | `/api/user/creem/pay` | `controller.RequestCreemPay` | Creem 支付 | 用户 | 完成 |
+| POST | `/api/user/waffo/amount` | `controller.RequestWaffoAmount` | Waffo 金额计算 | 用户 | 完成 |
+| POST | `/api/user/waffo/pay` | `controller.RequestWaffoPay` | Waffo 支付 | 用户 | 完成 |
+| POST | `/api/user/waffo-pancake/amount` | `controller.RequestWaffoPancakeAmount` | Waffo Pancake 金额计算 | 用户 | 完成 |
+| POST | `/api/user/waffo-pancake/pay` | `controller.RequestWaffoPancakePay` | Waffo Pancake 支付 | 用户 | 完成 |
+| POST | `/api/stripe/webhook` | `controller.StripeWebhook` | Stripe 回调 | 公开 body limit | 完成 |
+| POST | `/api/creem/webhook` | `controller.CreemWebhook` | Creem 回调 | 公开 body limit | 完成 |
+| POST | `/api/waffo/webhook` | `controller.WaffoWebhook` | Waffo 回调 | 公开 body limit | 完成 |
+| POST | `/api/waffo-pancake/webhook/:env` | `controller.WaffoPancakeWebhook` | Waffo Pancake 回调 | 公开 body limit | 完成 |
+| GET/POST | `/api/user/epay/notify` | `controller.EpayNotify` | EPay 通知 | 公开 | 完成 |
+| GET/POST | `/api/subscription/epay/notify` | `controller.SubscriptionEpayNotify` | 订阅 EPay 通知 | 公开 | 完成 |
+| GET/POST | `/api/subscription/epay/return` | `controller.SubscriptionEpayReturn` | 订阅 EPay 返回 | 公开 | 完成 |
+
+`/api/subscription` 下用户订阅路由需要 `UserAuth()`：
+
+- `GET /plans`
+- `GET /self`
+- `PUT /self/preference`
+- `POST /balance/pay`
+- `POST /epay/pay`
+- `POST /stripe/pay`
+- `POST /creem/pay`
+- `POST /waffo-pancake/pay`
+
+`/api/subscription/admin` 下订阅管理路由需要 `AdminAuth()`：
+
+- `GET/POST/PUT/PATCH /plans`
+- `POST /bind`
+- `POST /plans/:id/subscriptions/reset`
+- `GET/POST /users/:id/subscriptions`
+- `POST /users/:id/subscriptions/reset`
+- `POST /user_subscriptions/:id/invalidate`
+- `DELETE /user_subscriptions/:id`
+
+### Token/API Key API
+
+所有 `/api/token` 路由都需要 `UserAuth()`。
+
+| 方法 | 路径 | Handler | 用途 | 状态 |
+| --- | --- | --- | --- | --- |
+| GET | `/api/token/` | `controller.GetAllTokens` | 用户 API key 列表 | 完成 |
+| GET | `/api/token/search` | `controller.SearchTokens` | 搜索 API key | 完成 |
+| GET | `/api/token/:id` | `controller.GetToken` | API key 详情 | 完成 |
+| POST | `/api/token/:id/key` | `controller.GetTokenKey` | 显示 key 明文 | 完成 |
+| POST | `/api/token/` | `controller.AddToken` | 创建 API key | 完成 |
+| PUT | `/api/token/` | `controller.UpdateToken` | 更新 API key | 完成 |
+| DELETE | `/api/token/:id` | `controller.DeleteToken` | 删除 API key | 完成 |
+| POST | `/api/token/batch` | `controller.DeleteTokenBatch` | 批量删除 key | 完成 |
+| POST | `/api/token/batch/keys` | `controller.GetTokenKeysBatch` | 批量显示 key | 完成 |
+| GET | `/api/token/:id/usage/` | `controller.GetTokenUsage` | Token 使用统计 | 完成 |
+
+### 兑换码 API
+
+`/api/redemption` 路由需要 `UserAuth()`。管理员/root 可查看全部；代理用户通过 `getRedemptionScopeUserId` 仅能访问自己生成的兑换码。
+
+| 方法 | 路径 | Handler | 用途 | 参数/请求体 | 响应 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- |
+| GET | `/api/redemption/` | `controller.GetAllRedemptions` | 兑换码列表 | `p`, `page_size` | `PageInfo<Redemption[]>` | 完成 |
+| GET | `/api/redemption/search` | `controller.SearchRedemptions` | 搜索兑换码 | `keyword`, `status`, `p`, `page_size` | `PageInfo<Redemption[]>` | 完成；搜索 ID、名称、key、生成者用户名/显示名 |
+| GET | `/api/redemption/:id` | `controller.GetRedemption` | 兑换码详情 | path `id` | `Redemption` | 完成 |
+| POST | `/api/redemption/` | `controller.AddRedemption` | 创建兑换码 | `{name,quota,count,expired_time}` | generated keys | 完成；代理扣费规则生效 |
+| PUT | `/api/redemption/` | `controller.UpdateRedemption` | 更新兑换码/状态 | `Redemption` payload | `Redemption` | 完成 |
+| DELETE | `/api/redemption/invalid` | `controller.DeleteInvalidRedemption` | 删除无效/已用/过期兑换码 | 无 | count | 完成 |
+| DELETE | `/api/redemption/:id` | `controller.DeleteRedemption` | 删除单个兑换码 | path `id` | success | 完成；未使用的代理兑换码退还 `agent_charge` |
+
+代理相关规则：
+
+- 代理只能在钱包余额足够时创建兑换码。
+- 代理扣费公式：`quota * agent_discount% * count`。
+- 代理创建兑换码不能设置过期时间。
+- 代理不能兑换自己或其他代理生成的兑换码；代理只能兑换管理员/root 生成的兑换码。
+- 删除未使用的代理兑换码时，退还原始 `agent_charge`，不是兑换码面值 quota。
+
+搜索示例：
+
+```bash
+curl 'http://localhost:3000/api/redemption/search?keyword=agent001&p=1&page_size=20' \
+  -H 'Cookie: <admin-session-cookie>' \
+  -H 'New-Api-User: 1'
+```
+
+### 日志、使用量、数据 API
+
+| 方法 | 路径 | Handler | 用途 | 权限 | 状态 |
+| --- | --- | --- | --- | --- | --- |
+| GET | `/api/log/` | `controller.GetAllLogs` | 管理员日志 | 管理员/root | 完成 |
+| GET | `/api/log/stat` | `controller.GetLogsStat` | 管理员日志统计 | 管理员/root | 完成 |
+| GET | `/api/log/self` | `controller.GetUserLogs` | 当前用户日志 | 用户 | 完成 |
+| GET | `/api/log/self/stat` | `controller.GetLogsSelfStat` | 当前用户统计 | 用户 | 完成 |
+| GET | `/api/log/search` | `controller.SearchAllLogs` | 已废弃搜索接口 | 管理员/root | 已废弃 |
+| GET | `/api/log/self/search` | `controller.SearchUserLogs` | 已废弃用户搜索接口 | 用户 | 已废弃 |
+| DELETE | `/api/log/` | `controller.DeleteHistoryLogs` | 旧版同步日志清理 | Root | 默认前端已不使用 |
+| GET | `/api/log/channel_affinity_usage_cache` | `controller.GetChannelAffinityUsageCacheStats` | 渠道亲和缓存统计 | 管理员/root | 完成 |
+| GET | `/api/log/token` | `controller.GetLogByKey` | Token 日志查询 | Token read-only | 完成 |
+| GET | `/api/data/` | `controller.GetAllQuotaDates` | 额度日期数据 | 管理员/root | 完成 |
+| GET | `/api/data/users` | `controller.GetQuotaDatesByUser` | 用户额度日期数据 | 管理员/root | 完成 |
+| GET | `/api/data/self` | `controller.GetUserQuotaDates` | 当前用户额度日期数据 | 用户 | 完成 |
+| GET | `/api/data/flow` | `controller.GetAllFlowQuotaDates` | 流量数据 | 管理员/root | 完成 |
+| GET | `/api/data/flow/self` | `controller.GetUserFlowQuotaDates` | 当前用户流量数据 | 用户 | 完成 |
+
+### 后台设置与运维 API
+
+Root-only `/api/option`：
+
+- `GET /api/option/`
+- `PUT /api/option/`
+- `POST /api/option/payment_compliance`
+- `GET /api/option/channel_affinity_cache`
+- `DELETE /api/option/channel_affinity_cache`
+- `POST /api/option/rest_model_ratio`
+- `POST /api/option/migrate_console_setting`
+- `GET /api/option/waffo-pancake/catalog`
+- `POST /api/option/waffo-pancake/pair`
+- `POST /api/option/waffo-pancake/save`
+- `POST /api/option/waffo-pancake/subscription-product`
+- `GET /api/option/waffo-pancake/subscription-product-options`
+
+其他管理分组：
+
+| 前缀 | 关键路由 | 权限 | 用途 |
+| --- | --- | --- | --- |
+| `/api/authz` | `GET /catalog` | 管理员/root | 权限目录 |
+| `/api/custom-oauth-provider` | `POST /discovery`、`GET/POST/PUT/DELETE` | Root | 自定义 OAuth Provider |
+| `/api/performance` | `GET /stats`、`DELETE /disk_cache`、`POST /reset_stats`、`POST /gc`、`GET/DELETE /logs` | Root | 运行时性能维护 |
+| `/api/ratio_sync` | `GET /channels`、`POST /fetch` | Root | 上游倍率同步 |
+| `/api/group` | `GET /` | 管理员/root | 分组列表 |
+| `/api/prefill_group` | `GET/POST/PUT/DELETE` | 管理员/root | 预填模型分组 |
+| `/api/system-task` | `POST /log-cleanup`、`GET /list`、`GET /current`、`GET /:task_id` | Root | 异步维护任务 |
+| `/api/system-info` | `GET /instances`、`DELETE /stale-instances`、`DELETE /instances/:node_name` | Root | 多实例状态 |
+
+### 模型、渠道、部署 API
+
+| 前缀 | 路由 | 权限 | 用途 | 状态 |
+| --- | --- | --- | --- | --- |
+| `/api/channel` | `GET/POST/PUT/DELETE`、`/search`、`/test`、状态/批量路由见 `router/api-router.go` 和 `router/channel-router.go` | 管理员/root 及 authz 权限 | 上游渠道管理 | 完成 |
+| `/api/channel/:id/key` | `POST` | 管理员/root | 显示渠道 key | 完成 |
+| `/api/models` | `GET /`、`/search`、`/:id`、`POST /`、`PUT /`、`DELETE /:id`、`/sync_upstream/*`、`/missing` | 管理员/root | 模型元数据/目录/部署元数据 | 完成 |
+| `/api/vendors` | `GET /`、`/search`、`/:id`、`POST`、`PUT`、`DELETE` | 管理员/root | Vendor 元数据 | 完成 |
+| `/api/deployments` | settings、test、CRUD、硬件/地区/副本辅助、日志/容器详情 | 管理员/root | IONet/模型部署管理 | 完成 |
+| `/api/mj` | `GET /`、`GET /self` | 管理员或用户 | Midjourney 任务日志 | 完成 |
+| `/api/task` | `GET /`、`GET /self` | 管理员或用户 | 通用异步任务日志 | 完成 |
+
+### Relay 兼容 API
+
+Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middleware.TokenAuth()`、系统性能检查、模型限流和 `middleware.Distribute()` 渠道路由。
+
+已支持：
+
+- `GET /v1/models`
+- `GET /v1/models/:model`
+- `GET /v1beta/models`
+- `GET /v1beta/openai/models`
+- `GET /v1/realtime`
+- `POST /v1/messages`
+- `POST /v1/completions`
+- `POST /v1/chat/completions`
+- `POST /v1/responses`
+- `POST /v1/responses/compact`
+- `POST /v1/edits`
+- `POST /v1/images/generations`
+- `POST /v1/images/edits`
+- `POST /v1/embeddings`
+- `POST /v1/audio/transcriptions`
+- `POST /v1/audio/translations`
+- `POST /v1/audio/speech`
+- `POST /v1/rerank`
+- `POST /v1/engines/:model/embeddings`
+- `POST /v1/models/*path`
+- `POST /v1/moderations`
+- `POST /pg/chat/completions`，用于登录后的 Dashboard Playground。
+
+明确未实现：
+
+- `/v1/images/variations`
+- `/v1/files*`
+- `/v1/fine-tunes*`
+- `DELETE /v1/models/:model`
+
+任务/视频路由：
+
+- Suno-like：`/suno/submit/:action`、`/suno/fetch`、`/suno/fetch/:id`。
+- Midjourney-compatible：`/mj/submit/*`、`/mj/task/*`、`/mj/image/:id`、`/mj/insight-face/swap`。
+- 视频路由见 `router/video-router.go`：`/v1/video/generations`、`/v1/videos`、`/v1/videos/:task_id`、`/kling/v1/videos/*`、`/jimeng/*`。
+
+## 数据模型与数据库结构
+
+迁移在 `model/main.go` 中通过 `DB.AutoMigrate(...)` 执行。SQLite 下 `SubscriptionPlan` 有专门迁移处理。快速迁移 `migrateDBFast()` 会并发迁移模型表，新增模型时也必须同步更新。
+
+### 核心模型
+
+| 模型 | 文件 | 表用途 | 关键字段和约束 | 关系/说明 | 状态 |
+| --- | --- | --- | --- | --- | --- |
+| `User` | `model/user.go` | Dashboard 用户 | `id`、唯一索引 `username`、`password`、`display_name`、`role`、`status`、`email`、`quota`、`used_quota`、`request_count`、`group`、唯一 `aff_code`、`inviter_id`、`is_agent`、`agent_discount`、`agent_topup_link`、`stripe_customer`、时间戳 | 列表/详情必须隐藏 password/access token。代理字段为 Julong 二开。`AdminPermissions` 是 transient 字段。 | 活跃 |
+| `Token` | `model/token.go` | API keys | `id`、`user_id`、`key`、`name`、额度字段、模型限制、group、allow IPs | Relay 鉴权和计费使用。 | 活跃 |
+| `Channel` | `model/channel.go` | 上游 provider 渠道 | `id`、`type`、`key`、`base_url`、`models`、`group`、状态、priority/weight、计费/override 字段 | 由 distributor middleware 选择。敏感 key 需要脱敏。 | 活跃 |
+| `Ability` | `model/ability.go` | 渠道/模型能力映射 | channel/model/group enabled 字段 | 用于模型可用性和路由。 | 活跃 |
+| `Log` | `model/log.go` | 使用日志和审计日志 | `id`、`user_id`、`created_at`、`type`、`content`、`username`、`token_name`、`model_name`、`quota`、`prompt_tokens`、`completion_tokens`、`channel_id`、`request_id`、`upstream_request_id`、`other` | 可位于独立日志库/ClickHouse。`SumUserUsedToken` 为用户详情总 token 消耗提供数据。 | 活跃 |
+| `Redemption` | `model/redemption.go` | 兑换码 | 唯一 `key`、`user_id` 生成者、`status`、`name`、`quota`、`created_time`、`redeemed_time`、`used_user_id`、`expired_time`、`agent_charge`、软删除 | 生成者显示字段是 transient。搜索支持 code、生成者、ID、名称。代理退款使用 `agent_charge`。 | 活跃 |
+| `TopUp` | `model/topup.go` | 在线支付/充值订单 | trade no、user、amount/money、provider、status | 支付回调结算。 | 活跃 |
+| `Checkin` / `CheckinRecord` | `model/checkin.go` | 每日签到奖励记录 | user/date/quota/time 字段 | 设置位于 `checkin_setting.*`。 | 活跃 |
+| `Model` | `model/model_meta.go` | 模型目录元数据 | 模型名、vendor、展示元数据、定价/可见性 | 用于模型广场和后台模型元数据。 | 活跃 |
+| `Vendor` | `model/vendor_meta.go` | Vendor 元数据 | id/name/display/config 字段 | 与 Model 元数据关联。 | 活跃 |
+| `Pricing` / `PricingVendor` | `model/pricing.go` | 定价页面数据 | 模型定价和 vendor 分组字段 | 用于公开定价页。 | 活跃 |
+| `PrefillGroup` | `model/prefill_group.go` | 模型预填分组 | group name、models/config | 后台模型管理。 | 活跃 |
+| `Task` | `model/task.go` | 异步模型/媒体任务 | platform、task id、action、status、quota/billing private data | 用于视频/音乐/图片任务 relay。 | 活跃 |
+| `Midjourney` | `model/midjourney.go` | MJProxy 风格任务 | mj id/action/status/prompt/result 字段 | 兼容/旧版图片任务跟踪。 | 活跃 |
+| `SubscriptionPlan` | `model/subscription.go` | 订阅计划 | id/title/price/quota/reset/model limits/status 字段 | SQLite 有自定义迁移。 | 活跃 |
+| `SubscriptionOrder` | `model/subscription.go` | 订阅支付订单 | order id/user/plan/payment status 字段 | 支付回调使用。 | 活跃 |
+| `UserSubscription` | `model/subscription.go` | 用户有效订阅 | user/plan/quota/period/status 字段 | 订阅抵扣使用。 | 活跃 |
+| `SubscriptionPreConsumeRecord` | `model/subscription.go` | 订阅预扣记录 | subscription/request/pre/post quota 字段 | 请求结算使用。 | 活跃 |
+| `Option` | `model/option.go` | 运行时设置 | `key`、`value` | Root 设置 API。 | 活跃 |
+| `Setup` | `model/setup.go` | 安装/初始化状态 | setup timestamp/status | `/api/setup`。 | 活跃 |
+| `PasskeyCredential` | `model/passkey.go` | WebAuthn 凭据 | user/credential 字段 | Passkey 登录。 | 活跃 |
+| `TwoFA` / `TwoFABackupCode` | `model/twofa.go` | 2FA 密钥和备份码 | user secret/status/codes | 2FA 登录和管理员重置。 | 活跃 |
+| `CustomOAuthProvider` | `model/custom_oauth_provider.go` | Root 可配置 OAuth provider | provider id/name/client ids/discovery/policy 字段 | 自定义 OAuth 管理。 | 活跃 |
+| `UserOAuthBinding` | `model/user_oauth_binding.go` | OAuth 账号绑定 | user/provider/external id | 用户/管理员解绑。 | 活跃 |
+| `PerfMetric` | `model/perf_metric.go` | 性能采样 | route/model/provider/time/error/cache 字段 | 公开性能指标/定价页。 | 活跃 |
+| `SystemInstance` | `model/system_instance.go` | 运行节点 | node name/status/time 字段 | 多实例状态。 | 活跃 |
+| `SystemTask` / `SystemTaskLock` | `model/system_task.go` | 后台维护任务 | task id/type/status/payload/state/lock | Root 运维操作。 | 活跃 |
+| `CasbinRule` / `AuthzRole` | `model/casbin_rule.go`、`model/authz_role.go` | 细粒度管理员权限 | casbin p/v 字段和角色分配 | Admin authz catalog。 | 活跃 |
+| `ErrorReport` | `model/error_report.go` | 500 页面反馈 | `id`、`created_at`、索引 `user_id`、`username`、`title`、`message`、`page_url`、`error_status`、`user_agent`、`stack`、`ip` | Julong 二开。已加入两种迁移流程。 | 活跃 |
+| `QuotaData` / `FlowQuotaData` | `model/usedata.go`、`model/usedata_flow.go` | Dashboard 聚合用量 | date/user/quota/flow 字段 | 数据看板。 | 活跃 |
+
+### 迁移注意事项
+
+- 新增持久化模型时，必须同时加入 `model/main.go` 的 `migrateDB()` 和 `migrateDBFast()`。
+- 日志表结构变化可能还需要更新 `migrateLOGDB()`。
+- PostgreSQL 保留字字段（如 `key`）要像 `model/redemption.go` 一样做数据库类型判断并加引号。
+- SQLite 字段变更必须用已有本地 `one-api.db` 测试迁移。
+- 仅用于 JSON 响应、不入库的字段要加 `gorm:"-:all"`。
+
+## 前端路由
+
+路由位于 `web/default/src/routes`。
+
+| 路由 | 文件 | 组件/功能 | 权限 | 状态 |
+| --- | --- | --- | --- | --- |
+| `/` | `routes/index.tsx` | 首页 | 公开 | 完成 |
+| `/sign-in`、`/sign-up`、`/forgot-password`、`/reset`、`/otp` | `routes/(auth)/*` | 认证功能 | 公开 | 完成 |
+| `/setup` | `routes/setup/index.tsx` | 初始化向导 | 公开/安装 | 完成 |
+| `/pricing`、`/pricing/:modelId` | `routes/pricing/*` | 定价/模型广场 | 公开或导航权限 | 完成 |
+| `/rankings` | `routes/rankings/index.tsx` | 排行榜 | 公开或导航权限 | 完成 |
+| `/about`、`/privacy-policy`、`/user-agreement` | legal/about routes | 法务/内容 | 公开 | 完成 |
+| `/error-report` | `routes/error-report.tsx` | 提交错误反馈 | 公开 | 完成 |
+| `/dashboard/*` | `_authenticated/dashboard/*` | 看板统计 | 用户 | 完成 |
+| `/keys` | `_authenticated/keys/index.tsx` | API Keys | 用户 | 完成 |
+| `/usage-logs/*` | `_authenticated/usage-logs/*` | 使用日志/任务日志/绘图日志 | 用户/管理员视图不同 | 完成 |
+| `/wallet` | `_authenticated/wallet/index.tsx` | 钱包、充值、兑换码 | 用户 | 完成 |
+| `/profile` | `_authenticated/profile/index.tsx` | 个人资料/安全 | 用户 | 完成 |
+| `/agent-users` | `_authenticated/agent-users/index.tsx` | 代理所属用户 | 代理 | 完成 |
+| `/redemption-codes` | `_authenticated/redemption-codes/index.tsx` | 兑换码管理 | 用户；管理员全部，代理限自己 | 完成 |
+| `/channels` | `_authenticated/channels/index.tsx` | 渠道管理 | 管理员/root | 完成 |
+| `/models/*` | `_authenticated/models/*` | 模型元数据/部署 | 管理员/root | 完成 |
+| `/users` | `_authenticated/users/index.tsx` | 用户管理 | 管理员/root | 完成 |
+| `/subscriptions` | `_authenticated/subscriptions/index.tsx` | 订阅管理 | 管理员/root | 完成 |
+| `/error-reports` | `_authenticated/error-reports/index.tsx` | 错误反馈列表 | 管理员/root | 完成 |
+| `/system-info` | `_authenticated/system-info/index.tsx` | 系统节点/任务 | Root | 完成 |
+| `/system-settings/*` | `_authenticated/system-settings/*` | 系统设置 | 管理员/root，视页面而定 | 完成 |
+| `/401`、`/403`、`/404`、`/500`、`/503` | `routes/(errors)/*` | 错误页 | 公开 | 完成 |
+
+## 前端组件清单
+
+### 共享组件分组
+
+以下路径均位于 `web/default/src/components`。
+
+| 分组 | 文件 | 用途 | 依赖 | 状态 |
+| --- | --- | --- | --- | --- |
+| UI primitives | `ui/accordion.tsx`、`alert-dialog.tsx`、`alert.tsx`、`aspect-ratio.tsx`、`avatar.tsx`、`badge.tsx`、`breadcrumb.tsx`、`button.tsx`、`button-group.tsx`、`calendar.tsx`、`card.tsx`、`carousel.tsx`、`chart.tsx`、`checkbox.tsx`、`collapsible.tsx`、`combobox.tsx`、`combobox-input.tsx`、`command.tsx`、`context-menu.tsx`、`dialog.tsx`、`drawer.tsx`、`empty.tsx`、`field.tsx`、`form.tsx`、`hover-card.tsx`、`input.tsx`、`input-group.tsx`、`input-otp.tsx`、`item.tsx`、`kbd.tsx`、`label.tsx`、`markdown.tsx`、`menubar.tsx`、`native-select.tsx`、`navigation-menu.tsx`、`pagination.tsx`、`popover.tsx`、`progress.tsx`、`radio-group.tsx`、`resizable.tsx`、`scroll-area.tsx`、`select.tsx`、`separator.tsx`、`sheet.tsx`、`sidebar.tsx`、`skeleton.tsx`、`slider.tsx`、`sonner.tsx`、`spinner.tsx`、`switch.tsx`、`table.tsx`、`tabs.tsx`、`textarea.tsx`、`titled-card.tsx`、`toggle.tsx`、`toggle-group.tsx`、`tooltip.tsx` | 可复用设计系统 primitives。关键参数通常透传到底层 Base UI/Radix-like primitive 并支持 `className`；Button 支持 variants/sizes/render/nativeButton。 | Base UI、Hugeicons/lucide、Tailwind、`cn` | 完成 |
+| Data table | `data-table/core/*`、`data-table/layout/*`、`data-table/toolbar/*`、`data-table/hooks/*`、`data-table/static/*` | 响应式表格系统：桌面表格、移动卡片、分页、工具栏、过滤器、视图模式、批量操作。 | TanStack Table、media query hooks、UI primitives | 完成 |
+| Layout | `layout/components/*`、`layout/config/*`、`layout/lib/*`、`layout/types.ts` | 登录后/公开布局、侧边栏、顶部导航、SectionPageLayout、系统品牌。 | TanStack Router、sidebar config hooks、auth store | 完成 |
+| AI elements | `ai-elements/*` | Playground/chat 响应渲染、prompt input、artifact、reasoning、tool、sources、code block。 | React、markdown/shiki、AI SDK 风格组件 | 完成 |
+| Utility widgets | `copy-button.tsx`、`confirm-dialog.tsx`、`date-picker.tsx`、`datetime-picker.tsx`、`empty-state.tsx`、`error-state.tsx`、`group-badge.tsx`、`json-editor.tsx`、`json-code-editor.tsx`、`language-switcher.tsx`、`long-text.tsx`、`masked-value-display.tsx`、`model-group-selector.tsx`、`multi-select.tsx`、`password-input.tsx`、`profile-dropdown.tsx`、`provider-badge.tsx`、`status-badge.tsx`、`table-id.tsx`、`tag-input.tsx`、`theme-switch.tsx`、`turnstile.tsx` | 跨功能控件和显示组件。 | UI primitives、i18n、本地格式化工具 | 完成 |
+
+### Feature 模块
+
+以下路径均位于 `web/default/src/features`。
+
+| Feature | 关键文件/组件 | 用途 | API 依赖 | 状态 |
+| --- | --- | --- | --- | --- |
+| `auth` | `sign-in`、`sign-up`、`forgot-password`、`otp`、`passkey`、`secure-verification`、`components/oauth-providers.tsx` | 登录、注册、找回密码、OAuth、Passkey、2FA | `/api/user/*`、`/api/oauth/*`、`/api/verify` | 完成 |
+| `home` | `index.tsx`、hero/gateway/stat 组件 | 公开首页内容 | `/api/home_page_content` | 完成 |
+| `dashboard` | `index.tsx`、`section-registry.tsx`、stats/charts libs | 用户/管理员看板统计 | `/api/data*`、`/api/dashboard*`、`/api/status` | 完成 |
+| `channels` | `channels-table.tsx`、`channels-columns.tsx`、dialogs/drawers、`api.ts` | 上游渠道 CRUD/测试/配置 | `/api/channel*` | 完成 |
+| `keys` | `api-keys-table.tsx`、`api-keys-columns.tsx`、mutate/delete dialogs | 用户 API key 管理 | `/api/token*` | 完成 |
+| `usage-logs` | `usage-logs-table.tsx`、columns/dialogs/filter bars | 普通/绘图/任务使用日志 | `/api/log*`、`/api/mj`、`/api/task` | 完成 |
+| `wallet` | recharge cards、subscription cards、affiliate rewards、redemption hook | 钱包充值、兑换码、订阅 | `/api/user/topup*`、`/api/subscription*`、支付 API | 完成 |
+| `redemption-codes` | `redemptions-table.tsx`、`redemptions-columns.tsx`、mutate/delete dialogs | 管理员/代理兑换码管理 | `/api/redemption*`、`/api/user/agent/topup-link` | 完成 |
+| `users` | `users-table.tsx`、`users-columns.tsx`、`users-mutate-drawer.tsx`、`agent-detail-dialog.tsx`、`user-detail-dialog.tsx` | 后台用户管理、代理详情、用户详情 | `/api/user*`、`/api/log` | 完成 |
+| `models` | metadata/deployment tables and drawers | 模型元数据和部署管理 | `/api/models*`、`/api/vendors*`、`/api/deployments*` | 完成 |
+| `subscriptions` | subscription table/drawers | 后台订阅计划/用户绑定 | `/api/subscription/admin*` | 完成 |
+| `system-settings` | `auth`、`billing`、`content`、`models`、`request-limits`、`maintenance`、`integrations`、`general` 下的 section registries | 管理员/root 运行时设置 | `/api/option*` 及特定后台 API | 完成/进行中 |
+| `system-info` | system instances/tasks panels | Root 系统运维 | `/api/system-info*`、`/api/system-task*` | 完成 |
+| `error-reports` | `submit-error-report.tsx`、`index.tsx`、`api.ts` | 提交/查看 500 页面反馈 | `/api/error-reports*` | 完成 |
+| `errors` | `general-error.tsx`、forbidden/not-found/maintenance/unauthorized | 错误页 | `/error-report` 路由用于反馈 | 完成 |
+| `pricing` | pricing tables/model detail | 公开模型定价 | `/api/pricing` | 完成 |
+| `rankings` | hero/model leaderboard/provider sections | 公开排行榜 | `/api/rankings` | 完成 |
+| `playground` | chat playground UI | 浏览器内请求测试 | `/pg/chat/completions` | 完成 |
+| `setup` | setup wizard steps | 初始化安装 | `/api/setup` | 完成 |
+| `profile` | profile/security settings | 用户资料 | `/api/user/self`、passkey/2FA APIs | 完成 |
+| `legal`、`about` | legal/about documents | 静态/服务端内容页 | `/api/about`、`/api/privacy-policy`、`/api/user-agreement` | 完成 |
+
+## Julong 二开功能
+
+### 品牌
+
+- 产品名显示为 `矩龙-API`。
+- Docker 镜像/tag 目标为 `qq1371446705/julong-api:latest`。
+- Compose project/container 使用 `julong-api`。
+- 已知技术债：Go module import path 仍为上游 `github.com/QuantumNous/new-api`；重命名风险较高，暂不计划。
+
+### 代理系统
+
+相关文件：
+
+- 后端：`model/user.go`、`controller/user.go`、`controller/redemption.go`、`model/redemption.go`。
+- 前端：`web/default/src/features/users/*`、`web/default/src/features/redemption-codes/*`、`web/default/src/features/wallet/*`。
+
+行为：
+
+- 管理员/root 可将用户设置为代理，并配置 0-100 的 `agent_discount`。
+- 代理可生成兑换码。钱包扣费公式：`quota * agent_discount% * count`。
+- 代理创建兑换码会检查钱包余额，不使用订阅额度。
+- 代理生成的兑换码记录 `agent_charge`。
+- 管理员/root 删除未使用的代理兑换码时，退还原始 `agent_charge`。
+- 代理使用日志包含退款记录，代理和管理员/root 都能查看。
+- 代理可以只读查看自己的所属用户。
+- 代理可以设置 `agent_topup_link`；通过该代理邀请的用户在钱包兑换码区域看到代理自己的购买链接。
+
+### 错误反馈流程
+
+相关文件：
+
+- 后端：`model/error_report.go`、`controller/error_report.go`、`router/api-router.go`、`model/main.go` 中的迁移。
+- 前端：`web/default/src/features/errors/general-error.tsx`、`web/default/src/features/error-reports/*`、`web/default/src/routes/error-report.tsx`、`web/default/src/routes/_authenticated/error-reports/index.tsx`。
+
+行为：
+
+- 500 页面按钮跳转到 `/error-report`。
+- 公开用户可以提交错误详情；已登录时通过 `TryUserAuth` 记录 user ID/username。
+- 管理员/root 在 `/error-reports` 查看列表和详情。
+
+### 用户详情弹窗
+
+相关文件：
+
+- 前端：`web/default/src/features/users/components/user-detail-dialog.tsx`、`users-columns.tsx`、`users/index.tsx`。
+- 后端：`controller/user.go:AdminGetUserUsageSummary`、`model/log.go:SumUserUsedToken`、路由 `/api/user/:id/usage-summary`。
+
+行为：
+
+- 后台用户表点击用户名打开详情弹窗。
+- 显示基本信息、格式化额度、请求数、总 token 消耗和最近 20 条消费日志。
+- 总 token 消耗按 `user_id` 从日志表求和。
+
+### 兑换码搜索增强
+
+相关文件：
+
+- 后端：`model/redemption.go:SearchRedemptionsByUser`。
+- 前端：`web/default/src/features/redemption-codes/components/redemptions-table.tsx`。
+
+行为：
+
+- 搜索关键词匹配 ID、名称、兑换码 key/code、生成者用户名、生成者显示名。
+- 状态过滤保持兼容。
+- PostgreSQL 下 `key` 保留字段引用已处理。
+
+### 签到额度预览
+
+相关文件：
+
+- `web/default/src/features/system-settings/general/checkin-settings-section.tsx`。
+
+行为：
+
+- 最小和最大签到额度说明显示格式化额度预览，使用 `formatQuota`，与额度设置页面一致。
+
+## 已知问题
+
+| 问题 | 影响 | 当前处理方式 | 建议修复 |
+| --- | --- | --- | --- |
+| `docker-compose.dev.yml` 仍使用 `new-api-dev` 名称和数据库名 `new-api` | 开发 Compose 品牌名不一致 | 使用生产 Compose 或手动调整 dev compose | 将 dev compose 的 service/image/db 名全部改为 Julong 命名。 |
+| Go module path 仍为 `github.com/QuantumNous/new-api` | 内部 import 仍显示上游名 | 为稳定性暂时保留 | 仅在准备好更新所有 imports、CI、Docker、上游合并策略时再重命名。 |
+| 部分路由/API 文档按路由组汇总 | Relay 表面很大，完全展开会很长 | 用 `rg ".(GET|POST|PUT|PATCH|DELETE)(" router` 查看精确源码 | 如需机器可读规范，增加生成式 API 附录。 |
+| 语言包容易被误手动编辑 | 可能漏翻译或破坏排序 | 必须使用临时脚本 + `bun run i18n:sync` | 增加 lint/precommit 校验语言包一致性。 |
+| 生产 Compose 包含示例密码 | 若直接公开部署存在安全风险 | 部署前手动修改密码 | 移到 `.env` 或 Docker secrets。 |
+| 错误反馈提交接口公开 | 可能被刷反馈 | 当前有全局限流和 body limit | 如被滥用，增加专用限流或验证码。 |
+| 代理规则需要更多回归测试 | 计费/退款 bug 风险高 | 当前依赖手动 QA 和已有测试 | 增加 agent 创建/删除/退款/兑换限制的 model/controller 测试。 |
+
+## 技术债
+
+- 将 `router/api-router.go` 按领域拆分成多个路由注册文件。
+- 从 Gin 路由生成 OpenAPI 或 route manifest。
+- 统一 API 错误 HTTP 状态；当前许多业务错误返回 HTTP 200。
+- 合并或删除已废弃的 admin/user log search 接口。
+- 为所有 controller 请求/响应增加明确 DTO，减少直接暴露 model JSON。
+- 对高风险 schema 变更引入迁移文件，而不是只依赖 AutoMigrate。
+- 对关键后台页面增加前端视觉回归检查。
+- 继续优化所有后台表格移动端布局，而不只限兑换码。
+
+## 进度
+
+### 已完成
+
+- Julong 生产 Compose Docker 命名和镜像配置。
+- README 中记录本地 Docker 镜像维护流程。
+- 代理折扣、代理生成兑换码、代理用户、代理充值链接流程。
+- 代理兑换码删除时按原始 `agent_charge` 退款。
+- 代理/管理员可见的退款使用日志。
+- 兑换码列表移动端操作优化。
+- 从 500 页面提交/后台查看错误反馈。
+- 后台用户列表点击用户名查看用户详情。
+- 兑换码支持按生成者、兑换码、名称、ID 搜索。
+- 签到奖励额度预览。
+- 新增 UI 文案的多语言同步。
+
+### 进行中
+
+- 本 `DEVELOPMENT.md` 项目文档维护。
+- 代理和计费逻辑持续 QA。
+- 服务器部署加固和域名/反代配置。
+
+### 待开发
+
+- 覆盖所有自定义代理计费/退款路径的自动化测试。
+- 错误反馈数量/未读状态后台看板组件。
+- 错误反馈状态流：open/resolved/ignored。
+- 更细的兑换码生成者和兑换码字段搜索/过滤 UI。
+- Julong 生产 `.env` 模板。
+- CI 流程：Go tests、前端 typecheck、build、Docker image push。
+
+## 变更日志
+
+| 日期 | 变更 | 更新文件/API/模型 | 验证 |
+| --- | --- | --- | --- |
+| 2026-07-11 | 将 `DEVELOPMENT.md` 翻译为中文。 | `DEVELOPMENT.md` | `git diff --check` |
+| 2026-07-11 | 创建 `DEVELOPMENT.md` 作为强制项目开发记录。 | `DEVELOPMENT.md` | 文档变更 |
+| 2026-07-11 | 在计费设置中增加签到奖励额度预览。 | `web/default/src/features/system-settings/general/checkin-settings-section.tsx`、locale files | `bun run typecheck`、`bun run i18n:sync`、`git diff --check` |
+| 2026-07-11 | 增强兑换码按 code/key 和生成者搜索。 | `model/redemption.go`、`redemptions-table.tsx`、locale files | `go test ./model ./controller`、`bun run typecheck`、`bun run i18n:sync` |
+| 2026-07-11 | 增加后台用户详情弹窗和 token 总量 API。 | `controller/user.go`、`model/log.go`、`router/api-router.go`、`web/default/src/features/users/*` | `go test ./...`、`bun run typecheck`、`bun run i18n:sync` |
+| 2026-07-11 | 增加 500 页面错误反馈提交/后台查看流程。 | `model/error_report.go`、`controller/error_report.go`、`router/api-router.go`、`web/default/src/features/error-reports/*`、routes、sidebar config | `go test ./...`、`bun run typecheck`、`bun run i18n:sync` |
+| 2026-07-11 | 添加/迭代代理兑换码退款日志和兑换码移动端操作。 | `model/redemption.go`、`controller/redemption.go`、`web/default/src/features/redemption-codes/*`、usage logs | 实现过程中执行 Go/前端检查 |
+| 2026-07-10 | 为 Julong 调整 Docker 部署命名/镜像。 | `docker-compose.yml`、README updates | Docker build/push/deploy 手动检查 |
+
+## 后续开发 Checklist
+
+每次完成改动前必须检查：
+
+- [ ] 如果 API、组件、模型、配置行为发生变化，已更新 `DEVELOPMENT.md`。
+- [ ] 已在变更日志中新增日期、文件/API/模型和验证记录。
+- [ ] 前端 UI 文案已通过脚本更新所有语言，并运行 `bun run i18n:sync`。
+- [ ] 后端改动已运行 `go test ./...`，或至少运行目标包测试并说明未全量测试原因。
+- [ ] 前端改动已运行 `bun run typecheck`。
+- [ ] 已运行 `git diff --check`。
+- [ ] 如果 Go 路由/controller/model 行为变更且用户正在本地调试，已重启本地后端。
+

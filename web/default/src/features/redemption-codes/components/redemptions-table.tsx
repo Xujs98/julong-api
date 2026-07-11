@@ -138,11 +138,20 @@ export function RedemptionsTable() {
     globalFilter,
     pagination,
     globalFilterFn: (row, _columnId, filterValue) => {
-      const name = String(row.getValue('name')).toLowerCase()
-      const id = String(row.getValue('id'))
       const searchValue = String(filterValue).toLowerCase()
+      const fields = [
+        row.getValue('id'),
+        row.original.name,
+        row.original.key,
+        row.original.creator_username,
+        row.original.creator_display_name,
+      ]
 
-      return name.includes(searchValue) || id.includes(searchValue)
+      return fields.some((field) =>
+        String(field || '')
+          .toLowerCase()
+          .includes(searchValue)
+      )
     },
     onPaginationChange,
     onGlobalFilterChange,
@@ -177,7 +186,7 @@ export function RedemptionsTable() {
       skeletonKeyPrefix='redemptions-skeleton'
       applyHeaderSize
       toolbarProps={{
-        searchPlaceholder: t('Filter by name or ID...'),
+        searchPlaceholder: t('Filter by code, creator, name or ID...'),
         filters: [
           {
             columnId: 'status',

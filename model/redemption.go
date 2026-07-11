@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/logger"
@@ -126,11 +127,31 @@ func SearchRedemptionsByUser(userId int, keyword string, status string, startIdx
 		query = query.Where("user_id = ?", userId)
 	}
 
+	keyword = strings.TrimSpace(keyword)
 	if keyword != "" {
+		pattern := "%" + keyword + "%"
+		keyCol := "`key`"
+		if common.UsingMainDatabase(common.DatabaseTypePostgreSQL) {
+			keyCol = `"key"`
+		}
+		creatorSubQuery := tx.Model(&User{}).
+			Select("id").
+			Where("username LIKE ? OR display_name LIKE ?", pattern, pattern)
 		if id, err := strconv.Atoi(keyword); err == nil {
-			query = query.Where("id = ? OR name LIKE ?", id, keyword+"%")
+			query = query.Where(
+				"id = ? OR name LIKE ? OR "+keyCol+" LIKE ? OR user_id IN (?)",
+				id,
+				pattern,
+				pattern,
+				creatorSubQuery,
+			)
 		} else {
-			query = query.Where("name LIKE ?", keyword+"%")
+			query = query.Where(
+				"name LIKE ? OR "+keyCol+" LIKE ? OR user_id IN (?)",
+				pattern,
+				pattern,
+				creatorSubQuery,
+			)
 		}
 	}
 

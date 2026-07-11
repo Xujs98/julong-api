@@ -154,6 +154,10 @@ export function SidebarModulesSection({
         title: t('Subscription Management'),
         description: t('Manage subscription plans and pricing.'),
       },
+      errorReports: {
+        title: t('Error Reports'),
+        description: t('Review error feedback submitted from error pages.'),
+      },
     },
   }
   const formDefaults = useMemo(() => config, [config])

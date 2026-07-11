@@ -388,6 +388,22 @@ func GetUser(c *gin.Context) {
 	return
 }
 
+func AdminGetUserUsageSummary(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	totalTokens, err := model.SumUserUsedToken(id)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, gin.H{
+		"total_tokens": totalTokens,
+	})
+}
+
 func GenerateAccessToken(c *gin.Context) {
 	id := c.GetInt("id")
 	user, err := model.GetUserById(id, true)

@@ -723,6 +723,14 @@ func SumUsedToken(logType int, startTimestamp int64, endTimestamp int64, modelNa
 	return token
 }
 
+func SumUserUsedToken(userId int) (token int64, err error) {
+	err = LOG_DB.Table("logs").
+		Select("COALESCE(sum(prompt_tokens), 0) + COALESCE(sum(completion_tokens), 0)").
+		Where("user_id = ? AND type = ?", userId, LogTypeConsume).
+		Scan(&token).Error
+	return token, err
+}
+
 func CountOldLog(ctx context.Context, targetTimestamp int64) (int64, error) {
 	var total int64
 	if err := LOG_DB.WithContext(ctx).Model(&Log{}).Where("created_at < ?", targetTimestamp).Count(&total).Error; err != nil {
