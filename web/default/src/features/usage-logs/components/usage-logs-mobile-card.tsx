@@ -340,6 +340,7 @@ function ImageGenerationLogsCard<TData>({
         />
         <SummaryField label={t('Parameters')} cell={cells.get('parameters')} />
         <SummaryField label={t('Cost')} cell={cells.get('quota')} />
+        <SummaryField label={t('Duration')} cell={cells.get('use_time')} />
       </div>
     </div>
   )

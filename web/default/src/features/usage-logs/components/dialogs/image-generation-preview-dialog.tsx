@@ -1,26 +1,36 @@
-import { useEffect, useState } from 'react'
+import { Download, FileJson } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { Dialog } from '@/components/dialog'
+import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { api } from '@/lib/api'
 
+import type { ImageGenerationLog } from '../../types'
+
 interface Props {
-  imageUrls: string[]
-  requestId?: string
+  log: ImageGenerationLog
   open: boolean
   onOpenChange: (open: boolean) => void
 }
 
+interface LoadedImage {
+  previewUrl: string
+  sourceUrl: string
+  blob?: Blob
+}
+
 export function ImageGenerationPreviewDialog(props: Props) {
   const { t } = useTranslation()
-  const [images, setImages] = useState<string[]>([])
+  const [images, setImages] = useState<LoadedImage[]>([])
   const [loading, setLoading] = useState(false)
   const [failed, setFailed] = useState(false)
 
   useEffect(() => {
-    if (!props.open || props.imageUrls.length === 0) return
+    if (!props.open || props.log.image_urls.length === 0) return
     let cancelled = false
     const objectUrls: string[] = []
 
@@ -29,14 +39,15 @@ export function ImageGenerationPreviewDialog(props: Props) {
       setFailed(false)
       try {
         const responses = await Promise.all(
-          props.imageUrls.map(async (url) => {
+          props.log.image_urls.map(async (url) => {
             if (url.startsWith('https://') || url.startsWith('http://')) {
-              return url
+              return { previewUrl: url, sourceUrl: url }
             }
             const response = await api.get(url, { responseType: 'blob' })
-            const objectUrl = URL.createObjectURL(response.data as Blob)
+            const blob = response.data as Blob
+            const objectUrl = URL.createObjectURL(blob)
             objectUrls.push(objectUrl)
-            return objectUrl
+            return { previewUrl: objectUrl, sourceUrl: url, blob }
           })
         )
         if (cancelled) return
@@ -54,24 +65,93 @@ export function ImageGenerationPreviewDialog(props: Props) {
       objectUrls.forEach((url) => URL.revokeObjectURL(url))
       setImages([])
     }
-  }, [props.imageUrls, props.open])
+  }, [props.log.image_urls, props.open])
+
+  const jsonData = useMemo(
+    () => ({
+      id: props.log.id,
+      request_id: props.log.request_id,
+      created_at: props.log.created_at,
+      user_id: props.log.user_id,
+      username: props.log.username,
+      token_id: props.log.token_id,
+      token_name: props.log.token_name,
+      channel_id: props.log.channel_id,
+      channel_name: props.log.channel_name,
+      model: props.log.model_name,
+      prompt: props.log.prompt,
+      size: props.log.size,
+      quality: props.log.quality,
+      image_count: props.log.image_count,
+      image_urls: props.log.image_urls,
+      quota: props.log.quota,
+      duration_seconds: props.log.use_time,
+    }),
+    [props.log]
+  )
+  const formattedJson = useMemo(
+    () => JSON.stringify(jsonData, null, 2),
+    [jsonData]
+  )
+
+  const downloadBlob = (blob: Blob, filename: string) => {
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = filename
+    link.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const handleImageDownload = (image: LoadedImage, index: number) => {
+    const filename = `image-${props.log.request_id || props.log.id}-${index + 1}`
+    if (image.blob) {
+      downloadBlob(image.blob, filename)
+      return
+    }
+    const link = document.createElement('a')
+    link.href = image.sourceUrl
+    link.download = filename
+    link.target = '_blank'
+    link.rel = 'noopener noreferrer'
+    link.click()
+  }
+
+  const handleJsonDownload = () => {
+    downloadBlob(
+      new Blob([formattedJson], { type: 'application/json;charset=utf-8' }),
+      `image-log-${props.log.request_id || props.log.id}.json`
+    )
+  }
 
   let content = (
     <div className='grid gap-3 py-4 sm:grid-cols-2'>
-      {images.map((url, index) => (
-        <img
-          key={url}
-          src={url}
-          alt={`${t('Generated image')} ${index + 1}`}
-          className='bg-muted aspect-square w-full rounded-lg border object-contain'
-        />
+      {images.map((image, index) => (
+        <div key={image.previewUrl} className='group relative'>
+          <img
+            src={image.previewUrl}
+            alt={`${t('Generated image')} ${index + 1}`}
+            className='bg-muted aspect-square w-full rounded-lg border object-contain'
+          />
+          <Button
+            type='button'
+            variant='secondary'
+            size='icon'
+            className='absolute top-2 right-2 size-9 shadow-sm'
+            title={t('Download image')}
+            aria-label={t('Download image')}
+            onClick={() => handleImageDownload(image, index)}
+          >
+            <Download className='size-4' />
+          </Button>
+        </div>
       ))}
     </div>
   )
   if (loading) {
     content = (
       <div className='grid gap-3 py-4 sm:grid-cols-2'>
-        {props.imageUrls.map((url) => (
+        {props.log.image_urls.map((url) => (
           <Skeleton key={url} className='aspect-square w-full' />
         ))}
       </div>
@@ -89,11 +169,36 @@ export function ImageGenerationPreviewDialog(props: Props) {
       open={props.open}
       onOpenChange={props.onOpenChange}
       title={t('Generated Images')}
-      description={props.requestId || t('Image Generation Logs')}
+      description={props.log.request_id || t('Image Generation Logs')}
       contentClassName='sm:max-w-4xl'
       contentHeight='auto'
     >
-      <ScrollArea className='max-h-[70vh]'>{content}</ScrollArea>
+      <Tabs defaultValue='images'>
+        <TabsList>
+          <TabsTrigger value='images'>{t('Images')}</TabsTrigger>
+          <TabsTrigger value='json'>{t('JSON data')}</TabsTrigger>
+        </TabsList>
+        <TabsContent value='images'>
+          <ScrollArea className='max-h-[70vh]'>{content}</ScrollArea>
+        </TabsContent>
+        <TabsContent value='json'>
+          <div className='flex justify-end py-3'>
+            <Button
+              type='button'
+              variant='outline'
+              onClick={handleJsonDownload}
+            >
+              <FileJson className='size-4' />
+              {t('Download JSON')}
+            </Button>
+          </div>
+          <ScrollArea className='bg-muted/30 max-h-[60vh] rounded-lg border'>
+            <pre className='min-w-0 p-4 font-mono text-xs leading-5 break-words whitespace-pre-wrap'>
+              {formattedJson}
+            </pre>
+          </ScrollArea>
+        </TabsContent>
+      </Tabs>
     </Dialog>
   )
 }

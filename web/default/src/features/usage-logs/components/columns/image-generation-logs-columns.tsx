@@ -101,8 +101,7 @@ export function useImageGenerationLogsColumns(
               {t('View')} ({log.image_count})
             </button>
             <ImageGenerationPreviewDialog
-              imageUrls={log.image_urls || []}
-              requestId={log.request_id}
+              log={log}
               open={open}
               onOpenChange={setOpen}
             />
@@ -114,6 +113,18 @@ export function useImageGenerationLogsColumns(
       accessorKey: 'quota',
       header: t('Cost'),
       cell: ({ row }) => formatQuota(row.original.quota || 0),
+    },
+    {
+      accessorKey: 'use_time',
+      header: t('Duration'),
+      cell: ({ row }) => {
+        const seconds = Number(row.original.use_time || 0)
+        return (
+          <span className='font-mono text-xs tabular-nums'>
+            {seconds > 0 ? `${seconds}s` : '<1s'}
+          </span>
+        )
+      },
     }
   )
 
