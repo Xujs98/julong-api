@@ -421,9 +421,9 @@ curl 'http://localhost:3000/api/redemption/search?keyword=agent001&p=1&page_size
 
 | 方法 | 路径 | Handler | 用途 | 参数 | 响应 | 权限 | 状态 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| GET | `/api/image-generation-logs` | `controller.GetImageGenerationLogs` | 分页查询成功的同步生图记录 | `p`、`page_size`、`model`、`prompt`、`channel_id`、`start_timestamp`、`end_timestamp` | `PageInfo<ImageGenerationLog[]>`，每条包含受保护的 `image_urls` | 用户看自己；管理员/root 看全部 | 完成 |
+| GET | `/api/image-generation-logs` | `controller.GetImageGenerationLogs` | 分页查询成功的同步生图记录 | `p`、`page_size`、`model`、`prompt`、`channel_id`、`start_timestamp`、`end_timestamp` | `PageInfo<ImageGenerationLog[]>`，每条包含受保护的 `image_urls`；无有效订阅权益返回 403 | 普通用户需有效订阅且只能看自己的最近 N 条；管理员/root 看全部 | 完成 |
 | GET | `/api/image-generation-logs/` | `controller.GetImageGenerationLogs` | 兼容尾斜杠 | 同上 | 同上 | 同上 | 完成 |
-| GET | `/api/image-generation-logs/:id/images/:index` | `controller.GetImageGenerationLogImage` | 鉴权读取本地落盘图片 | path `id`、`index` | 图片二进制；不存在 404、越权 403 | 所属用户或管理员/root | 完成 |
+| GET | `/api/image-generation-logs/:id/images/:index` | `controller.GetImageGenerationLogImage` | 鉴权读取本地落盘图片 | path `id`、`index` | 图片二进制；不存在 404、无订阅/越权/超出最近 N 条范围均为 403 | 有效订阅所属用户或管理员/root | 完成 |
 
 调用示例：
 
@@ -540,9 +540,9 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 | `PrefillGroup` | `model/prefill_group.go` | 模型预填分组 | group name、models/config | 后台模型管理。 | 活跃 |
 | `Task` | `model/task.go` | 异步模型/媒体任务 | platform、task id、action、status、quota/billing private data | 用于视频/音乐/图片任务 relay。 | 活跃 |
 | `Midjourney` | `model/midjourney.go` | MJProxy 风格任务 | mj id/action/status/prompt/result 字段 | 兼容/旧版图片任务跟踪。 | 活跃 |
-| `SubscriptionPlan` | `model/subscription.go` | 订阅计划 | id/title/price/quota/reset/model limits/status 字段 | SQLite 有自定义迁移。 | 活跃 |
+| `SubscriptionPlan` | `model/subscription.go` | 订阅计划 | id/title/price/quota/reset/status，以及 `allow_image_generation_logs`、`image_generation_log_limit`（0 为不限条数） | SQLite 有自定义迁移；生图日志权益默认关闭。 | 活跃 |
 | `SubscriptionOrder` | `model/subscription.go` | 订阅支付订单 | order id/user/plan/payment status 字段 | 支付回调使用。 | 活跃 |
-| `UserSubscription` | `model/subscription.go` | 用户有效订阅 | user/plan/quota/period/status 字段 | 订阅抵扣使用。 | 活跃 |
+| `UserSubscription` | `model/subscription.go` | 用户有效订阅 | user/plan/quota/period/status，以及生图日志权限和条数快照字段 | 创建订阅时从套餐复制权益；多个有效订阅任一为 0 则无限，否则取最大条数。 | 活跃 |
 | `SubscriptionPreConsumeRecord` | `model/subscription.go` | 订阅预扣记录 | subscription/request/pre/post quota 字段 | 请求结算使用。 | 活跃 |
 | `Option` | `model/option.go` | 运行时设置 | `key`、`value` | Root 设置 API。 | 活跃 |
 | `Setup` | `model/setup.go` | 安装/初始化状态 | setup timestamp/status | `/api/setup`。 | 活跃 |
@@ -729,7 +729,8 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 - 记录用户、Token、渠道、模型、提示词、尺寸、品质、图片数、费用、请求 ID 和耗时。
 - base64 结果先解码为原始图片文件，单张上限 25MB；数据库只保存图片引用，避免 base64 约 33% 的编码膨胀。
 - 上游 URL 结果保存 URL 引用并由浏览器直接展示，避免后端日志预览产生 SSRF 风险；base64 本地文件通过鉴权接口读取。
-- 普通用户只能查看自己的图片，管理员/root 可查看全部。
+- 普通用户必须拥有启用生图日志权限的有效订阅，且只能查看自己的图片；管理员/root 可查看全部。
+- 套餐可设置允许查看的最近日志条数，`0` 为全部；多个有效订阅任一为 `0` 时无限制，否则取最大值。列表查询和图片读取接口都会校验该范围，不能通过旧图片 URL 绕过。
 - 默认保留 30 天；写入新记录时每小时至多触发一次过期日志和本地图片清理。
 
 ## 已知问题
@@ -770,6 +771,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 - 兑换码支持按生成者、兑换码、名称、ID 搜索。
 - 签到奖励额度预览。
 - 可由 root 开关控制、支持图片预览和自动保留清理的生图日志。
+- 订阅套餐可授予普通用户生图日志查看权限，并限制可见的最近记录数量。
 - 新增 UI 文案的多语言同步。
 
 ### 进行中
@@ -791,6 +793,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 
 | 日期 | 变更 | 更新文件/API/模型 | 验证 |
 | --- | --- | --- | --- |
+| 2026-07-12 | 新增订阅套餐生图日志权限和最近 N 条限制；0 为全部，多有效订阅取最大权益，列表及图片读取均强制鉴权。 | `SubscriptionPlan`、`UserSubscription`、`GetUserImageGenerationLogAccess`、`GET /api/image-generation-logs*`、订阅套餐编辑抽屉、locale files | `go test ./model ./controller`、`bun run typecheck`、`bun run i18n:sync`、`git diff --check` |
 | 2026-07-12 | 新增同步生图日志：root 开关、保留天数、base64 文件落盘、用户隔离查询/图片接口，以及任务日志中的生图日志和图片预览。 | `ImageGenerationLog`、`ImageGenerationLogEnabled`、`ImageGenerationLogRetentionDays`、`/api/image-generation-logs*`、Relay 图片适配器、`web/default/src/features/usage-logs/*`、日志维护设置、locale files | `go test ./model ./service ./controller ./relay/...`、`bun run typecheck`、`bun run i18n:sync`、`git diff --check` |
 | 2026-07-12 | 在后台用户详情基本信息区增加有效订阅摘要。 | `web/default/src/features/users/components/user-detail-dialog.tsx`、`DEVELOPMENT.md`；复用 `GET /api/subscription/admin/users/:id/subscriptions` 和 `GET /api/subscription/admin/plans` | `bun run typecheck`、`bun run i18n:sync`、Rsbuild 热更新编译、`git diff --check` |
 | 2026-07-12 | 优化代理详情和用户详情弹窗 UI，增加身份摘要、关键指标带、加载骨架、紧凑信息网格及移动端响应式表格。 | `web/default/src/features/users/components/agent-detail-dialog.tsx`、`user-detail-dialog.tsx`、`DEVELOPMENT.md` | `bun run typecheck`、Rsbuild 热更新编译、`git diff --check` |

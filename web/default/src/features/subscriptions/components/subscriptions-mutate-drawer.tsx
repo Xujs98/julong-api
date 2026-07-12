@@ -144,6 +144,7 @@ export function SubscriptionsMutateDrawer({
 
   const durationUnit = form.watch('duration_unit')
   const resetPeriod = form.watch('quota_reset_period')
+  const allowImageGenerationLogs = form.watch('allow_image_generation_logs')
   // Gate "+ Create on Pancake" on the same checks the mint handler runs.
   const watchedTitle = form.watch('title')
   const watchedPrice = form.watch('price_amount')
@@ -567,6 +568,60 @@ export function SubscriptionsMutateDrawer({
                     </FormItem>
                   )}
                 />
+
+                <FormField
+                  control={form.control}
+                  name='allow_image_generation_logs'
+                  render={({ field }) => (
+                    <FormItem className={sideDrawerSwitchItemClassName()}>
+                      <div className='space-y-1'>
+                        <FormLabel className='!mt-0'>
+                          {t('Allow image generation log access')}
+                        </FormLabel>
+                        <FormDescription>
+                          {t('Subscribers can only view their own image generation logs')}
+                        </FormDescription>
+                      </div>
+                      <FormControl>
+                        <Switch
+                          checked={field.value}
+                          onCheckedChange={field.onChange}
+                        />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+
+                {allowImageGenerationLogs && (
+                  <FormField
+                    control={form.control}
+                    name='image_generation_log_limit'
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>
+                          {t('Image generation log view limit')}
+                        </FormLabel>
+                        <FormControl>
+                          <Input
+                            {...field}
+                            type='number'
+                            min={0}
+                            step={1}
+                            onChange={(event) =>
+                              field.onChange(
+                                Math.max(0, parseInt(event.target.value, 10) || 0)
+                              )
+                            }
+                          />
+                        </FormControl>
+                        <FormDescription>
+                          {t('0 means all image generation logs')}
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
               </div>
             </SideDrawerSection>
 

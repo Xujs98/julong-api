@@ -185,6 +185,10 @@ func AdminCreateSubscriptionPlan(c *gin.Context) {
 		common.ApiErrorMsg(c, "总额度不能为负数")
 		return
 	}
+	if req.Plan.ImageGenerationLogLimit < 0 {
+		common.ApiErrorMsg(c, "生图日志查看数量不能为负数")
+		return
+	}
 	req.Plan.UpgradeGroup = strings.TrimSpace(req.Plan.UpgradeGroup)
 	if req.Plan.UpgradeGroup != "" {
 		if _, ok := ratio_setting.GetGroupRatioCopy()[req.Plan.UpgradeGroup]; !ok {
@@ -259,6 +263,10 @@ func AdminUpdateSubscriptionPlan(c *gin.Context) {
 		common.ApiErrorMsg(c, "总额度不能为负数")
 		return
 	}
+	if req.Plan.ImageGenerationLogLimit < 0 {
+		common.ApiErrorMsg(c, "生图日志查看数量不能为负数")
+		return
+	}
 	req.Plan.UpgradeGroup = strings.TrimSpace(req.Plan.UpgradeGroup)
 	if req.Plan.UpgradeGroup != "" {
 		if _, ok := ratio_setting.GetGroupRatioCopy()[req.Plan.UpgradeGroup]; !ok {
@@ -282,25 +290,27 @@ func AdminUpdateSubscriptionPlan(c *gin.Context) {
 	err := model.DB.Transaction(func(tx *gorm.DB) error {
 		// update plan (allow zero values updates with map)
 		updateMap := map[string]interface{}{
-			"title":                      req.Plan.Title,
-			"subtitle":                   req.Plan.Subtitle,
-			"price_amount":               req.Plan.PriceAmount,
-			"currency":                   req.Plan.Currency,
-			"duration_unit":              req.Plan.DurationUnit,
-			"duration_value":             req.Plan.DurationValue,
-			"custom_seconds":             req.Plan.CustomSeconds,
-			"enabled":                    req.Plan.Enabled,
-			"sort_order":                 req.Plan.SortOrder,
-			"stripe_price_id":            req.Plan.StripePriceId,
-			"creem_product_id":           req.Plan.CreemProductId,
-			"waffo_pancake_product_id":   req.Plan.WaffoPancakeProductId,
-			"max_purchase_per_user":      req.Plan.MaxPurchasePerUser,
-			"total_amount":               req.Plan.TotalAmount,
-			"upgrade_group":              req.Plan.UpgradeGroup,
-			"downgrade_group":            req.Plan.DowngradeGroup,
-			"quota_reset_period":         req.Plan.QuotaResetPeriod,
-			"quota_reset_custom_seconds": req.Plan.QuotaResetCustomSeconds,
-			"updated_at":                 common.GetTimestamp(),
+			"title":                       req.Plan.Title,
+			"subtitle":                    req.Plan.Subtitle,
+			"price_amount":                req.Plan.PriceAmount,
+			"currency":                    req.Plan.Currency,
+			"duration_unit":               req.Plan.DurationUnit,
+			"duration_value":              req.Plan.DurationValue,
+			"custom_seconds":              req.Plan.CustomSeconds,
+			"enabled":                     req.Plan.Enabled,
+			"sort_order":                  req.Plan.SortOrder,
+			"stripe_price_id":             req.Plan.StripePriceId,
+			"creem_product_id":            req.Plan.CreemProductId,
+			"waffo_pancake_product_id":    req.Plan.WaffoPancakeProductId,
+			"max_purchase_per_user":       req.Plan.MaxPurchasePerUser,
+			"total_amount":                req.Plan.TotalAmount,
+			"upgrade_group":               req.Plan.UpgradeGroup,
+			"downgrade_group":             req.Plan.DowngradeGroup,
+			"quota_reset_period":          req.Plan.QuotaResetPeriod,
+			"quota_reset_custom_seconds":  req.Plan.QuotaResetCustomSeconds,
+			"allow_image_generation_logs": req.Plan.AllowImageGenerationLogs,
+			"image_generation_log_limit":  req.Plan.ImageGenerationLogLimit,
+			"updated_at":                  common.GetTimestamp(),
 		}
 		if req.Plan.AllowBalancePay != nil {
 			updateMap["allow_balance_pay"] = *req.Plan.AllowBalancePay

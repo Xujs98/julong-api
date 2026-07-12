@@ -20,9 +20,23 @@ func GetImageGenerationLogs(c *gin.Context) {
 	endTime, _ := strconv.ParseInt(c.Query("end_timestamp"), 10, 64)
 	channelId, _ := strconv.Atoi(c.Query("channel_id"))
 	role := c.GetInt("role")
+	visibleLimit := 0
+	if role < common.RoleAdminUser {
+		allowed, limit, accessErr := model.GetUserImageGenerationLogAccess(c.GetInt("id"))
+		if accessErr != nil {
+			common.ApiError(c, accessErr)
+			return
+		}
+		if !allowed {
+			c.JSON(http.StatusForbidden, gin.H{"success": false, "message": "当前订阅不包含生图日志查看权限"})
+			return
+		}
+		visibleLimit = limit
+	}
 	logs, total, err := model.GetImageGenerationLogs(
 		c.GetInt("id"),
 		role >= common.RoleAdminUser,
+		visibleLimit,
 		pageInfo.GetStartIdx(),
 		pageInfo.GetPageSize(),
 		channelId,
@@ -66,9 +80,18 @@ func GetImageGenerationLogImage(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-	if c.GetInt("role") < common.RoleAdminUser && log.UserId != c.GetInt("id") {
-		c.Status(http.StatusForbidden)
-		return
+	if c.GetInt("role") < common.RoleAdminUser {
+		userId := c.GetInt("id")
+		allowed, limit, accessErr := model.GetUserImageGenerationLogAccess(userId)
+		if accessErr != nil || !allowed || log.UserId != userId {
+			c.Status(http.StatusForbidden)
+			return
+		}
+		visible, visibleErr := model.IsImageGenerationLogVisibleToUser(log.Id, userId, limit)
+		if visibleErr != nil || !visible {
+			c.Status(http.StatusForbidden)
+			return
+		}
 	}
 	refs, err := log.ImageRefs()
 	if err != nil || index >= len(refs) {

@@ -49,10 +49,14 @@ func (log *ImageGenerationLog) Insert() error {
 	return DB.Create(log).Error
 }
 
-func GetImageGenerationLogs(userId int, isAdmin bool, startIdx, pageSize, channelId int, modelName, prompt string, startTime, endTime int64) ([]*ImageGenerationLog, int64, error) {
+func GetImageGenerationLogs(userId int, isAdmin bool, visibleLimit, startIdx, pageSize, channelId int, modelName, prompt string, startTime, endTime int64) ([]*ImageGenerationLog, int64, error) {
 	query := DB.Model(&ImageGenerationLog{})
 	if !isAdmin {
 		query = query.Where("user_id = ?", userId)
+		if visibleLimit > 0 {
+			query = query.Where("id IN (?)", DB.Model(&ImageGenerationLog{}).
+				Select("id").Where("user_id = ?", userId).Order("id DESC").Limit(visibleLimit))
+		}
 	}
 	if modelName != "" {
 		query = query.Where("model_name LIKE ?", "%"+modelName+"%")
@@ -84,6 +88,17 @@ func GetImageGenerationLogs(userId int, isAdmin bool, startIdx, pageSize, channe
 		}
 	}
 	return logs, total, nil
+}
+
+func IsImageGenerationLogVisibleToUser(logId, userId, visibleLimit int) (bool, error) {
+	if visibleLimit <= 0 {
+		return true, nil
+	}
+	var count int64
+	err := DB.Model(&ImageGenerationLog{}).
+		Where("user_id = ? AND id >= ?", userId, logId).
+		Count(&count).Error
+	return count > 0 && count <= int64(visibleLimit), err
 }
 
 func GetImageGenerationLogById(id int) (*ImageGenerationLog, error) {

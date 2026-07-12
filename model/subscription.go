@@ -165,6 +165,11 @@ type SubscriptionPlan struct {
 	// Allow falling back to wallet balance after subscription quota is exhausted (empty = true)
 	AllowWalletOverflow *bool `json:"allow_wallet_overflow"`
 
+	// Allow the subscriber to view their own image generation logs.
+	AllowImageGenerationLogs bool `json:"allow_image_generation_logs" gorm:"default:false"`
+	// Maximum visible recent logs (0 = unlimited when access is allowed).
+	ImageGenerationLogLimit int `json:"image_generation_log_limit" gorm:"type:int;not null;default:0"`
+
 	StripePriceId         string `json:"stripe_price_id" gorm:"type:varchar(128);default:''"`
 	CreemProductId        string `json:"creem_product_id" gorm:"type:varchar(128);default:''"`
 	WaffoPancakeProductId string `json:"waffo_pancake_product_id" gorm:"type:varchar(128);default:''"`
@@ -275,6 +280,10 @@ type UserSubscription struct {
 
 	// Whether wallet fallback is allowed after this subscription's quota is exhausted (snapshot from plan)
 	AllowWalletOverflow bool `json:"allow_wallet_overflow"`
+
+	// Image generation log access snapshot from the plan.
+	AllowImageGenerationLogs bool `json:"allow_image_generation_logs" gorm:"default:false"`
+	ImageGenerationLogLimit  int  `json:"image_generation_log_limit" gorm:"type:int;not null;default:0"`
 
 	CreatedAt int64 `json:"created_at" gorm:"bigint"`
 	UpdatedAt int64 `json:"updated_at" gorm:"bigint"`
@@ -534,27 +543,56 @@ func CreateUserSubscriptionFromPlanTx(tx *gorm.DB, userId int, plan *Subscriptio
 		allowWalletOverflow = *plan.AllowWalletOverflow
 	}
 	sub := &UserSubscription{
-		UserId:              userId,
-		PlanId:              plan.Id,
-		AmountTotal:         plan.TotalAmount,
-		AmountUsed:          0,
-		StartTime:           now.Unix(),
-		EndTime:             endUnix,
-		Status:              "active",
-		Source:              source,
-		LastResetTime:       lastReset,
-		NextResetTime:       nextReset,
-		UpgradeGroup:        upgradeGroup,
-		PrevUserGroup:       prevGroup,
-		DowngradeGroup:      strings.TrimSpace(plan.DowngradeGroup),
-		AllowWalletOverflow: allowWalletOverflow,
-		CreatedAt:           common.GetTimestamp(),
-		UpdatedAt:           common.GetTimestamp(),
+		UserId:                   userId,
+		PlanId:                   plan.Id,
+		AmountTotal:              plan.TotalAmount,
+		AmountUsed:               0,
+		StartTime:                now.Unix(),
+		EndTime:                  endUnix,
+		Status:                   "active",
+		Source:                   source,
+		LastResetTime:            lastReset,
+		NextResetTime:            nextReset,
+		UpgradeGroup:             upgradeGroup,
+		PrevUserGroup:            prevGroup,
+		DowngradeGroup:           strings.TrimSpace(plan.DowngradeGroup),
+		AllowWalletOverflow:      allowWalletOverflow,
+		AllowImageGenerationLogs: plan.AllowImageGenerationLogs,
+		ImageGenerationLogLimit:  plan.ImageGenerationLogLimit,
+		CreatedAt:                common.GetTimestamp(),
+		UpdatedAt:                common.GetTimestamp(),
 	}
 	if err := tx.Create(sub).Error; err != nil {
 		return nil, err
 	}
 	return sub, nil
+}
+
+// GetUserImageGenerationLogAccess merges image-log rights from active subscriptions.
+// Any unlimited entitlement wins; otherwise the largest positive limit wins.
+func GetUserImageGenerationLogAccess(userId int) (bool, int, error) {
+	if userId <= 0 {
+		return false, 0, errors.New("invalid user id")
+	}
+	var subs []UserSubscription
+	if err := DB.Select("allow_image_generation_logs", "image_generation_log_limit").
+		Where("user_id = ? AND status = ? AND end_time > ? AND allow_image_generation_logs = ?", userId, "active", GetDBTimestamp(), true).
+		Find(&subs).Error; err != nil {
+		return false, 0, err
+	}
+	if len(subs) == 0 {
+		return false, 0, nil
+	}
+	maxLimit := 0
+	for _, sub := range subs {
+		if sub.ImageGenerationLogLimit <= 0 {
+			return true, 0, nil
+		}
+		if sub.ImageGenerationLogLimit > maxLimit {
+			maxLimit = sub.ImageGenerationLogLimit
+		}
+	}
+	return true, maxLimit, nil
 }
 
 // Complete a subscription order (idempotent). Creates a UserSubscription snapshot from the plan.
