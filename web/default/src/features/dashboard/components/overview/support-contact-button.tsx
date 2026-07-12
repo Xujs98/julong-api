@@ -29,7 +29,7 @@ function contactTypeLabel(contact: SupportContact, t: (key: string) => string) {
 
 function qqChatUrl(value: string) {
   const qq = encodeURIComponent(value.trim())
-  return `mqqwpa://im/chat?chat_type=wpa&uin=${qq}&version=1&src_type=web`
+  return `tencent://message/?uin=${qq}&Site=&Menu=yes`
 }
 
 export function SupportContactButton() {
