@@ -35,11 +35,53 @@ func CaptureImageGenerationResult(c *gin.Context, images []dto.ImageData) {
 	}
 	existing, _ := c.Get(imageGenerationResultKey)
 	results, _ := existing.([]dto.ImageData)
-	c.Set(imageGenerationResultKey, append(results, images...))
+	for _, image := range images {
+		duplicate := false
+		for _, result := range results {
+			if (image.B64Json != "" && image.B64Json == result.B64Json) ||
+				(image.Url != "" && image.Url == result.Url) {
+				duplicate = true
+				break
+			}
+		}
+		if !duplicate {
+			results = append(results, image)
+		}
+	}
+	c.Set(imageGenerationResultKey, results)
+}
+
+func CaptureResponsesImageGenerationResult(c *gin.Context, response *dto.OpenAIResponsesResponse) {
+	if response == nil {
+		return
+	}
+	for i := range response.Output {
+		CaptureResponsesImageGenerationOutput(c, &response.Output[i])
+	}
+}
+
+func CaptureResponsesImageGenerationOutput(c *gin.Context, output *dto.ResponsesOutput) {
+	if output == nil || output.Type != dto.ResponsesOutputTypeImageGenerationCall || strings.TrimSpace(output.Result) == "" {
+		return
+	}
+	CaptureImageGenerationResult(c, []dto.ImageData{{B64Json: output.Result}})
+	if output.Quality != "" {
+		c.Set("image_generation_call_quality", output.Quality)
+	}
+	if output.Size != "" {
+		c.Set("image_generation_call_size", output.Size)
+	}
 }
 
 func RecordImageGenerationLog(c *gin.Context, info *relaycommon.RelayInfo, request *dto.ImageRequest, quota int) {
 	if c == nil || info == nil || request == nil || !common.ImageGenerationLogEnabled {
+		return
+	}
+	RecordCapturedImageGenerationLog(c, info, request.Prompt, request.Size, request.Quality, quota)
+}
+
+func RecordCapturedImageGenerationLog(c *gin.Context, info *relaycommon.RelayInfo, prompt, size, quality string, quota int) {
+	if c == nil || info == nil || !common.ImageGenerationLogEnabled {
 		return
 	}
 	value, exists := c.Get(imageGenerationResultKey)
@@ -73,9 +115,9 @@ func RecordImageGenerationLog(c *gin.Context, info *relaycommon.RelayInfo, reque
 	}
 	log.ChannelId = info.ChannelId
 	log.ModelName = info.OriginModelName
-	log.Prompt = truncateImageLogPrompt(request.Prompt)
-	log.Size = request.Size
-	log.Quality = request.Quality
+	log.Prompt = truncateImageLogPrompt(prompt)
+	log.Size = size
+	log.Quality = quality
 	log.ImageCount = len(refs)
 	log.Images = string(encoded)
 	log.Quota = quota

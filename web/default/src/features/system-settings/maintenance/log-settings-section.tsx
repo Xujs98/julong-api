@@ -275,20 +275,19 @@ export function LogSettingsSection({
 
   const onSubmit = async (values: LogSettingsFormValues) => {
     const updates = [
-      values.LogConsumeEnabled !== defaultEnabled && {
+      {
         key: 'LogConsumeEnabled',
         value: values.LogConsumeEnabled,
       },
-      values.ImageGenerationLogEnabled !== defaultImageLogEnabled && {
+      {
         key: 'ImageGenerationLogEnabled',
         value: values.ImageGenerationLogEnabled,
       },
-      values.ImageGenerationLogRetentionDays !==
-        defaultImageLogRetentionDays && {
+      {
         key: 'ImageGenerationLogRetentionDays',
         value: values.ImageGenerationLogRetentionDays,
       },
-    ].filter(Boolean) as Array<{ key: string; value: boolean | number }>
+    ] as Array<{ key: string; value: boolean | number }>
 
     for (const update of updates) {
       await updateOption.mutateAsync(update)

@@ -40,6 +40,7 @@ func OaiResponsesToChatHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 	if oaiError := responsesResp.GetOpenAIError(); oaiError != nil && oaiError.Type != "" {
 		return nil, types.WithOpenAIError(*oaiError, resp.StatusCode)
 	}
+	service.CaptureResponsesImageGenerationResult(c, &responsesResp)
 
 	chatId := helper.GetResponseID(c)
 	chatResp, usage, err := service.ResponsesResponseToChatCompletionsResponse(&responsesResp, chatId)
@@ -144,6 +145,7 @@ func OaiResponsesToChatBufferedStreamHandler(c *gin.Context, info *relaycommon.R
 		}
 	}
 	accumulator.SupplementResponseOutput(finalResponse)
+	service.CaptureResponsesImageGenerationResult(c, finalResponse)
 
 	chatId := helper.GetResponseID(c)
 	chatResp, usage, err := service.ResponsesResponseToChatCompletionsResponse(finalResponse, chatId)
@@ -241,6 +243,12 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 			streamErr = types.NewOpenAIError(fmt.Errorf("responses stream error: %s", streamResp.Type), types.ErrorCodeBadResponse, http.StatusInternalServerError)
 			sr.Stop(streamErr)
 			return
+		}
+		if streamResp.Response != nil {
+			service.CaptureResponsesImageGenerationResult(c, streamResp.Response)
+		}
+		if streamResp.Item != nil {
+			service.CaptureResponsesImageGenerationOutput(c, streamResp.Item)
 		}
 
 		chunks, err := relayconvert.ResponsesStreamEventToChatChunks(&streamResp, state)

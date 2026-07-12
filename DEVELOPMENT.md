@@ -725,7 +725,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 行为：
 
 - Root 在“系统设置 → 运营设置 → 日志维护”开启“记录生图日志”，默认关闭。
-- 仅成功的 `/v1/images/generations` 请求写入记录；`/v1/images/edits` 不写入生图日志。
+- 成功的 `/v1/images/generations` 请求，以及聊天/Responses 中成功返回 `image_generation_call.result` 的生图调用会写入记录；`/v1/images/edits` 暂不写入生图日志。
 - 记录用户、Token、渠道、模型、提示词、尺寸、品质、图片数、费用、请求 ID 和耗时。
 - base64 结果先解码为原始图片文件，单张上限 25MB；数据库只保存图片引用，避免 base64 约 33% 的编码膨胀。
 - 上游 URL 结果保存 URL 引用并由浏览器直接展示，避免后端日志预览产生 SSRF 风险；base64 本地文件通过鉴权接口读取。
@@ -794,6 +794,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 
 | 日期 | 变更 | 更新文件/API/模型 | 验证 |
 | --- | --- | --- | --- |
+| 2026-07-12 | 修复生图日志开关假开启：日志设置保存时明确提交全部字段；增加聊天/Responses `image_generation_call.result` 捕获、去重、文件落盘和日志写入。 | `log-settings-section.tsx`、`ResponsesOutput.result`、`service/image_generation_log.go`、OpenAI Responses/Chat 转换处理器 | `go test ./service ./relay/...`、`bun run typecheck`、`git diff --check` |
 | 2026-07-12 | 优化钱包页响应式布局与套餐卡片，展示套餐及当前订阅的生图日志查看范围。 | `wallet/index.tsx`、`wallet-stats-card.tsx`、`subscription-plans-card.tsx`、locale files | `bun run typecheck`、`bun run i18n:sync`、`git diff --check` |
 | 2026-07-12 | 新增订阅套餐生图日志权限和最近 N 条限制；0 为全部，多有效订阅取最大权益，列表及图片读取均强制鉴权。 | `SubscriptionPlan`、`UserSubscription`、`GetUserImageGenerationLogAccess`、`GET /api/image-generation-logs*`、订阅套餐编辑抽屉、locale files | `go test ./model ./controller`、`bun run typecheck`、`bun run i18n:sync`、`git diff --check` |
 | 2026-07-12 | 新增同步生图日志：root 开关、保留天数、base64 文件落盘、用户隔离查询/图片接口，以及任务日志中的生图日志和图片预览。 | `ImageGenerationLog`、`ImageGenerationLogEnabled`、`ImageGenerationLogRetentionDays`、`/api/image-generation-logs*`、Relay 图片适配器、`web/default/src/features/usage-logs/*`、日志维护设置、locale files | `go test ./model ./service ./controller ./relay/...`、`bun run typecheck`、`bun run i18n:sync`、`git diff --check` |

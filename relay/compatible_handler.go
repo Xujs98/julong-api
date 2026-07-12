@@ -87,7 +87,15 @@ func TextHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types
 		if containAudioTokens && containsAudioRatios {
 			service.PostAudioConsumeQuota(c, info, usage, "")
 		} else {
-			service.PostTextConsumeQuota(c, info, usage, nil)
+			actualQuota := service.PostTextConsumeQuota(c, info, usage, nil)
+			prompt := ""
+			for i := len(request.Messages) - 1; i >= 0; i-- {
+				if request.Messages[i].Role == "user" {
+					prompt = request.Messages[i].StringContent()
+					break
+				}
+			}
+			service.RecordCapturedImageGenerationLog(c, info, prompt, c.GetString("image_generation_call_size"), c.GetString("image_generation_call_quality"), actualQuota)
 		}
 		return nil
 	}

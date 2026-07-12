@@ -95,3 +95,29 @@ func TestPersistImageGenerationResultKeepsRemoteReference(t *testing.T) {
 		t.Fatalf("unexpected ref: %+v", ref)
 	}
 }
+
+func TestCaptureResponsesImageGenerationResult(t *testing.T) {
+	previousEnabled := common.ImageGenerationLogEnabled
+	common.ImageGenerationLogEnabled = true
+	t.Cleanup(func() { common.ImageGenerationLogEnabled = previousEnabled })
+
+	c, _ := gin.CreateTestContext(nil)
+	encoded := base64.StdEncoding.EncodeToString([]byte{0x89, 0x50, 0x4e, 0x47})
+	CaptureResponsesImageGenerationResult(c, &dto.OpenAIResponsesResponse{
+		Output: []dto.ResponsesOutput{{
+			Type:    dto.ResponsesOutputTypeImageGenerationCall,
+			Result:  encoded,
+			Quality: "high",
+			Size:    "1024x1024",
+		}},
+	})
+
+	value, exists := c.Get(imageGenerationResultKey)
+	images, ok := value.([]dto.ImageData)
+	if !exists || !ok || len(images) != 1 || images[0].B64Json != encoded {
+		t.Fatalf("unexpected captured images: %#v", value)
+	}
+	if c.GetString("image_generation_call_quality") != "high" || c.GetString("image_generation_call_size") != "1024x1024" {
+		t.Fatal("responses image metadata was not captured")
+	}
+}
