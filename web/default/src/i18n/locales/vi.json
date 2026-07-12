@@ -333,6 +333,7 @@
     "Allow service_tier passthrough": "Cho phép chuyển tiếp service_tier",
     "Allow speed passthrough": "Cho phép truyền speed",
     "Allow subscription deduction": "Cho phép trừ từ gói đăng ký",
+    "Allow this administrator to view and modify this settings page.": "Cho phép quản trị viên này xem và sửa đổi trang cài đặt này.",
     "Allow upstream callbacks": "Cho phép callback upstream",
     "Allow users to check in daily for random quota rewards": "Cho phép người dùng điểm danh hàng ngày để nhận phần thưởng hạn ngạch ngẫu nhiên",
     "Allow users to enter promo codes": "Cho phép người dùng nhập mã khuyến mãi",

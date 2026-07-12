@@ -23,6 +23,8 @@ import {
   BILLING_DEFAULT_SECTION,
   BILLING_SECTION_IDS,
 } from '@/features/system-settings/billing/section-registry.tsx'
+import { canAccessSystemSettingsSection } from '@/features/system-settings/permissions'
+import { useAuthStore } from '@/stores/auth-store'
 
 export const Route = createFileRoute(
   '/_authenticated/system-settings/billing/$section'
@@ -34,6 +36,15 @@ export const Route = createFileRoute(
         to: '/system-settings/billing/$section',
         params: { section: BILLING_DEFAULT_SECTION },
       })
+    }
+    if (
+      !canAccessSystemSettingsSection(
+        useAuthStore.getState().auth.user,
+        'billing',
+        params.section
+      )
+    ) {
+      throw redirect({ to: '/403' })
     }
   },
   component: BillingSettings,

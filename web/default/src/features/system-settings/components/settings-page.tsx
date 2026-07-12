@@ -109,10 +109,14 @@ export function SettingsPage<
   resolveSettings,
 }: SettingsPageProps<TSettings, TSectionId, TExtraArgs>) {
   const { t } = useTranslation()
-  const { data, isLoading } = useSystemOptions()
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const params = useParams({ from: routePath as any })
   const activeSection = (params?.section ?? defaultSection) as TSectionId
+  const category = routePath.match(/system-settings\/([^/]+)/)?.[1]
+  const permissionSection = category
+    ? `${category}.${activeSection}`
+    : undefined
+  const { data, isLoading } = useSystemOptions(permissionSection)
   const sectionMeta = getSectionMeta(activeSection)
 
   const settings = useMemo(() => {

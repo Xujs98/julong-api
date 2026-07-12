@@ -54,13 +54,22 @@ export async function updateSupportContacts(contacts: SupportContact[]) {
   return res.data
 }
 
-export async function getSystemOptions() {
-  const res = await api.get<SystemOptionsResponse>('/api/option/')
+export async function getSystemOptions(section?: string) {
+  const res = await api.get<SystemOptionsResponse>('/api/option/', {
+    params: section ? { section } : undefined,
+  })
   return res.data
 }
 
 export async function updateSystemOption(request: UpdateOptionRequest) {
-  const res = await api.put<UpdateOptionResponse>('/api/option/', request)
+  const pathParts = window.location.pathname.split('/').filter(Boolean)
+  const section =
+    pathParts[0] === 'system-settings' && pathParts[1] && pathParts[2]
+      ? `${pathParts[1]}.${pathParts[2]}`
+      : undefined
+  const res = await api.put<UpdateOptionResponse>('/api/option/', request, {
+    params: section ? { section } : undefined,
+  })
   return res.data
 }
 

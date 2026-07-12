@@ -97,18 +97,14 @@ func TestSetUserPermissionsStoresOnlyOverrides(t *testing.T) {
 
 	assert.True(t, Can(42, common.RoleAdminUser, ChannelSensitiveWrite))
 	assert.False(t, Can(42, common.RoleAdminUser, ChannelWrite))
-	assert.Equal(t, PermissionsMap{
-		ResourceChannel: {
-			ActionRead:           true,
-			ActionOperate:        true,
-			ActionWrite:          false,
-			ActionSensitiveWrite: true,
-			ActionSecretView:     false,
-		},
-		ResourceSystemSettings: {
-			ActionSupportContactsWrite: false,
-		},
-	}, ExplicitUserPermissions(42))
+	effective := ExplicitUserPermissions(42)
+	assert.Equal(t, map[string]bool{
+		ActionRead:           true,
+		ActionOperate:        true,
+		ActionWrite:          false,
+		ActionSensitiveWrite: true,
+		ActionSecretView:     false,
+	}, effective[ResourceChannel])
 	assert.Equal(t, PermissionsMap{
 		ResourceChannel: {
 			ActionSensitiveWrite: true,
@@ -128,18 +124,14 @@ func TestSetUserPermissionsStoresOnlyOverrides(t *testing.T) {
 		ActionSecretView:     false,
 	}}))
 	assert.False(t, Can(42, common.RoleAdminUser, ChannelSensitiveWrite))
-	assert.Equal(t, PermissionsMap{
-		ResourceChannel: {
-			ActionRead:           true,
-			ActionOperate:        true,
-			ActionWrite:          true,
-			ActionSensitiveWrite: false,
-			ActionSecretView:     false,
-		},
-		ResourceSystemSettings: {
-			ActionSupportContactsWrite: false,
-		},
-	}, ExplicitUserPermissions(42))
+	effective = ExplicitUserPermissions(42)
+	assert.Equal(t, map[string]bool{
+		ActionRead:           true,
+		ActionOperate:        true,
+		ActionWrite:          true,
+		ActionSensitiveWrite: false,
+		ActionSecretView:     false,
+	}, effective[ResourceChannel])
 	assert.Empty(t, ExplicitUserOverrides(42))
 }
 

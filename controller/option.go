@@ -76,10 +76,18 @@ func buildCompletionRatioMetaValue(optionValues map[string]string) string {
 }
 
 func GetOptions(c *gin.Context) {
+	action := systemSettingsAction(c)
+	if !canAccessSystemSettingsAction(c, action) {
+		c.JSON(http.StatusForbidden, gin.H{"success": false, "message": "无权访问该系统设置"})
+		return
+	}
 	var options []*model.Option
 	optionValues := make(map[string]string)
 	common.OptionMapRWMutex.Lock()
 	for k, v := range common.OptionMap {
+		if c.GetInt("role") < common.RoleRootUser && !optionAllowedForSystemSettingsAction(k, action) {
+			continue
+		}
 		value := common.Interface2String(v)
 		isSensitiveKey := strings.HasSuffix(k, "Token") ||
 			strings.HasSuffix(k, "Secret") ||
@@ -126,6 +134,13 @@ func UpdateOption(c *gin.Context) {
 			"message": "无效的参数",
 		})
 		return
+	}
+	if c.GetInt("role") < common.RoleRootUser {
+		action := systemSettingsAction(c)
+		if !canAccessSystemSettingsAction(c, action) || !optionAllowedForSystemSettingsAction(option.Key, action) {
+			c.JSON(http.StatusForbidden, gin.H{"success": false, "message": "无权修改该系统设置"})
+			return
+		}
 	}
 	switch option.Value.(type) {
 	case bool:

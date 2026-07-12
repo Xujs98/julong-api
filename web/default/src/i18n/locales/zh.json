@@ -333,6 +333,7 @@
     "Allow service_tier passthrough": "允许透传 service_tier",
     "Allow speed passthrough": "允许 speed 透传",
     "Allow subscription deduction": "允许订阅抵扣",
+    "Allow this administrator to view and modify this settings page.": "允许该管理员查看和修改此设置页面。",
     "Allow upstream callbacks": "允许上游回调",
     "Allow users to check in daily for random quota rewards": "允许用户每日签到获取随机额度奖励",
     "Allow users to enter promo codes": "允许用户输入促销代码",

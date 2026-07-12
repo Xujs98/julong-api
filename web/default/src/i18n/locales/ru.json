@@ -333,6 +333,7 @@
     "Allow service_tier passthrough": "Разрешить сквозную передачу service_tier",
     "Allow speed passthrough": "Разрешить передачу speed",
     "Allow subscription deduction": "Разрешить списание из подписки",
+    "Allow this administrator to view and modify this settings page.": "Разрешить администратору просматривать и изменять эту страницу настроек.",
     "Allow upstream callbacks": "Разрешить обратные вызовы upstream",
     "Allow users to check in daily for random quota rewards": "Разрешить пользователям регистрироваться ежедневно для получения случайных квотных наград",
     "Allow users to enter promo codes": "Разрешить пользователям вводить промокоды",

@@ -18,11 +18,13 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { createFileRoute, redirect } from '@tanstack/react-router'
 
+import { canAccessSystemSettingsSection } from '@/features/system-settings/permissions'
 import { SiteSettings } from '@/features/system-settings/site'
 import {
   SITE_DEFAULT_SECTION,
   SITE_SECTION_IDS,
 } from '@/features/system-settings/site/section-registry.tsx'
+import { useAuthStore } from '@/stores/auth-store'
 
 export const Route = createFileRoute(
   '/_authenticated/system-settings/site/$section'
@@ -34,6 +36,15 @@ export const Route = createFileRoute(
         to: '/system-settings/site/$section',
         params: { section: SITE_DEFAULT_SECTION },
       })
+    }
+    if (
+      !canAccessSystemSettingsSection(
+        useAuthStore.getState().auth.user,
+        'site',
+        params.section
+      )
+    ) {
+      throw redirect({ to: '/403' })
     }
   },
   component: SiteSettings,

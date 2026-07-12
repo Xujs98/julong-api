@@ -23,6 +23,8 @@ import {
   AUTH_DEFAULT_SECTION,
   AUTH_SECTION_IDS,
 } from '@/features/system-settings/auth/section-registry.tsx'
+import { canAccessSystemSettingsSection } from '@/features/system-settings/permissions'
+import { useAuthStore } from '@/stores/auth-store'
 
 export const Route = createFileRoute(
   '/_authenticated/system-settings/auth/$section'
@@ -34,6 +36,15 @@ export const Route = createFileRoute(
         to: '/system-settings/auth/$section',
         params: { section: AUTH_DEFAULT_SECTION },
       })
+    }
+    if (
+      !canAccessSystemSettingsSection(
+        useAuthStore.getState().auth.user,
+        'auth',
+        params.section
+      )
+    ) {
+      throw redirect({ to: '/403' })
     }
   },
   component: AuthSettings,

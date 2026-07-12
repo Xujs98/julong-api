@@ -210,25 +210,25 @@ func SetApiRouter(router *gin.Engine) {
 			supportContactsRoute.PUT("", middleware.AdminAuth(), middleware.RequirePermission(authz.SystemSettingsSupportContactsWrite), controller.UpdateSupportContacts)
 		}
 		optionRoute := apiRouter.Group("/option")
-		optionRoute.Use(middleware.RootAuth())
+		optionRoute.Use(middleware.AdminAuth())
 		{
 			optionRoute.GET("/", controller.GetOptions)
 			optionRoute.PUT("/", controller.UpdateOption)
-			optionRoute.POST("/payment_compliance", controller.ConfirmPaymentCompliance)
-			optionRoute.GET("/channel_affinity_cache", controller.GetChannelAffinityCacheStats)
-			optionRoute.DELETE("/channel_affinity_cache", controller.ClearChannelAffinityCache)
-			optionRoute.POST("/rest_model_ratio", controller.ResetModelRatio)
-			optionRoute.POST("/migrate_console_setting", controller.MigrateConsoleSetting) // 用于迁移检测的旧键，下个版本会删除
-			optionRoute.GET("/waffo-pancake/catalog", controller.ListWaffoPancakeCatalog)
-			optionRoute.POST("/waffo-pancake/pair", controller.CreateWaffoPancakePair)
-			optionRoute.POST("/waffo-pancake/save", controller.SaveWaffoPancake)
-			optionRoute.POST("/waffo-pancake/subscription-product", controller.CreateWaffoPancakeSubscriptionProduct)
-			optionRoute.GET("/waffo-pancake/subscription-product-options", controller.ListWaffoPancakeSubscriptionProductOptions)
+			optionRoute.POST("/payment_compliance", middleware.RequirePermission(authz.SystemSettingsPermission("billing.payment")), controller.ConfirmPaymentCompliance)
+			optionRoute.GET("/channel_affinity_cache", middleware.RequirePermission(authz.SystemSettingsPermission("models.channel-affinity")), controller.GetChannelAffinityCacheStats)
+			optionRoute.DELETE("/channel_affinity_cache", middleware.RequirePermission(authz.SystemSettingsPermission("models.channel-affinity")), controller.ClearChannelAffinityCache)
+			optionRoute.POST("/rest_model_ratio", middleware.RequirePermission(authz.SystemSettingsPermission("billing.model-pricing")), controller.ResetModelRatio)
+			optionRoute.POST("/migrate_console_setting", middleware.RootAuth(), controller.MigrateConsoleSetting) // 用于迁移检测的旧键，下个版本会删除
+			optionRoute.GET("/waffo-pancake/catalog", middleware.RequirePermission(authz.SystemSettingsPermission("billing.payment")), controller.ListWaffoPancakeCatalog)
+			optionRoute.POST("/waffo-pancake/pair", middleware.RequirePermission(authz.SystemSettingsPermission("billing.payment")), controller.CreateWaffoPancakePair)
+			optionRoute.POST("/waffo-pancake/save", middleware.RequirePermission(authz.SystemSettingsPermission("billing.payment")), controller.SaveWaffoPancake)
+			optionRoute.POST("/waffo-pancake/subscription-product", middleware.RequirePermission(authz.SystemSettingsPermission("billing.payment")), controller.CreateWaffoPancakeSubscriptionProduct)
+			optionRoute.GET("/waffo-pancake/subscription-product-options", middleware.RequirePermission(authz.SystemSettingsPermission("billing.payment")), controller.ListWaffoPancakeSubscriptionProductOptions)
 		}
 
-		// Custom OAuth provider management (root only)
+		// Custom OAuth provider management for root and authorized administrators.
 		customOAuthRoute := apiRouter.Group("/custom-oauth-provider")
-		customOAuthRoute.Use(middleware.RootAuth())
+		customOAuthRoute.Use(middleware.AdminAuth(), middleware.RequirePermission(authz.SystemSettingsPermission("auth.custom-oauth")))
 		{
 			customOAuthRoute.POST("/discovery", controller.FetchCustomOAuthDiscovery)
 			customOAuthRoute.GET("/", controller.GetCustomOAuthProviders)
@@ -238,17 +238,17 @@ func SetApiRouter(router *gin.Engine) {
 			customOAuthRoute.DELETE("/:id", controller.DeleteCustomOAuthProvider)
 		}
 		performanceRoute := apiRouter.Group("/performance")
-		performanceRoute.Use(middleware.RootAuth())
+		performanceRoute.Use(middleware.AdminAuth())
 		{
-			performanceRoute.GET("/stats", controller.GetPerformanceStats)
-			performanceRoute.DELETE("/disk_cache", controller.ClearDiskCache)
-			performanceRoute.POST("/reset_stats", controller.ResetPerformanceStats)
-			performanceRoute.POST("/gc", controller.ForceGC)
-			performanceRoute.GET("/logs", controller.GetLogFiles)
-			performanceRoute.DELETE("/logs", controller.CleanupLogFiles)
+			performanceRoute.GET("/stats", middleware.RequirePermission(authz.SystemSettingsPermission("operations.performance")), controller.GetPerformanceStats)
+			performanceRoute.DELETE("/disk_cache", middleware.RequirePermission(authz.SystemSettingsPermission("operations.performance")), controller.ClearDiskCache)
+			performanceRoute.POST("/reset_stats", middleware.RequirePermission(authz.SystemSettingsPermission("operations.performance")), controller.ResetPerformanceStats)
+			performanceRoute.POST("/gc", middleware.RequirePermission(authz.SystemSettingsPermission("operations.performance")), controller.ForceGC)
+			performanceRoute.GET("/logs", middleware.RequirePermission(authz.SystemSettingsPermission("operations.logs")), controller.GetLogFiles)
+			performanceRoute.DELETE("/logs", middleware.RequirePermission(authz.SystemSettingsPermission("operations.logs")), controller.CleanupLogFiles)
 		}
 		ratioSyncRoute := apiRouter.Group("/ratio_sync")
-		ratioSyncRoute.Use(middleware.RootAuth())
+		ratioSyncRoute.Use(middleware.AdminAuth(), middleware.RequirePermission(authz.SystemSettingsPermission("billing.model-pricing")))
 		{
 			ratioSyncRoute.GET("/channels", controller.GetSyncableChannels)
 			ratioSyncRoute.POST("/fetch", controller.FetchUpstreamRatios)
@@ -303,7 +303,7 @@ func SetApiRouter(router *gin.Engine) {
 		logRoute.GET("/self/search", middleware.UserAuth(), middleware.SearchRateLimit(), controller.SearchUserLogs)
 
 		systemTaskRoute := apiRouter.Group("/system-task")
-		systemTaskRoute.Use(middleware.RootAuth())
+		systemTaskRoute.Use(middleware.AdminAuth(), middleware.RequirePermission(authz.SystemSettingsPermission("operations.logs")))
 		{
 			systemTaskRoute.POST("/log-cleanup", controller.CreateLogCleanupSystemTask)
 			systemTaskRoute.GET("/list", controller.ListSystemTasks)

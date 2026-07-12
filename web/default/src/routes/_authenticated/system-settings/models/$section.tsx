@@ -23,6 +23,8 @@ import {
   MODELS_DEFAULT_SECTION,
   MODELS_SECTION_IDS,
 } from '@/features/system-settings/models/section-registry.tsx'
+import { canAccessSystemSettingsSection } from '@/features/system-settings/permissions'
+import { useAuthStore } from '@/stores/auth-store'
 
 export const Route = createFileRoute(
   '/_authenticated/system-settings/models/$section'
@@ -34,6 +36,15 @@ export const Route = createFileRoute(
         to: '/system-settings/models/$section',
         params: { section: MODELS_DEFAULT_SECTION },
       })
+    }
+    if (
+      !canAccessSystemSettingsSection(
+        useAuthStore.getState().auth.user,
+        'models',
+        params.section
+      )
+    ) {
+      throw redirect({ to: '/403' })
     }
   },
   component: ModelSettings,

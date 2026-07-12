@@ -28,7 +28,8 @@
 | 兑换码搜索 | 已实现 | 后台兑换码支持按兑换码 key、生成者用户名/显示名、名称、ID、状态搜索。 |
 | 签到额度预览 | 已实现 | 计费与支付中的签到奖励输入框显示格式化额度预览。 |
 | 生图日志 | 已实现 | 成功的 `/v1/images/generations` 请求可按 root 开关记录提示词和图片，并在任务日志中查看；默认关闭。 |
-| 客服联系 | 已实现 | 概览页展示联系客服弹窗；root 可通过管理员权限授权指定管理员维护多条 QQ、微信和手机联系方式。 |
+| 系统设置权限 | 已实现 | root 可按 7 个一级菜单下的 41 个二级设置页面逐项授权管理员；菜单、路由、通用配置键和专用 API 均执行权限校验。 |
+| 客服联系 | 已实现 | 概览页展示联系客服弹窗；root 可授权指定管理员维护多条 QQ、微信和手机联系方式。 |
 | 文档纪律 | 新增 | 以后每次代码改动都必须同步维护本文档。 |
 
 ## 仓库结构
@@ -440,11 +441,11 @@ curl 'http://localhost:3000/api/image-generation-logs?p=1&page_size=20&model=gpt
 | 方法 | 路径 | 函数 | 用途 | 请求/响应 | 权限 | 状态 |
 | --- | --- | --- | --- | --- | --- | --- |
 | GET | `/api/support-contacts` | `controller.GetSupportContacts` | 获取概览页客服联系方式 | 响应 `SupportContact[]` | 登录用户 | 完成 |
-| PUT | `/api/support-contacts` | `controller.UpdateSupportContacts` | 保存多条 QQ/微信/手机联系方式 | 请求 `{contacts:[{type,label,value}]}`；非法类型、空值、超长或超过 30 条时报错 | root 或拥有 `system_settings.support_contacts_write` 的管理员 | 完成 |
+| PUT | `/api/support-contacts` | `controller.UpdateSupportContacts` | 保存多条 QQ/微信/手机联系方式 | 请求 `{contacts:[{type,label,value}]}`；非法类型、空值、超长或超过 30 条时报错 | root 或拥有 `system_settings.content.support` 的管理员 | 完成 |
 
 ### 后台设置与运维 API
 
-Root-only `/api/option`：
+系统设置与运维接口（root 拥有全部权限；管理员按 `system_settings.<一级菜单>.<二级页面>` 权限访问）：
 
 - `GET /api/option/`
 - `PUT /api/option/`
@@ -458,6 +459,8 @@ Root-only `/api/option`：
 - `POST /api/option/waffo-pancake/save`
 - `POST /api/option/waffo-pancake/subscription-product`
 - `GET /api/option/waffo-pancake/subscription-product-options`
+
+其中 `GET/PUT /api/option/` 要求管理员传入 `section=<一级菜单>.<二级页面>`，后端会同时校验页面权限和配置键归属；`POST /api/option/migrate_console_setting` 仍仅限 root。
 
 其他管理分组：
 
@@ -804,7 +807,8 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 
 | 日期 | 变更 | 更新文件/API/模型 | 验证 |
 | --- | --- | --- | --- |
-| 2026-07-12 | 新增概览页联系客服弹窗、客服联系方式后台配置，以及 root 可分配给管理员的客服设置权限；QQ、微信和手机使用对应类型图标。 | `SupportContacts`、`GET/PUT /api/support-contacts`、`system_settings.support_contacts_write`、`support-contacts-section.tsx`、`support-contact-button.tsx`、系统设置路由/侧边栏、locale files | `go test ./...`、`bun run typecheck`、目标 lint、`bun run i18n:sync`、`git diff --check` |
+| 2026-07-12 | 将管理员系统设置权限扩展到全部 41 个二级菜单；增加菜单/路由过滤、`/api/option` 按页面过滤及配置键归属校验，并保护自定义 OAuth、性能、日志、支付、渠道亲和与价格同步专用接口。 | `service/authz/resources_system_settings.go`、`controller/system_settings_access.go`、`controller/option.go`、`router/api-router.go`、系统设置 permissions/routes/sidebar/settings API、管理员权限编辑器 | `go test ./...`、`bun run typecheck`、目标 lint、`bun run i18n:sync`、`git diff --check` |
+| 2026-07-12 | 新增概览页联系客服弹窗、客服联系方式后台配置，以及 root 可分配给管理员的客服设置权限；QQ、微信和手机使用对应类型图标。 | `SupportContacts`、`GET/PUT /api/support-contacts`、`system_settings.content.support`、`support-contacts-section.tsx`、`support-contact-button.tsx`、系统设置路由/侧边栏、locale files | `go test ./...`、`bun run typecheck`、目标 lint、`bun run i18n:sync`、`git diff --check` |
 | 2026-07-12 | 生图图片预览增加逐图下载、JSON 数据展示和 JSON 文件下载；桌面/移动端列表展示后端测量的请求总耗时。 | `image-generation-preview-dialog.tsx`、`image-generation-logs-columns.tsx`、`usage-logs-mobile-card.tsx`、locale files | `bun run typecheck`、`bun run i18n:sync`、`git diff --check` |
 | 2026-07-12 | 修复生图日志开关假开启：日志设置保存时明确提交全部字段；增加聊天/Responses `image_generation_call.result` 捕获、去重、文件落盘和日志写入。 | `log-settings-section.tsx`、`ResponsesOutput.result`、`service/image_generation_log.go`、OpenAI Responses/Chat 转换处理器 | `go test ./service ./relay/...`、`bun run typecheck`、`git diff --check` |
 | 2026-07-12 | 优化钱包页响应式布局与套餐卡片，展示套餐及当前订阅的生图日志查看范围。 | `wallet/index.tsx`、`wallet-stats-card.tsx`、`subscription-plans-card.tsx`、locale files | `bun run typecheck`、`bun run i18n:sync`、`git diff --check` |

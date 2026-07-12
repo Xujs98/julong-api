@@ -20,10 +20,10 @@ import { useQuery } from '@tanstack/react-query'
 
 import { getSystemOptions } from '../api'
 
-export function useSystemOptions() {
+export function useSystemOptions(section?: string) {
   return useQuery({
-    queryKey: ['system-options'],
-    queryFn: getSystemOptions,
+    queryKey: ['system-options', section],
+    queryFn: () => getSystemOptions(section),
     staleTime: 5 * 60 * 1000,
   })
 }

@@ -333,6 +333,7 @@
     "Allow service_tier passthrough": "Autoriser la transmission de service_tier",
     "Allow speed passthrough": "Autoriser la transmission de speed",
     "Allow subscription deduction": "Autoriser l'imputation sur l'abonnement",
+    "Allow this administrator to view and modify this settings page.": "Autoriser cet administrateur à consulter et modifier cette page de paramètres.",
     "Allow upstream callbacks": "Autoriser les callbacks en amont",
     "Allow users to check in daily for random quota rewards": "Permettre aux utilisateurs de se connecter quotidiennement pour des récompenses de quota aléatoires",
     "Allow users to enter promo codes": "Autoriser les utilisateurs à saisir des codes promotionnels",
