@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { Crown, RefreshCw, Sparkles, Check } from 'lucide-react'
+import { Crown, RefreshCw, Sparkles, Check, Images } from 'lucide-react'
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -411,11 +411,16 @@ export function SubscriptionPlansCard({
                   const isCancelled = subscription?.status === 'cancelled'
                   const isActive =
                     subscription?.status === 'active' && !isExpired
+                  const canViewImageLogs =
+                    subscription?.allow_image_generation_logs === true
+                  const imageLogLimit = Number(
+                    subscription?.image_generation_log_limit || 0
+                  )
 
                   return (
                     <div
                       key={subscription?.id}
-                      className='bg-background rounded-md border p-3 text-xs'
+                      className='bg-background rounded-lg border p-3 text-xs shadow-xs'
                     >
                       <div className='flex items-center justify-between'>
                         <div className='flex items-center gap-2'>
@@ -498,6 +503,21 @@ export function SubscriptionPlansCard({
                       {totalAmount > 0 && isActive && (
                         <Progress value={usagePercent} className='mt-2 h-1.5' />
                       )}
+                      {canViewImageLogs && (
+                        <div className='bg-muted/50 mt-2.5 flex items-center gap-2 rounded-md px-2.5 py-2 text-xs'>
+                          <Images className='text-primary size-3.5 shrink-0' />
+                          <span className='font-medium'>
+                            {t('Image generation logs')}
+                          </span>
+                          <span className='text-muted-foreground ml-auto'>
+                            {imageLogLimit > 0
+                              ? t('Latest {{count}} records', {
+                                  count: imageLogLimit,
+                                })
+                              : t('All records')}
+                          </span>
+                        </div>
+                      )}
                     </div>
                   )
                 })}
@@ -514,7 +534,12 @@ export function SubscriptionPlansCard({
 
         {/* Available plans grid */}
         {plans.length > 0 ? (
-          <div className='grid grid-cols-1 gap-3 2xl:grid-cols-2 2xl:gap-4'>
+          <div
+            className={cn(
+              'grid grid-cols-1 gap-3 2xl:gap-4',
+              plans.length > 1 && '2xl:grid-cols-2'
+            )}
+          >
             {plans.map((p, index) => {
               const plan = p?.plan
               if (!plan) return null
@@ -537,13 +562,25 @@ export function SubscriptionPlansCard({
                 plan.upgrade_group
                   ? `${t('Upgrade Group')}: ${plan.upgrade_group}`
                   : null,
+                plan.allow_image_generation_logs
+                  ? `${t('Image generation logs')}: ${
+                      Number(plan.image_generation_log_limit || 0) > 0
+                        ? t('Latest {{count}} records', {
+                            count: Number(plan.image_generation_log_limit),
+                          })
+                        : t('All records')
+                    }`
+                  : null,
               ].filter(Boolean) as string[]
 
               return (
                 <Card
                   key={plan.id}
                   data-card-hover='false'
-                  className={cn(isPopular && 'border-primary/70 shadow-sm')}
+                  className={cn(
+                    'overflow-hidden',
+                    isPopular && 'border-primary/70 shadow-sm'
+                  )}
                 >
                   <CardContent className='flex h-full flex-col p-3.5 sm:p-4'>
                     <div className='mb-2 flex items-start justify-between gap-3'>
@@ -569,20 +606,23 @@ export function SubscriptionPlansCard({
                       )}
                     </div>
 
-                    <div className='py-2'>
-                      <span className='text-primary text-2xl font-bold'>
+                    <div className='bg-muted/25 -mx-3.5 my-2 border-y px-3.5 py-3 sm:-mx-4 sm:px-4'>
+                      <span className='text-primary text-2xl font-bold tabular-nums'>
                         ${price}
+                      </span>
+                      <span className='text-muted-foreground ml-2 text-xs'>
+                        / {formatDuration(plan, t)}
                       </span>
                     </div>
 
-                    <div className='flex-1 space-y-1.5 pb-3'>
+                    <div className='flex-1 space-y-2 py-2 pb-4'>
                       {benefits.map((label) => (
                         <div
                           key={label}
-                          className='text-muted-foreground flex items-center gap-2 text-xs'
+                          className='text-muted-foreground flex items-start gap-2 text-xs leading-5'
                         >
-                          <Check className='text-primary h-3 w-3 shrink-0' />
-                          <span>{label}</span>
+                          <Check className='text-primary mt-1 h-3 w-3 shrink-0' />
+                          <span className='min-w-0 break-words'>{label}</span>
                         </div>
                       ))}
                     </div>

@@ -772,6 +772,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 - 签到奖励额度预览。
 - 可由 root 开关控制、支持图片预览和自动保留清理的生图日志。
 - 订阅套餐可授予普通用户生图日志查看权限，并限制可见的最近记录数量。
+- 钱包页优化统计区移动端布局、宽屏双栏比例和套餐卡片信息层级；单个套餐不再保留空白列，并在可购套餐和当前订阅中展示生图日志权益。
 - 新增 UI 文案的多语言同步。
 
 ### 进行中
@@ -793,6 +794,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 
 | 日期 | 变更 | 更新文件/API/模型 | 验证 |
 | --- | --- | --- | --- |
+| 2026-07-12 | 优化钱包页响应式布局与套餐卡片，展示套餐及当前订阅的生图日志查看范围。 | `wallet/index.tsx`、`wallet-stats-card.tsx`、`subscription-plans-card.tsx`、locale files | `bun run typecheck`、`bun run i18n:sync`、`git diff --check` |
 | 2026-07-12 | 新增订阅套餐生图日志权限和最近 N 条限制；0 为全部，多有效订阅取最大权益，列表及图片读取均强制鉴权。 | `SubscriptionPlan`、`UserSubscription`、`GetUserImageGenerationLogAccess`、`GET /api/image-generation-logs*`、订阅套餐编辑抽屉、locale files | `go test ./model ./controller`、`bun run typecheck`、`bun run i18n:sync`、`git diff --check` |
 | 2026-07-12 | 新增同步生图日志：root 开关、保留天数、base64 文件落盘、用户隔离查询/图片接口，以及任务日志中的生图日志和图片预览。 | `ImageGenerationLog`、`ImageGenerationLogEnabled`、`ImageGenerationLogRetentionDays`、`/api/image-generation-logs*`、Relay 图片适配器、`web/default/src/features/usage-logs/*`、日志维护设置、locale files | `go test ./model ./service ./controller ./relay/...`、`bun run typecheck`、`bun run i18n:sync`、`git diff --check` |
 | 2026-07-12 | 在后台用户详情基本信息区增加有效订阅摘要。 | `web/default/src/features/users/components/user-detail-dialog.tsx`、`DEVELOPMENT.md`；复用 `GET /api/subscription/admin/users/:id/subscriptions` 和 `GET /api/subscription/admin/plans` | `bun run typecheck`、`bun run i18n:sync`、Rsbuild 热更新编译、`git diff --check` |

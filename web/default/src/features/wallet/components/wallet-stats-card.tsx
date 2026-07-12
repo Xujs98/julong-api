@@ -34,7 +34,7 @@ export function WalletStatsCard(props: WalletStatsCardProps) {
   if (props.loading) {
     return (
       <div className='overflow-hidden rounded-lg border'>
-        <div className='divide-border/60 grid grid-cols-3 divide-x'>
+        <div className='divide-border/60 grid grid-cols-1 divide-y sm:grid-cols-3 sm:divide-x sm:divide-y-0'>
           {Array.from({ length: 3 }).map((_, i) => (
             <div key={i} className='px-3 py-3 sm:px-5 sm:py-4'>
               <Skeleton className='h-3.5 w-20' />
@@ -70,7 +70,7 @@ export function WalletStatsCard(props: WalletStatsCardProps) {
 
   return (
     <div className='overflow-hidden rounded-lg border'>
-      <div className='divide-border/60 grid grid-cols-3 divide-x'>
+      <div className='divide-border/60 grid grid-cols-1 divide-y sm:grid-cols-3 sm:divide-x sm:divide-y-0'>
         {stats.map((item) => (
           <div key={item.label} className='px-3 py-3 sm:px-5 sm:py-4'>
             <div className='flex items-center gap-2'>
@@ -83,7 +83,7 @@ export function WalletStatsCard(props: WalletStatsCardProps) {
             <div className='text-foreground mt-1.5 font-mono text-base font-bold tracking-tight break-all tabular-nums sm:mt-2 sm:text-2xl'>
               {item.value}
             </div>
-            <div className='text-muted-foreground/60 mt-1 hidden text-xs md:block'>
+            <div className='text-muted-foreground/60 mt-1 text-xs'>
               {item.description}
             </div>
           </div>
