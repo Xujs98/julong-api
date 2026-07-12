@@ -1,6 +1,6 @@
 # Julong-API 开发文档
 
-最后更新：2026-07-11
+最后更新：2026-07-12
 
 本文档是本二开项目的强制开发记录。以后新增、修改或删除任何 API、组件、数据模型、配置项、路由、数据库行为或部署行为时，必须在同一次改动中同步更新本文档，并在“变更日志”中新增记录。
 
@@ -599,7 +599,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 | `usage-logs` | `usage-logs-table.tsx`、columns/dialogs/filter bars | 普通/绘图/任务使用日志 | `/api/log*`、`/api/mj`、`/api/task` | 完成 |
 | `wallet` | recharge cards、subscription cards、affiliate rewards、redemption hook | 钱包充值、兑换码、订阅 | `/api/user/topup*`、`/api/subscription*`、支付 API | 完成 |
 | `redemption-codes` | `redemptions-table.tsx`、`redemptions-columns.tsx`、mutate/delete dialogs | 管理员/代理兑换码管理 | `/api/redemption*`、`/api/user/agent/topup-link` | 完成 |
-| `users` | `users-table.tsx`、`users-columns.tsx`、`users-mutate-drawer.tsx`、`agent-detail-dialog.tsx`、`user-detail-dialog.tsx` | 后台用户管理、代理详情、用户详情 | `/api/user*`、`/api/log` | 完成 |
+| `users` | `users-table.tsx`、`users-columns.tsx`、`users-mutate-drawer.tsx`、`agent-detail-dialog.tsx`、`user-detail-dialog.tsx` | 后台用户管理、代理详情、用户详情；详情弹窗包含头像身份摘要、关键指标带、紧凑信息网格、响应式数据表和加载骨架 | `/api/user*`、`/api/log` | 完成 |
 | `models` | metadata/deployment tables and drawers | 模型元数据和部署管理 | `/api/models*`、`/api/vendors*`、`/api/deployments*` | 完成 |
 | `subscriptions` | subscription table/drawers | 后台订阅计划/用户绑定 | `/api/subscription/admin*` | 完成 |
 | `system-settings` | `auth`、`billing`、`content`、`models`、`request-limits`、`maintenance`、`integrations`、`general` 下的 section registries | 管理员/root 运行时设置 | `/api/option*` 及特定后台 API | 完成/进行中 |
@@ -665,6 +665,8 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 - 后台用户表点击用户名打开详情弹窗。
 - 显示基本信息、格式化额度、请求数、总 token 消耗和最近 20 条消费日志。
 - 总 token 消耗按 `user_id` 从日志表求和。
+- 代理详情和用户详情采用统一的紧凑弹窗布局：身份摘要置顶，关键额度/用量指标独立展示，基本信息使用单一网格面板。
+- 弹窗限制在可视区域内滚动；移动端详情单列显示，日志、兑换码和所属用户表格支持横向滚动。
 
 ### 兑换码搜索增强
 
@@ -747,6 +749,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 
 | 日期 | 变更 | 更新文件/API/模型 | 验证 |
 | --- | --- | --- | --- |
+| 2026-07-12 | 优化代理详情和用户详情弹窗 UI，增加身份摘要、关键指标带、加载骨架、紧凑信息网格及移动端响应式表格。 | `web/default/src/features/users/components/agent-detail-dialog.tsx`、`user-detail-dialog.tsx`、`DEVELOPMENT.md` | `bun run typecheck`、Rsbuild 热更新编译、`git diff --check` |
 | 2026-07-11 | 将 `DEVELOPMENT.md` 翻译为中文。 | `DEVELOPMENT.md` | `git diff --check` |
 | 2026-07-11 | 创建 `DEVELOPMENT.md` 作为强制项目开发记录。 | `DEVELOPMENT.md` | 文档变更 |
 | 2026-07-11 | 在计费设置中增加签到奖励额度预览。 | `web/default/src/features/system-settings/general/checkin-settings-section.tsx`、locale files | `bun run typecheck`、`bun run i18n:sync`、`git diff --check` |
@@ -767,4 +770,3 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 - [ ] 前端改动已运行 `bun run typecheck`。
 - [ ] 已运行 `git diff --check`。
 - [ ] 如果 Go 路由/controller/model 行为变更且用户正在本地调试，已重启本地后端。
-

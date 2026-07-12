@@ -3,6 +3,7 @@ import type React from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { StatusBadge } from '@/components/status-badge'
+import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import {
   Dialog,
   DialogContent,
@@ -11,6 +12,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { Skeleton } from '@/components/ui/skeleton'
 import {
   Table,
   TableBody,
@@ -20,26 +22,54 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { getAllLogs } from '@/features/usage-logs/api'
+import type { UsageLog } from '@/features/usage-logs/data/schema'
 import {
   formatNumber,
   formatQuota,
   formatTimestampToDate,
   formatTokens,
 } from '@/lib/format'
-import { getAllLogs } from '@/features/usage-logs/api'
-import type { UsageLog } from '@/features/usage-logs/data/schema'
+import { cn } from '@/lib/utils'
 
-import { USER_ROLES, USER_STATUS, USER_STATUSES, isUserDeleted } from '../constants'
 import { getUserUsageSummary } from '../api'
+import {
+  USER_ROLES,
+  USER_STATUS,
+  USER_STATUSES,
+  isUserDeleted,
+} from '../constants'
 import { useUsers } from './users-provider'
 
 const RECENT_LOG_LIMIT = 20
 
-function InfoItem(props: { label: string; value: React.ReactNode }) {
+function InfoItem(props: {
+  label: string
+  value: React.ReactNode
+  className?: string
+}) {
   return (
-    <div className='rounded-md border bg-muted/20 px-3 py-2'>
+    <div
+      className={cn(
+        'border-b p-3 last:border-b-0 sm:border-r sm:[&:nth-child(3n)]:border-r-0',
+        props.className
+      )}
+    >
       <div className='text-muted-foreground text-xs'>{props.label}</div>
       <div className='mt-1 text-sm font-medium break-all'>{props.value}</div>
+    </div>
+  )
+}
+
+function Metric(props: { label: string; value: React.ReactNode }) {
+  return (
+    <div className='border-r px-3 py-3 even:border-r-0 sm:border-r sm:border-b-0 sm:px-4 sm:last:border-r-0 sm:even:border-r [&:nth-child(-n+2)]:border-b'>
+      <div className='text-muted-foreground text-xs leading-4'>
+        {props.label}
+      </div>
+      <div className='mt-1 text-base font-semibold tabular-nums sm:text-lg'>
+        {props.value}
+      </div>
     </div>
   )
 }
@@ -99,36 +129,72 @@ export function UserDetailDialog() {
 
   return (
     <Dialog open={isOpen} onOpenChange={(value) => !value && setOpen(null)}>
-      <DialogContent className='max-h-[88vh] overflow-hidden sm:max-w-[980px]'>
-        <DialogHeader>
+      <DialogContent className='max-h-[calc(100dvh-2rem)] overflow-hidden p-0 sm:max-w-[900px]'>
+        <DialogHeader className='gap-0 border-b px-4 pt-4 pr-12 pb-0 sm:px-6 sm:pt-5 sm:pr-14'>
           <DialogTitle>{t('User detail')}</DialogTitle>
-          <DialogDescription className='flex flex-wrap items-center gap-2'>
-            <span className='text-foreground text-lg font-semibold'>
-              {user?.username || '-'}
-            </span>
-            {user?.display_name && user.display_name !== user.username && (
-              <span>{user.display_name}</span>
-            )}
-            {statusConfig && (
-              <StatusBadge
-                label={t(statusConfig.labelKey)}
-                variant={statusConfig.variant}
-                copyable={false}
-                type='text'
-              />
-            )}
+          <DialogDescription className='sr-only'>
+            {user?.username || '-'}
           </DialogDescription>
+          <div className='mt-4 flex items-center gap-3 pb-4'>
+            <Avatar size='lg' className='size-12'>
+              <AvatarFallback className='text-base font-semibold'>
+                {getInitials(user?.display_name || user?.username)}
+              </AvatarFallback>
+            </Avatar>
+            <div className='min-w-0 flex-1'>
+              <div className='flex flex-wrap items-center gap-2'>
+                <span className='truncate text-base font-semibold'>
+                  {user?.username || '-'}
+                </span>
+                {statusConfig && (
+                  <StatusBadge
+                    label={t(statusConfig.labelKey)}
+                    variant={statusConfig.variant}
+                    copyable={false}
+                    type='text'
+                  />
+                )}
+              </div>
+              <div className='text-muted-foreground mt-0.5 truncate text-sm'>
+                {user?.display_name || user?.email || '-'}
+              </div>
+            </div>
+          </div>
+          <div className='grid grid-cols-2 border-t sm:grid-cols-4'>
+            <Metric
+              label={t('Wallet balance')}
+              value={formatQuota(user?.quota ?? 0)}
+            />
+            <Metric
+              label={t('Used:')}
+              value={formatQuota(user?.used_quota ?? 0)}
+            />
+            <Metric
+              label={t('Total token consumption')}
+              value={
+                summaryQuery.isLoading ? (
+                  <Skeleton className='h-5 w-16' />
+                ) : (
+                  formatTokens(totalTokens)
+                )
+              }
+            />
+            <Metric
+              label={t('Requests:')}
+              value={formatNumber(user?.request_count ?? 0)}
+            />
+          </div>
         </DialogHeader>
 
-        <Tabs defaultValue='info' className='min-h-0 gap-4'>
-          <TabsList className='w-full justify-start sm:w-fit'>
+        <Tabs defaultValue='info' className='min-h-0 gap-0'>
+          <TabsList variant='line' className='mx-4 mt-2 w-fit sm:mx-6'>
             <TabsTrigger value='info'>{t('Basic Information')}</TabsTrigger>
             <TabsTrigger value='logs'>{t('Usage Logs')}</TabsTrigger>
           </TabsList>
 
-          <ScrollArea className='max-h-[68vh] pr-3'>
-            <TabsContent value='info' className='mt-0'>
-              <div className='grid gap-3 sm:grid-cols-3'>
+          <ScrollArea className='max-h-[calc(100dvh-19rem)]'>
+            <TabsContent value='info' className='p-4 sm:p-6'>
+              <div className='grid overflow-hidden rounded-lg border sm:grid-cols-3'>
                 <InfoItem label={t('ID')} value={user?.id ?? '-'} />
                 <InfoItem label={t('Username')} value={user?.username ?? '-'} />
                 <InfoItem
@@ -142,26 +208,6 @@ export function UserDetailDialog() {
                 />
                 <InfoItem label={t('Group')} value={user?.group || '-'} />
                 <InfoItem
-                  label={t('Wallet balance')}
-                  value={formatQuota(user?.quota ?? 0)}
-                />
-                <InfoItem
-                  label={t('Used:')}
-                  value={formatQuota(user?.used_quota ?? 0)}
-                />
-                <InfoItem
-                  label={t('Total token consumption')}
-                  value={
-                    summaryQuery.isLoading
-                      ? t('Loading...')
-                      : formatTokens(totalTokens)
-                  }
-                />
-                <InfoItem
-                  label={t('Requests:')}
-                  value={formatNumber(user?.request_count ?? 0)}
-                />
-                <InfoItem
                   label={t('Created At')}
                   value={formatTimestampToDate(user?.created_at)}
                 />
@@ -169,15 +215,17 @@ export function UserDetailDialog() {
                   label={t('Last Login')}
                   value={formatTimestampToDate(user?.last_login_at)}
                 />
-                <div className='sm:col-span-3'>
-                  <InfoItem label={t('Remark')} value={user?.remark || '-'} />
-                </div>
+                <InfoItem
+                  className='sm:col-span-3 sm:border-r-0'
+                  label={t('Remark')}
+                  value={user?.remark || '-'}
+                />
               </div>
             </TabsContent>
 
-            <TabsContent value='logs' className='mt-0'>
-              <div className='overflow-hidden rounded-md border'>
-                <Table>
+            <TabsContent value='logs' className='p-4 sm:p-6'>
+              <div className='overflow-x-auto rounded-lg border'>
+                <Table className='min-w-[780px]'>
                   <TableHeader>
                     <TableRow>
                       <TableHead>{t('Time')}</TableHead>
@@ -227,4 +275,9 @@ export function UserDetailDialog() {
       </DialogContent>
     </Dialog>
   )
+}
+
+function getInitials(value?: string) {
+  if (!value) return '-'
+  return value.trim().slice(0, 2).toUpperCase()
 }
