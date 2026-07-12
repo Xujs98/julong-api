@@ -807,6 +807,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 
 | 日期 | 变更 | 更新文件/API/模型 | 验证 |
 | --- | --- | --- | --- |
+| 2026-07-13 | 客服弹窗中的 QQ 联系方式支持点击后通过 `mqqwpa://` 协议唤起本机 QQ 并打开对应聊天；保留独立复制按钮。 | `support-contact-button.tsx` | `bun run typecheck`、目标 lint、`git diff --check` |
 | 2026-07-12 | 将管理员系统设置权限扩展到全部 41 个二级菜单；增加菜单/路由过滤、`/api/option` 按页面过滤及配置键归属校验，并保护自定义 OAuth、性能、日志、支付、渠道亲和与价格同步专用接口。 | `service/authz/resources_system_settings.go`、`controller/system_settings_access.go`、`controller/option.go`、`router/api-router.go`、系统设置 permissions/routes/sidebar/settings API、管理员权限编辑器 | `go test ./...`、`bun run typecheck`、目标 lint、`bun run i18n:sync`、`git diff --check` |
 | 2026-07-12 | 新增概览页联系客服弹窗、客服联系方式后台配置，以及 root 可分配给管理员的客服设置权限；QQ、微信和手机使用对应类型图标。 | `SupportContacts`、`GET/PUT /api/support-contacts`、`system_settings.content.support`、`support-contacts-section.tsx`、`support-contact-button.tsx`、系统设置路由/侧边栏、locale files | `go test ./...`、`bun run typecheck`、目标 lint、`bun run i18n:sync`、`git diff --check` |
 | 2026-07-12 | 生图图片预览增加逐图下载、JSON 数据展示和 JSON 文件下载；桌面/移动端列表展示后端测量的请求总耗时。 | `image-generation-preview-dialog.tsx`、`image-generation-logs-columns.tsx`、`usage-logs-mobile-card.tsx`、locale files | `bun run typecheck`、`bun run i18n:sync`、`git diff --check` |

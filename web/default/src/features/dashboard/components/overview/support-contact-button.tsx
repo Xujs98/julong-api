@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { Headphones, Phone } from 'lucide-react'
+import { ExternalLink, Headphones, Phone } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { FaQq } from 'react-icons/fa6'
@@ -25,6 +25,11 @@ function contactTypeLabel(contact: SupportContact, t: (key: string) => string) {
   if (contact.type === 'qq') return 'QQ'
   if (contact.type === 'wechat') return t('WeChat')
   return t('Phone')
+}
+
+function qqChatUrl(value: string) {
+  const qq = encodeURIComponent(value.trim())
+  return `mqqwpa://im/chat?chat_type=wpa&uin=${qq}&version=1&src_type=web`
 }
 
 export function SupportContactButton() {
@@ -71,17 +76,40 @@ export function SupportContactButton() {
               key={contact.id}
               className='flex min-w-0 items-center gap-3 rounded-lg border px-3 py-2.5'
             >
-              <div className='bg-muted flex size-9 shrink-0 items-center justify-center rounded-md'>
-                <ContactIcon type={contact.type} />
-              </div>
-              <div className='min-w-0 flex-1 text-left'>
-                <div className='text-muted-foreground text-xs'>
-                  {contactTypeLabel(contact, t)}
-                </div>
-                <div className='truncate text-sm font-medium'>
-                  {contact.value}
-                </div>
-              </div>
+              {contact.type === 'qq' ? (
+                <a
+                  href={qqChatUrl(contact.value)}
+                  className='focus-visible:ring-ring flex min-w-0 flex-1 items-center gap-3 rounded-md outline-none focus-visible:ring-2'
+                  aria-label={`${t('Contact Support')}: QQ ${contact.value}`}
+                >
+                  <div className='bg-muted flex size-9 shrink-0 items-center justify-center rounded-md'>
+                    <ContactIcon type={contact.type} />
+                  </div>
+                  <div className='min-w-0 flex-1 text-left'>
+                    <div className='text-muted-foreground text-xs'>
+                      {contactTypeLabel(contact, t)}
+                    </div>
+                    <div className='truncate text-sm font-medium'>
+                      {contact.value}
+                    </div>
+                  </div>
+                  <ExternalLink className='text-muted-foreground size-4 shrink-0' />
+                </a>
+              ) : (
+                <>
+                  <div className='bg-muted flex size-9 shrink-0 items-center justify-center rounded-md'>
+                    <ContactIcon type={contact.type} />
+                  </div>
+                  <div className='min-w-0 flex-1 text-left'>
+                    <div className='text-muted-foreground text-xs'>
+                      {contactTypeLabel(contact, t)}
+                    </div>
+                    <div className='truncate text-sm font-medium'>
+                      {contact.value}
+                    </div>
+                  </div>
+                </>
+              )}
               <CopyButton
                 value={contact.value}
                 variant='ghost'
