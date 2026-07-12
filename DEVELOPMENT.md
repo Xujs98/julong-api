@@ -599,7 +599,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 | `usage-logs` | `usage-logs-table.tsx`、columns/dialogs/filter bars | 普通/绘图/任务使用日志 | `/api/log*`、`/api/mj`、`/api/task` | 完成 |
 | `wallet` | recharge cards、subscription cards、affiliate rewards、redemption hook | 钱包充值、兑换码、订阅 | `/api/user/topup*`、`/api/subscription*`、支付 API | 完成 |
 | `redemption-codes` | `redemptions-table.tsx`、`redemptions-columns.tsx`、mutate/delete dialogs | 管理员/代理兑换码管理 | `/api/redemption*`、`/api/user/agent/topup-link` | 完成 |
-| `users` | `users-table.tsx`、`users-columns.tsx`、`users-mutate-drawer.tsx`、`agent-detail-dialog.tsx`、`user-detail-dialog.tsx` | 后台用户管理、代理详情、用户详情；详情弹窗包含头像身份摘要、关键指标带、紧凑信息网格、响应式数据表和加载骨架 | `/api/user*`、`/api/log` | 完成 |
+| `users` | `users-table.tsx`、`users-columns.tsx`、`users-mutate-drawer.tsx`、`agent-detail-dialog.tsx`、`user-detail-dialog.tsx` | 后台用户管理、代理详情、用户详情；详情弹窗包含头像身份摘要、关键指标带、订阅摘要、紧凑信息网格、响应式数据表和加载骨架 | `/api/user*`、`/api/log`、`/api/subscription/admin/*` | 完成 |
 | `models` | metadata/deployment tables and drawers | 模型元数据和部署管理 | `/api/models*`、`/api/vendors*`、`/api/deployments*` | 完成 |
 | `subscriptions` | subscription table/drawers | 后台订阅计划/用户绑定 | `/api/subscription/admin*` | 完成 |
 | `system-settings` | `auth`、`billing`、`content`、`models`、`request-limits`、`maintenance`、`integrations`、`general` 下的 section registries | 管理员/root 运行时设置 | `/api/option*` 及特定后台 API | 完成/进行中 |
@@ -667,6 +667,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 - 总 token 消耗按 `user_id` 从日志表求和。
 - 代理详情和用户详情采用统一的紧凑弹窗布局：身份摘要置顶，关键额度/用量指标独立展示，基本信息使用单一网格面板。
 - 弹窗限制在可视区域内滚动；移动端详情单列显示，日志、兑换码和所属用户表格支持横向滚动。
+- 用户详情基本信息区显示有效订阅摘要；前端并行读取用户订阅与套餐列表，展示套餐名称、状态、剩余额度、到期时间和有效订阅数量。
 
 ### 兑换码搜索增强
 
@@ -749,6 +750,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 
 | 日期 | 变更 | 更新文件/API/模型 | 验证 |
 | --- | --- | --- | --- |
+| 2026-07-12 | 在后台用户详情基本信息区增加有效订阅摘要。 | `web/default/src/features/users/components/user-detail-dialog.tsx`、`DEVELOPMENT.md`；复用 `GET /api/subscription/admin/users/:id/subscriptions` 和 `GET /api/subscription/admin/plans` | `bun run typecheck`、`bun run i18n:sync`、Rsbuild 热更新编译、`git diff --check` |
 | 2026-07-12 | 优化代理详情和用户详情弹窗 UI，增加身份摘要、关键指标带、加载骨架、紧凑信息网格及移动端响应式表格。 | `web/default/src/features/users/components/agent-detail-dialog.tsx`、`user-detail-dialog.tsx`、`DEVELOPMENT.md` | `bun run typecheck`、Rsbuild 热更新编译、`git diff --check` |
 | 2026-07-11 | 将 `DEVELOPMENT.md` 翻译为中文。 | `DEVELOPMENT.md` | `git diff --check` |
 | 2026-07-11 | 创建 `DEVELOPMENT.md` 作为强制项目开发记录。 | `DEVELOPMENT.md` | 文档变更 |

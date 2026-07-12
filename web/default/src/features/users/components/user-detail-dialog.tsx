@@ -22,6 +22,11 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import {
+  getAdminPlans,
+  getUserSubscriptions,
+} from '@/features/subscriptions/api'
+import type { UserSubscription } from '@/features/subscriptions/types'
 import { getAllLogs } from '@/features/usage-logs/api'
 import type { UsageLog } from '@/features/usage-logs/data/schema'
 import {
@@ -113,6 +118,32 @@ export function UserDetailDialog() {
         username: user!.username,
       })
       return result.success ? (result.data?.items as UsageLog[]) || [] : []
+    },
+  })
+
+  const subscriptionsQuery = useQuery({
+    queryKey: ['admin-user-detail-subscriptions', user?.id],
+    enabled: isOpen && Boolean(user?.id),
+    queryFn: async () => {
+      const [subscriptionsResult, plansResult] = await Promise.all([
+        getUserSubscriptions(user!.id),
+        getAdminPlans(),
+      ])
+      const now = Date.now() / 1000
+      const subscriptions = (subscriptionsResult.data || [])
+        .map((record) => record.subscription)
+        .filter(
+          (subscription) =>
+            subscription.status === 'active' && subscription.end_time > now
+        )
+      const planTitles = new Map(
+        (plansResult.data || []).map((record) => [
+          record.plan.id,
+          record.plan.title,
+        ])
+      )
+
+      return { subscriptions, planTitles }
     },
   })
 
@@ -216,6 +247,18 @@ export function UserDetailDialog() {
                   value={formatTimestampToDate(user?.last_login_at)}
                 />
                 <InfoItem
+                  label={t('Subscriptions')}
+                  value={
+                    <SubscriptionInfo
+                      subscriptions={
+                        subscriptionsQuery.data?.subscriptions || []
+                      }
+                      planTitles={subscriptionsQuery.data?.planTitles}
+                      isLoading={subscriptionsQuery.isLoading}
+                    />
+                  }
+                />
+                <InfoItem
                   className='sm:col-span-3 sm:border-r-0'
                   label={t('Remark')}
                   value={user?.remark || '-'}
@@ -280,4 +323,63 @@ export function UserDetailDialog() {
 function getInitials(value?: string) {
   if (!value) return '-'
   return value.trim().slice(0, 2).toUpperCase()
+}
+
+function SubscriptionInfo(props: {
+  subscriptions: UserSubscription[]
+  planTitles?: Map<number, string>
+  isLoading: boolean
+}) {
+  const { t } = useTranslation()
+
+  if (props.isLoading) {
+    return <Skeleton className='h-9 w-full max-w-44' />
+  }
+
+  if (props.subscriptions.length === 0) {
+    return (
+      <span className='text-muted-foreground font-normal'>
+        {t('No subscription records')}
+      </span>
+    )
+  }
+
+  const subscription = props.subscriptions[0]
+  const remaining = Math.max(
+    0,
+    subscription.amount_total - subscription.amount_used
+  )
+
+  return (
+    <div className='flex min-w-0 flex-col gap-1.5'>
+      <div className='flex min-w-0 items-center gap-2'>
+        <span className='truncate'>
+          {props.planTitles?.get(subscription.plan_id) ||
+            `#${subscription.plan_id}`}
+        </span>
+        <StatusBadge
+          label={t('Active')}
+          variant='success'
+          copyable={false}
+          type='text'
+        />
+      </div>
+      <div className='text-muted-foreground flex flex-wrap gap-x-3 gap-y-1 text-xs font-normal'>
+        <span>
+          {t('Remaining')}:{' '}
+          {subscription.amount_total > 0
+            ? formatQuota(remaining)
+            : t('Unlimited')}
+        </span>
+        <span>
+          {t('Expires')}: {formatTimestampToDate(subscription.end_time)}
+        </span>
+        {props.subscriptions.length > 1 && (
+          <span>
+            {t('Subscriptions')}: {props.subscriptions.length}
+          </span>
+        )}
+      </div>
+    </div>
+  )
 }
