@@ -1,7 +1,9 @@
 import { useQuery } from '@tanstack/react-query'
-import { Headphones, MessagesSquare, Phone } from 'lucide-react'
+import { Headphones, Phone } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { FaQq } from 'react-icons/fa6'
+import { SiWechat } from 'react-icons/si'
 
 import { CopyButton } from '@/components/copy-button'
 import { Dialog } from '@/components/dialog'
@@ -13,8 +15,9 @@ import {
 import { useSystemConfig } from '@/hooks/use-system-config'
 
 function ContactIcon({ type }: { type: SupportContact['type'] }) {
-  if (type === 'phone') return <Phone className='size-4' />
-  return <MessagesSquare className='size-4' />
+  if (type === 'qq') return <FaQq className='size-4 text-[#12b7f5]' />
+  if (type === 'wechat') return <SiWechat className='size-4 text-[#07c160]' />
+  return <Phone className='size-4 text-[#16a34a]' />
 }
 
 function contactTypeLabel(contact: SupportContact, t: (key: string) => string) {

@@ -804,7 +804,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 
 | 日期 | 变更 | 更新文件/API/模型 | 验证 |
 | --- | --- | --- | --- |
-| 2026-07-12 | 新增概览页联系客服弹窗、客服联系方式后台配置，以及 root 可分配给管理员的客服设置权限。 | `SupportContacts`、`GET/PUT /api/support-contacts`、`system_settings.support_contacts_write`、`support-contacts-section.tsx`、`support-contact-button.tsx`、系统设置路由/侧边栏、locale files | `go test ./...`、`bun run typecheck`、目标 lint、`bun run i18n:sync`、`git diff --check` |
+| 2026-07-12 | 新增概览页联系客服弹窗、客服联系方式后台配置，以及 root 可分配给管理员的客服设置权限；QQ、微信和手机使用对应类型图标。 | `SupportContacts`、`GET/PUT /api/support-contacts`、`system_settings.support_contacts_write`、`support-contacts-section.tsx`、`support-contact-button.tsx`、系统设置路由/侧边栏、locale files | `go test ./...`、`bun run typecheck`、目标 lint、`bun run i18n:sync`、`git diff --check` |
 | 2026-07-12 | 生图图片预览增加逐图下载、JSON 数据展示和 JSON 文件下载；桌面/移动端列表展示后端测量的请求总耗时。 | `image-generation-preview-dialog.tsx`、`image-generation-logs-columns.tsx`、`usage-logs-mobile-card.tsx`、locale files | `bun run typecheck`、`bun run i18n:sync`、`git diff --check` |
 | 2026-07-12 | 修复生图日志开关假开启：日志设置保存时明确提交全部字段；增加聊天/Responses `image_generation_call.result` 捕获、去重、文件落盘和日志写入。 | `log-settings-section.tsx`、`ResponsesOutput.result`、`service/image_generation_log.go`、OpenAI Responses/Chat 转换处理器 | `go test ./service ./relay/...`、`bun run typecheck`、`git diff --check` |
 | 2026-07-12 | 优化钱包页响应式布局与套餐卡片，展示套餐及当前订阅的生图日志查看范围。 | `wallet/index.tsx`、`wallet-stats-card.tsx`、`subscription-plans-card.tsx`、locale files | `bun run typecheck`、`bun run i18n:sync`、`git diff --check` |
