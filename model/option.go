@@ -50,6 +50,7 @@ func InitOptionMap() {
 	common.OptionMap["LogConsumeEnabled"] = strconv.FormatBool(common.LogConsumeEnabled)
 	common.OptionMap["ImageGenerationLogEnabled"] = strconv.FormatBool(common.ImageGenerationLogEnabled)
 	common.OptionMap["ImageGenerationLogRetentionDays"] = strconv.Itoa(common.ImageGenerationLogRetentionDays)
+	common.OptionMap["SupportContacts"] = common.SupportContacts
 	common.OptionMap["DisplayInCurrencyEnabled"] = strconv.FormatBool(common.DisplayInCurrencyEnabled)
 	common.OptionMap["DisplayTokenStatEnabled"] = strconv.FormatBool(common.DisplayTokenStatEnabled)
 	common.OptionMap["DrawingEnabled"] = strconv.FormatBool(common.DrawingEnabled)
@@ -495,6 +496,8 @@ func updateOptionMap(key string, value string) (err error) {
 		common.SystemName = value
 	case "Logo":
 		common.Logo = value
+	case "SupportContacts":
+		common.SupportContacts = value
 	case "WeChatServerAddress":
 		common.WeChatServerAddress = value
 	case "WeChatServerToken":

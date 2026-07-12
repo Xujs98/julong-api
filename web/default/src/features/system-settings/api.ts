@@ -31,6 +31,29 @@ import type {
   UpstreamRatiosResponse,
 } from './types'
 
+export type SupportContactType = 'qq' | 'wechat' | 'phone'
+export interface SupportContact {
+  id: string
+  type: SupportContactType
+  label: string
+  value: string
+}
+
+export async function getSupportContacts() {
+  const res = await api.get<{ success: boolean; data: SupportContact[] }>(
+    '/api/support-contacts'
+  )
+  return res.data
+}
+
+export async function updateSupportContacts(contacts: SupportContact[]) {
+  const res = await api.put<{ success: boolean; data: SupportContact[] }>(
+    '/api/support-contacts',
+    { contacts }
+  )
+  return res.data
+}
+
 export async function getSystemOptions() {
   const res = await api.get<SystemOptionsResponse>('/api/option/')
   return res.data

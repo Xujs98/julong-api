@@ -19,6 +19,11 @@ For commercial licensing, please contact support@quantumnous.com
 import { createFileRoute, redirect } from '@tanstack/react-router'
 
 import { SystemSettings } from '@/features/system-settings'
+import {
+  ADMIN_PERMISSION_ACTIONS,
+  ADMIN_PERMISSION_RESOURCES,
+  hasPermission,
+} from '@/lib/admin-permissions'
 import { ROLE } from '@/lib/roles'
 import { useAuthStore } from '@/stores/auth-store'
 
@@ -26,7 +31,12 @@ export const Route = createFileRoute('/_authenticated/system-settings')({
   beforeLoad: () => {
     const { auth } = useAuthStore.getState()
 
-    if (auth.user?.role !== ROLE.SUPER_ADMIN) {
+    const canManageSupport = hasPermission(
+      auth.user,
+      ADMIN_PERMISSION_RESOURCES.SYSTEM_SETTINGS,
+      ADMIN_PERMISSION_ACTIONS.SUPPORT_CONTACTS_WRITE
+    )
+    if (auth.user?.role !== ROLE.SUPER_ADMIN && !canManageSupport) {
       throw redirect({
         to: '/403',
       })

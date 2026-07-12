@@ -7,6 +7,7 @@ export type AdminCapabilities = AdminPermissionMatrix
 
 export const ADMIN_PERMISSION_RESOURCES = {
   CHANNEL: 'channel',
+  SYSTEM_SETTINGS: 'system_settings',
 } as const
 
 export const ADMIN_PERMISSION_ACTIONS = {
@@ -15,6 +16,7 @@ export const ADMIN_PERMISSION_ACTIONS = {
   WRITE: 'write',
   SENSITIVE_WRITE: 'sensitive_write',
   SECRET_VIEW: 'secret_view',
+  SUPPORT_CONTACTS_WRITE: 'support_contacts_write',
 } as const
 
 // The role whose baseline grants are used as defaults in the permission editor.

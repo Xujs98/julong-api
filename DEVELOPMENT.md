@@ -28,6 +28,7 @@
 | 兑换码搜索 | 已实现 | 后台兑换码支持按兑换码 key、生成者用户名/显示名、名称、ID、状态搜索。 |
 | 签到额度预览 | 已实现 | 计费与支付中的签到奖励输入框显示格式化额度预览。 |
 | 生图日志 | 已实现 | 成功的 `/v1/images/generations` 请求可按 root 开关记录提示词和图片，并在任务日志中查看；默认关闭。 |
+| 客服联系 | 已实现 | 概览页展示联系客服弹窗；root 可通过管理员权限授权指定管理员维护多条 QQ、微信和手机联系方式。 |
 | 文档纪律 | 新增 | 以后每次代码改动都必须同步维护本文档。 |
 
 ## 仓库结构
@@ -162,6 +163,7 @@ docker compose up -d
 | `ImageGenerationLogEnabled` | `common/constants.go`、`model/option.go`、`log-settings-section.tsx` | 是否记录成功同步生图请求的提示词和图片 | Root 配置，默认 `false`；关闭时不捕获或保存图片。 |
 | `ImageGenerationLogRetentionDays` | 同上、`service/image_generation_log.go` | 生图日志及本地图片自动保留天数 | 默认 `30`，范围 `0-3650`；`0` 表示永久保留，每小时至多触发一次过期清理。 |
 | `IMAGE_LOG_STORAGE_DIR` | `service/image_generation_log.go` | 覆盖生图图片文件目录 | 默认 `image-generation-logs`；Docker `WORKDIR /data` 下位于持久化卷 `/data/image-generation-logs`。 |
+| `SupportContacts` | `common/constants.go`、`model/option.go` | 客服联系方式 JSON 数组 | 每项包含 `type`（qq/wechat/phone）、`label`、`value`；最多 30 条。 |
 
 ## 架构
 
@@ -432,6 +434,13 @@ curl 'http://localhost:3000/api/image-generation-logs?p=1&page_size=20&model=gpt
   -H 'Cookie: <session-cookie>' \
   -H 'New-Api-User: 1'
 ```
+
+### 客服联系方式 API
+
+| 方法 | 路径 | 函数 | 用途 | 请求/响应 | 权限 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- |
+| GET | `/api/support-contacts` | `controller.GetSupportContacts` | 获取概览页客服联系方式 | 响应 `SupportContact[]` | 登录用户 | 完成 |
+| PUT | `/api/support-contacts` | `controller.UpdateSupportContacts` | 保存多条 QQ/微信/手机联系方式 | 请求 `{contacts:[{type,label,value}]}`；非法类型、空值、超长或超过 30 条时报错 | root 或拥有 `system_settings.support_contacts_write` 的管理员 | 完成 |
 
 ### 后台设置与运维 API
 
@@ -795,6 +804,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 
 | 日期 | 变更 | 更新文件/API/模型 | 验证 |
 | --- | --- | --- | --- |
+| 2026-07-12 | 新增概览页联系客服弹窗、客服联系方式后台配置，以及 root 可分配给管理员的客服设置权限。 | `SupportContacts`、`GET/PUT /api/support-contacts`、`system_settings.support_contacts_write`、`support-contacts-section.tsx`、`support-contact-button.tsx`、系统设置路由/侧边栏、locale files | `go test ./...`、`bun run typecheck`、目标 lint、`bun run i18n:sync`、`git diff --check` |
 | 2026-07-12 | 生图图片预览增加逐图下载、JSON 数据展示和 JSON 文件下载；桌面/移动端列表展示后端测量的请求总耗时。 | `image-generation-preview-dialog.tsx`、`image-generation-logs-columns.tsx`、`usage-logs-mobile-card.tsx`、locale files | `bun run typecheck`、`bun run i18n:sync`、`git diff --check` |
 | 2026-07-12 | 修复生图日志开关假开启：日志设置保存时明确提交全部字段；增加聊天/Responses `image_generation_call.result` 捕获、去重、文件落盘和日志写入。 | `log-settings-section.tsx`、`ResponsesOutput.result`、`service/image_generation_log.go`、OpenAI Responses/Chat 转换处理器 | `go test ./service ./relay/...`、`bun run typecheck`、`git diff --check` |
 | 2026-07-12 | 优化钱包页响应式布局与套餐卡片，展示套餐及当前订阅的生图日志查看范围。 | `wallet/index.tsx`、`wallet-stats-card.tsx`、`subscription-plans-card.tsx`、locale files | `bun run typecheck`、`bun run i18n:sync`、`git diff --check` |

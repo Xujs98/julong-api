@@ -38,6 +38,11 @@ import {
 import { useTranslation } from 'react-i18next'
 
 import type { SidebarData } from '@/components/layout/types'
+import {
+  ADMIN_PERMISSION_ACTIONS,
+  ADMIN_PERMISSION_RESOURCES,
+  hasPermission,
+} from '@/lib/admin-permissions'
 import { ROLE } from '@/lib/roles'
 import { useAuthStore } from '@/stores/auth-store'
 
@@ -50,6 +55,12 @@ import { useAuthStore } from '@/stores/auth-store'
 export function useSidebarData(): SidebarData {
   const { t } = useTranslation()
   const isAgent = useAuthStore((s) => s.auth.user?.is_agent === true)
+  const user = useAuthStore((s) => s.auth.user)
+  const canManageSupport = hasPermission(
+    user,
+    ADMIN_PERMISSION_RESOURCES.SYSTEM_SETTINGS,
+    ADMIN_PERMISSION_ACTIONS.SUPPORT_CONTACTS_WRITE
+  )
 
   return {
     navGroups: [
@@ -176,12 +187,19 @@ export function useSidebarData(): SidebarData {
             icon: ServerCog,
             requiredRole: ROLE.SUPER_ADMIN,
           },
-          {
-            title: t('System Settings'),
-            url: '/system-settings/site',
-            activeUrls: ['/system-settings'],
-            icon: Settings,
-          },
+          ...(user?.role === ROLE.SUPER_ADMIN || canManageSupport
+            ? [
+                {
+                  title: t('System Settings'),
+                  url:
+                    user?.role === ROLE.SUPER_ADMIN
+                      ? '/system-settings/site'
+                      : '/system-settings/content/support',
+                  activeUrls: ['/system-settings'],
+                  icon: Settings,
+                },
+              ]
+            : []),
         ],
       },
     ],

@@ -3,6 +3,7 @@ package router
 import (
 	"github.com/QuantumNous/new-api/controller"
 	"github.com/QuantumNous/new-api/middleware"
+	"github.com/QuantumNous/new-api/service/authz"
 
 	// Import oauth package to register providers via init()
 	_ "github.com/QuantumNous/new-api/oauth"
@@ -201,6 +202,12 @@ func SetApiRouter(router *gin.Engine) {
 			imageGenerationLogsRoute.GET("", controller.GetImageGenerationLogs)
 			imageGenerationLogsRoute.GET("/", controller.GetImageGenerationLogs)
 			imageGenerationLogsRoute.GET("/:id/images/:index", controller.GetImageGenerationLogImage)
+		}
+		supportContactsRoute := apiRouter.Group("/support-contacts")
+		supportContactsRoute.Use(middleware.UserAuth())
+		{
+			supportContactsRoute.GET("", controller.GetSupportContacts)
+			supportContactsRoute.PUT("", middleware.AdminAuth(), middleware.RequirePermission(authz.SystemSettingsSupportContactsWrite), controller.UpdateSupportContacts)
 		}
 		optionRoute := apiRouter.Group("/option")
 		optionRoute.Use(middleware.RootAuth())

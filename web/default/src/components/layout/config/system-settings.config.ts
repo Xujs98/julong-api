@@ -34,6 +34,8 @@ import { getModelsSectionNavItems } from '@/features/system-settings/models/sect
 import { getOperationsSectionNavItems } from '@/features/system-settings/operations/section-registry.tsx'
 import { getSecuritySectionNavItems } from '@/features/system-settings/security/section-registry.tsx'
 import { getSiteSectionNavItems } from '@/features/system-settings/site/section-registry.tsx'
+import { ROLE } from '@/lib/roles'
+import { useAuthStore } from '@/stores/auth-store'
 
 import type { NavGroup, SidebarView } from '../types'
 
@@ -45,6 +47,24 @@ import type { NavGroup, SidebarView } from '../types'
  * scopes the items as "administration" actions.
  */
 function getSystemSettingsNavGroups(t: TFunction): NavGroup[] {
+  const user = useAuthStore.getState().auth.user
+  if (user?.role !== ROLE.SUPER_ADMIN) {
+    return [
+      {
+        id: 'system-administration',
+        title: t('System Administration'),
+        items: [
+          {
+            title: t('Console Content'),
+            icon: Layout,
+            items: getContentSectionNavItems(t).filter((item) =>
+              item.url?.includes('/support')
+            ),
+          },
+        ],
+      },
+    ]
+  }
   return [
     {
       id: 'system-administration',

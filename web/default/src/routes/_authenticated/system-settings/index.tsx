@@ -18,8 +18,18 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { createFileRoute, redirect } from '@tanstack/react-router'
 
+import { ROLE } from '@/lib/roles'
+import { useAuthStore } from '@/stores/auth-store'
+
 export const Route = createFileRoute('/_authenticated/system-settings/')({
   beforeLoad: () => {
+    const user = useAuthStore.getState().auth.user
+    if (user?.role !== ROLE.SUPER_ADMIN) {
+      throw redirect({
+        to: '/system-settings/content/$section',
+        params: { section: 'support' },
+      })
+    }
     throw redirect({
       to: '/system-settings/site',
     })

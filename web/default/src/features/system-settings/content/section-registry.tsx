@@ -24,6 +24,7 @@ import { ChatSettingsSection } from './chat-settings-section'
 import { DashboardSection } from './dashboard-section'
 import { DrawingSettingsSection } from './drawing-settings-section'
 import { FAQSection } from './faq-section'
+import { SupportContactsSection } from './support-contacts-section'
 import { UptimeKumaSection } from './uptime-kuma-section'
 
 /**
@@ -38,6 +39,11 @@ function validateDataExportDefaultTime(value: string): 'week' | 'hour' | 'day' {
 }
 
 const CONTENT_SECTIONS = [
+  {
+    id: 'support',
+    titleKey: 'Customer Support',
+    build: () => <SupportContactsSection />,
+  },
   {
     id: 'dashboard',
     titleKey: 'Data Dashboard',
