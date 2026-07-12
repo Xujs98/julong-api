@@ -98,6 +98,10 @@ const OPERATIONS_SECTIONS = [
     build: (settings: OperationsSettings) => (
       <LogSettingsSection
         defaultEnabled={Boolean(settings.LogConsumeEnabled)}
+        defaultImageLogEnabled={Boolean(settings.ImageGenerationLogEnabled)}
+        defaultImageLogRetentionDays={Number(
+          settings.ImageGenerationLogRetentionDays ?? 30
+        )}
       />
     ),
   },

@@ -317,6 +317,34 @@ function DrawingLogsCard<TData>({
   )
 }
 
+function ImageGenerationLogsCard<TData>({
+  cells,
+}: {
+  cells: Map<string, Cell<TData, unknown>>
+}) {
+  const { t } = useTranslation()
+
+  return (
+    <div className='flex flex-col gap-2.5'>
+      <div className='flex min-w-0 items-start justify-between gap-3'>
+        <CompactCell cell={cells.get('model_name')} className='flex-1' />
+        <CompactCell cell={cells.get('image_count')} className='shrink-0' />
+      </div>
+      <div className='grid grid-cols-2 gap-1.5'>
+        <SummaryField label={t('Time')} cell={cells.get('created_at')} />
+        <SummaryField label={t('User')} cell={cells.get('username')} />
+        <SummaryField
+          label={t('Prompt')}
+          cell={cells.get('prompt')}
+          className='col-span-2'
+        />
+        <SummaryField label={t('Parameters')} cell={cells.get('parameters')} />
+        <SummaryField label={t('Cost')} cell={cells.get('quota')} />
+      </div>
+    </div>
+  )
+}
+
 export function UsageLogsMobileList<TData>({
   table,
   isLoading = false,
@@ -376,6 +404,9 @@ export function UsageLogsMobileList<TData>({
             {logCategory === 'common' && <CommonLogsCard cells={cells} />}
             {logCategory === 'task' && <TaskLogsCard cells={cells} />}
             {logCategory === 'drawing' && <DrawingLogsCard cells={cells} />}
+            {logCategory === 'image' && (
+              <ImageGenerationLogsCard cells={cells} />
+            )}
           </div>
         )
       })}

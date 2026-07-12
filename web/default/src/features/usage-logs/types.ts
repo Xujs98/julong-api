@@ -28,7 +28,7 @@ import type { UsageLog } from './data/schema'
 /**
  * Log category for different log types
  */
-export type LogCategory = 'common' | 'drawing' | 'task'
+export type LogCategory = 'common' | 'drawing' | 'image' | 'task'
 
 // ============================================================================
 // Filter Types
@@ -69,10 +69,18 @@ export interface TaskLogFilters extends CommonFilters {
   taskId?: string
 }
 
+export interface ImageLogFilters extends CommonFilters {
+  prompt?: string
+}
+
 /**
  * Union type for all log filters
  */
-export type LogFilters = CommonLogFilters | DrawingLogFilters | TaskLogFilters
+export type LogFilters =
+  | CommonLogFilters
+  | DrawingLogFilters
+  | ImageLogFilters
+  | TaskLogFilters
 
 // ============================================================================
 // Common Logs Additional Types
@@ -285,6 +293,26 @@ export interface TaskLog {
   updated_at?: number
 }
 
+export interface ImageGenerationLog {
+  id: number
+  user_id: number
+  username: string
+  token_id: number
+  token_name: string
+  channel_id: number
+  channel_name: string
+  model_name: string
+  prompt: string
+  size: string
+  quality: string
+  image_count: number
+  image_urls: string[]
+  quota: number
+  request_id: string
+  created_at: number
+  use_time: number
+}
+
 // ============================================================================
 // Common Log Types
 // ============================================================================
@@ -308,7 +336,7 @@ export interface GetLogsResponse {
   success: boolean
   message?: string
   data?: {
-    items: UsageLog[] | MidjourneyLog[] | TaskLog[]
+    items: UsageLog[] | MidjourneyLog[] | ImageGenerationLog[] | TaskLog[]
     total: number
     page: number
     page_size: number
@@ -356,6 +384,16 @@ export interface GetTaskLogsParams {
   page_size?: number
   channel_id?: string
   task_id?: string
+  start_timestamp?: number
+  end_timestamp?: number
+}
+
+export interface GetImageGenerationLogsParams {
+  p?: number
+  page_size?: number
+  model?: string
+  prompt?: string
+  channel_id?: string
   start_timestamp?: number
   end_timestamp?: number
 }

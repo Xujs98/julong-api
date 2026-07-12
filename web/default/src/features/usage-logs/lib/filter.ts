@@ -25,6 +25,7 @@ import type {
   LogFilters,
   CommonLogFilters,
   DrawingLogFilters,
+  ImageLogFilters,
   TaskLogFilters,
 } from '../types'
 
@@ -65,6 +66,13 @@ export function buildSearchParams(
       return {
         ...baseParams,
         ...(drawingFilters.mjId && { filter: drawingFilters.mjId }),
+      }
+    }
+    case 'image': {
+      const imageFilters = filters as ImageLogFilters
+      return {
+        ...baseParams,
+        ...(imageFilters.prompt && { filter: imageFilters.prompt }),
       }
     }
     case 'task': {

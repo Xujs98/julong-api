@@ -120,6 +120,11 @@ func zhipu4vImageHandler(c *gin.Context, resp *http.Response, info *relaycommon.
 	if err != nil {
 		return nil, types.NewError(err, types.ErrorCodeBadResponseBody)
 	}
+	captured := make([]dto.ImageData, 0, len(payload.Data))
+	for _, image := range payload.Data {
+		captured = append(captured, dto.ImageData{B64Json: image.B64Json})
+	}
+	service.CaptureImageGenerationResult(c, captured)
 
 	service.IOCopyBytesGracefully(c, resp, jsonResp)
 

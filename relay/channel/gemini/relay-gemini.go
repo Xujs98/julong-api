@@ -1651,6 +1651,7 @@ func GeminiImageHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.
 			B64Json: prediction.BytesBase64Encoded,
 		})
 	}
+	service.CaptureImageGenerationResult(c, openAIResponse.Data)
 
 	jsonResponse, jsonErr := json.Marshal(openAIResponse)
 	if jsonErr != nil {

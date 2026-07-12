@@ -80,12 +80,16 @@ import type { LogCleanupTask } from '../types'
 
 const logSettingsSchema = z.object({
   LogConsumeEnabled: z.boolean(),
+  ImageGenerationLogEnabled: z.boolean(),
+  ImageGenerationLogRetentionDays: z.number().int().min(0).max(3650),
 })
 
 type LogSettingsFormValues = z.infer<typeof logSettingsSchema>
 
 type LogSettingsSectionProps = {
   defaultEnabled: boolean
+  defaultImageLogEnabled: boolean
+  defaultImageLogRetentionDays: number
 }
 
 type ServerLogInfo = {
@@ -141,6 +145,8 @@ function isActiveLogCleanupTask(task: LogCleanupTask | null) {
 
 export function LogSettingsSection({
   defaultEnabled,
+  defaultImageLogEnabled,
+  defaultImageLogRetentionDays,
 }: LogSettingsSectionProps) {
   const { t } = useTranslation()
   const updateOption = useUpdateOption()
@@ -148,6 +154,8 @@ export function LogSettingsSection({
     resolver: zodResolver(logSettingsSchema),
     defaultValues: {
       LogConsumeEnabled: defaultEnabled,
+      ImageGenerationLogEnabled: defaultImageLogEnabled,
+      ImageGenerationLogRetentionDays: defaultImageLogRetentionDays,
     },
   })
 
@@ -174,8 +182,17 @@ export function LogSettingsSection({
   }, [])
 
   useEffect(() => {
-    form.reset({ LogConsumeEnabled: defaultEnabled })
-  }, [defaultEnabled, form])
+    form.reset({
+      LogConsumeEnabled: defaultEnabled,
+      ImageGenerationLogEnabled: defaultImageLogEnabled,
+      ImageGenerationLogRetentionDays: defaultImageLogRetentionDays,
+    })
+  }, [
+    defaultEnabled,
+    defaultImageLogEnabled,
+    defaultImageLogRetentionDays,
+    form,
+  ])
 
   useEffect(() => {
     fetchServerLogInfo()
@@ -257,11 +274,25 @@ export function LogSettingsSection({
   }, [logCleanupActive, logCleanupTaskId, t])
 
   const onSubmit = async (values: LogSettingsFormValues) => {
-    if (values.LogConsumeEnabled === defaultEnabled) return
-    await updateOption.mutateAsync({
-      key: 'LogConsumeEnabled',
-      value: values.LogConsumeEnabled,
-    })
+    const updates = [
+      values.LogConsumeEnabled !== defaultEnabled && {
+        key: 'LogConsumeEnabled',
+        value: values.LogConsumeEnabled,
+      },
+      values.ImageGenerationLogEnabled !== defaultImageLogEnabled && {
+        key: 'ImageGenerationLogEnabled',
+        value: values.ImageGenerationLogEnabled,
+      },
+      values.ImageGenerationLogRetentionDays !==
+        defaultImageLogRetentionDays && {
+        key: 'ImageGenerationLogRetentionDays',
+        value: values.ImageGenerationLogRetentionDays,
+      },
+    ].filter(Boolean) as Array<{ key: string; value: boolean | number }>
+
+    for (const update of updates) {
+      await updateOption.mutateAsync(update)
+    }
   }
 
   const handleRequestCleanLogs = () => {
@@ -366,6 +397,60 @@ export function LogSettingsSection({
               </SettingsSwitchItem>
             )}
           />
+
+          <SettingsControlGroup className='flex flex-col gap-4'>
+            <FormField
+              control={form.control}
+              name='ImageGenerationLogEnabled'
+              render={({ field }) => (
+                <SettingsSwitchItem>
+                  <SettingsSwitchContent>
+                    <FormLabel>{t('Record image generation logs')}</FormLabel>
+                    <FormDescription>
+                      {t(
+                        'Store prompts and generated images for successful image generation requests. Images use local disk space.'
+                      )}
+                    </FormDescription>
+                  </SettingsSwitchContent>
+                  <FormControl>
+                    <Switch
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </SettingsSwitchItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name='ImageGenerationLogRetentionDays'
+              render={({ field }) => (
+                <div className='flex flex-col gap-2'>
+                  <FormLabel>{t('Image log retention days')}</FormLabel>
+                  <FormControl>
+                    <Input
+                      type='number'
+                      min={0}
+                      max={3650}
+                      className='max-w-40'
+                      value={field.value}
+                      onBlur={field.onBlur}
+                      name={field.name}
+                      ref={field.ref}
+                      onChange={(event) =>
+                        field.onChange(Number(event.target.value))
+                      }
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    {t('Set to 0 to keep image generation logs indefinitely.')}
+                  </FormDescription>
+                  <FormMessage />
+                </div>
+              )}
+            />
+          </SettingsControlGroup>
 
           <SettingsControlGroup className='space-y-3'>
             <div>

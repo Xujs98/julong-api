@@ -336,6 +336,7 @@ export const TASK_PLATFORM_MAPPINGS: Record<string, StatusMapping> = {
 export const LOG_CATEGORY_LABELS: Record<LogCategory, string> = {
   common: 'Common',
   drawing: 'Drawing',
+  image: 'Image Generation',
   task: 'Task',
 }
 

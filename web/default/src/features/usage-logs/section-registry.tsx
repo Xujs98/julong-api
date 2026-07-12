@@ -33,6 +33,11 @@ const USAGE_LOGS_SECTIONS = [
     build: () => null, // Content is rendered directly in the page component
   },
   {
+    id: 'image',
+    titleKey: 'Image Generation Logs',
+    build: () => null,
+  },
+  {
     id: 'task',
     titleKey: 'Task Logs',
     build: () => null, // Content is rendered directly in the page component

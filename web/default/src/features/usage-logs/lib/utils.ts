@@ -26,6 +26,7 @@ import {
   getUserMidjourneyLogs,
   getAllTaskLogs,
   getUserTaskLogs,
+  getImageGenerationLogs,
 } from '../api'
 import {
   LOG_TYPES,
@@ -38,6 +39,7 @@ import type {
   FetchLogsConfig,
   GetMidjourneyLogsParams,
   GetTaskLogsParams,
+  GetImageGenerationLogsParams,
 } from '../types'
 
 // ============================================================================
@@ -295,6 +297,13 @@ export async function fetchLogsByCategory(
     return isAdmin
       ? await getAllMidjourneyLogs(paramsWithFilter as GetMidjourneyLogsParams)
       : await getUserMidjourneyLogs(paramsWithFilter as GetMidjourneyLogsParams)
+  }
+
+  if (logCategory === 'image') {
+    return await getImageGenerationLogs({
+      ...baseParams,
+      prompt: searchParams.filter as string | undefined,
+    } as GetImageGenerationLogsParams)
   }
 
   // task logs

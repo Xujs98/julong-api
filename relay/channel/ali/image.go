@@ -333,6 +333,7 @@ func aliImageHandler(a *Adaptor, c *gin.Context, resp *http.Response, info *rela
 	}
 
 	imageResponses := responseAli2OpenAIImage(c, aliResponse, originRespBody, info, responseFormat)
+	service.CaptureImageGenerationResult(c, imageResponses.Data)
 	if aliResponse.Usage.ImageCount != 0 {
 		info.PriceData.AddOtherRatio("n", float64(aliResponse.Usage.ImageCount))
 	} else if len(imageResponses.Data) != 0 {

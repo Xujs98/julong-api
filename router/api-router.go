@@ -195,6 +195,13 @@ func SetApiRouter(router *gin.Engine) {
 			errorReportsRoute.GET("/", controller.GetErrorReports)
 			errorReportsRoute.GET("/:id", controller.GetErrorReport)
 		}
+		imageGenerationLogsRoute := apiRouter.Group("/image-generation-logs")
+		imageGenerationLogsRoute.Use(middleware.UserAuth())
+		{
+			imageGenerationLogsRoute.GET("", controller.GetImageGenerationLogs)
+			imageGenerationLogsRoute.GET("/", controller.GetImageGenerationLogs)
+			imageGenerationLogsRoute.GET("/:id/images/:index", controller.GetImageGenerationLogImage)
+		}
 		optionRoute := apiRouter.Group("/option")
 		optionRoute.Use(middleware.RootAuth())
 		{

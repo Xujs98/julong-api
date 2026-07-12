@@ -37,7 +37,7 @@ import {
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
-import { type SidebarData } from '@/components/layout/types'
+import type { SidebarData } from '@/components/layout/types'
 import { ROLE } from '@/lib/roles'
 import { useAuthStore } from '@/stores/auth-store'
 
@@ -96,8 +96,12 @@ export function useSidebarData(): SidebarData {
           {
             title: t('Task Logs'),
             url: '/usage-logs/task',
-            activeUrls: ['/usage-logs/drawing'],
-            configUrls: ['/usage-logs/drawing', '/usage-logs/task'],
+            activeUrls: ['/usage-logs/drawing', '/usage-logs/image'],
+            configUrls: [
+              '/usage-logs/drawing',
+              '/usage-logs/image',
+              '/usage-logs/task',
+            ],
             icon: ListTodo,
           },
         ],

@@ -26,6 +26,7 @@ import type {
   GetLogStatsResponse,
   GetMidjourneyLogsParams,
   GetTaskLogsParams,
+  GetImageGenerationLogsParams,
   UserInfo,
 } from './types'
 
@@ -110,3 +111,12 @@ export const getAllTaskLogs = (params: GetTaskLogsParams) =>
 
 export const getUserTaskLogs = (params: GetTaskLogsParams) =>
   fetchLogs('/api/task', params, false)
+
+export const getImageGenerationLogs = (
+  params: GetImageGenerationLogsParams
+) => {
+  const queryParams = buildQueryParams({ p: 1, page_size: 20, ...params })
+  return api
+    .get(`/api/image-generation-logs?${queryParams}`)
+    .then((res) => res.data as GetLogsResponse)
+}

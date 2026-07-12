@@ -38,6 +38,12 @@ func OpenaiImageHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.
 	if oaiError := usageResp.GetOpenAIError(); oaiError != nil && oaiError.Type != "" {
 		return nil, types.WithOpenAIError(*oaiError, resp.StatusCode)
 	}
+	if common.ImageGenerationLogEnabled {
+		var imageResponse dto.ImageResponse
+		if err := common.Unmarshal(responseBody, &imageResponse); err == nil {
+			service.CaptureImageGenerationResult(c, imageResponse.Data)
+		}
+	}
 
 	// 写入新的 response body
 	service.IOCopyBytesGracefully(c, resp, responseBody)
@@ -114,6 +120,7 @@ func OpenaiImageStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp 
 				usage = &usageResp.Usage
 			}
 		}
+		captureOpenAIImageStreamResult(c, raw)
 		writeOpenaiImageStreamChunk(c, raw)
 	})
 
@@ -212,6 +219,7 @@ func OpenaiImageJSONAsStreamHandler(c *gin.Context, info *relaycommon.RelayInfo,
 	}
 	normalizeOpenAIUsage(&usageResp.Usage)
 	applyUsagePostProcessing(info, &usageResp.Usage, responseBody)
+	service.CaptureImageGenerationResult(c, imageResp.Data)
 
 	helper.SetEventStreamHeaders(c)
 	c.Status(http.StatusOK)
@@ -261,6 +269,21 @@ func OpenaiImageJSONAsStreamHandler(c *gin.Context, info *relaycommon.RelayInfo,
 		info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonDone, nil)
 	}
 	return &usageResp.Usage, nil
+}
+
+func captureOpenAIImageStreamResult(c *gin.Context, data []byte) {
+	if !common.ImageGenerationLogEnabled {
+		return
+	}
+	var response dto.ImageResponse
+	if err := common.Unmarshal(data, &response); err == nil && len(response.Data) > 0 {
+		service.CaptureImageGenerationResult(c, response.Data)
+		return
+	}
+	var image dto.ImageData
+	if err := common.Unmarshal(data, &image); err == nil && (image.Url != "" || image.B64Json != "") {
+		service.CaptureImageGenerationResult(c, []dto.ImageData{image})
+	}
 }
 
 func writeOpenaiImageStreamPayload(c *gin.Context, eventName string, payload any) error {

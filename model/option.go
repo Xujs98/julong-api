@@ -48,6 +48,8 @@ func InitOptionMap() {
 	common.OptionMap["AutomaticDisableChannelEnabled"] = strconv.FormatBool(common.AutomaticDisableChannelEnabled)
 	common.OptionMap["AutomaticEnableChannelEnabled"] = strconv.FormatBool(common.AutomaticEnableChannelEnabled)
 	common.OptionMap["LogConsumeEnabled"] = strconv.FormatBool(common.LogConsumeEnabled)
+	common.OptionMap["ImageGenerationLogEnabled"] = strconv.FormatBool(common.ImageGenerationLogEnabled)
+	common.OptionMap["ImageGenerationLogRetentionDays"] = strconv.Itoa(common.ImageGenerationLogRetentionDays)
 	common.OptionMap["DisplayInCurrencyEnabled"] = strconv.FormatBool(common.DisplayInCurrencyEnabled)
 	common.OptionMap["DisplayTokenStatEnabled"] = strconv.FormatBool(common.DisplayTokenStatEnabled)
 	common.OptionMap["DrawingEnabled"] = strconv.FormatBool(common.DrawingEnabled)
@@ -308,6 +310,8 @@ func updateOptionMap(key string, value string) (err error) {
 			common.AutomaticEnableChannelEnabled = boolValue
 		case "LogConsumeEnabled":
 			common.LogConsumeEnabled = boolValue
+		case "ImageGenerationLogEnabled":
+			common.ImageGenerationLogEnabled = boolValue
 		case "DisplayInCurrencyEnabled":
 			// 兼容旧字段：同步到新配置 general_setting.quota_display_type（运行时生效）
 			// true -> USD, false -> TOKENS
@@ -374,6 +378,11 @@ func updateOptionMap(key string, value string) (err error) {
 	case "SMTPPort":
 		intValue, _ := strconv.Atoi(value)
 		common.SMTPPort = intValue
+	case "ImageGenerationLogRetentionDays":
+		intValue, parseErr := strconv.Atoi(value)
+		if parseErr == nil && intValue >= 0 && intValue <= 3650 {
+			common.ImageGenerationLogRetentionDays = intValue
+		}
 	case "SMTPAccount":
 		common.SMTPAccount = value
 	case "SMTPFrom":

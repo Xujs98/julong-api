@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useQueryClient, useIsFetching } from '@tanstack/react-query'
 import { useNavigate, getRouteApi } from '@tanstack/react-router'
-import { type Table } from '@tanstack/react-table'
+import type { Table } from '@tanstack/react-table'
 import { useState, useEffect, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -26,7 +26,12 @@ import { useIsAdmin } from '@/hooks/use-admin'
 
 import { buildSearchParams } from '../lib/filter'
 import { getDefaultTimeRange } from '../lib/utils'
-import type { DrawingLogFilters, LogCategory, TaskLogFilters } from '../types'
+import type {
+  DrawingLogFilters,
+  ImageLogFilters,
+  LogCategory,
+  TaskLogFilters,
+} from '../types'
 import { CompactDateTimeRangePicker } from './compact-date-time-range-picker'
 import {
   LogsFilterField,
@@ -36,8 +41,8 @@ import {
 
 const route = getRouteApi('/_authenticated/usage-logs/$section')
 
-type TaskLikeLogCategory = Extract<LogCategory, 'drawing' | 'task'>
-type TaskLogsFilters = DrawingLogFilters | TaskLogFilters
+type TaskLikeLogCategory = Extract<LogCategory, 'drawing' | 'image' | 'task'>
+type TaskLogsFilters = DrawingLogFilters | ImageLogFilters | TaskLogFilters
 
 interface TaskLogsFilterBarProps<TData> {
   table: Table<TData>
@@ -51,6 +56,9 @@ function getFilterValue(
   if (logCategory === 'drawing') {
     return (filters as DrawingLogFilters).mjId || ''
   }
+  if (logCategory === 'image') {
+    return (filters as ImageLogFilters).prompt || ''
+  }
   return (filters as TaskLogFilters).taskId || ''
 }
 
@@ -61,6 +69,9 @@ function setFilterValue(
 ): TaskLogsFilters {
   if (logCategory === 'drawing') {
     return { ...filters, mjId: value }
+  }
+  if (logCategory === 'image') {
+    return { ...filters, prompt: value }
   }
   return { ...filters, taskId: value }
 }
@@ -89,16 +100,23 @@ export function TaskLogsFilterBar<TData>(props: TaskLogsFilterBarProps<TData>) {
         ? { channel: String(searchParams.channel) }
         : {}),
     }
-    const next: TaskLogsFilters =
-      props.logCategory === 'drawing'
-        ? {
-            ...baseFilters,
-            ...(searchParams.filter ? { mjId: searchParams.filter } : {}),
-          }
-        : {
-            ...baseFilters,
-            ...(searchParams.filter ? { taskId: searchParams.filter } : {}),
-          }
+    let next: TaskLogsFilters
+    if (props.logCategory === 'drawing') {
+      next = {
+        ...baseFilters,
+        ...(searchParams.filter ? { mjId: searchParams.filter } : {}),
+      }
+    } else if (props.logCategory === 'image') {
+      next = {
+        ...baseFilters,
+        ...(searchParams.filter ? { prompt: searchParams.filter } : {}),
+      }
+    } else {
+      next = {
+        ...baseFilters,
+        ...(searchParams.filter ? { taskId: searchParams.filter } : {}),
+      }
+    }
 
     setFilters(next)
   }, [
@@ -161,10 +179,12 @@ export function TaskLogsFilterBar<TData>(props: TaskLogsFilterBarProps<TData>) {
   )
 
   const filterValue = getFilterValue(filters, props.logCategory)
-  const placeholder =
-    props.logCategory === 'drawing'
-      ? t('Filter by MjProxy task ID')
-      : t('Filter by task ID')
+  let placeholder = t('Filter by task ID')
+  if (props.logCategory === 'drawing') {
+    placeholder = t('Filter by MjProxy task ID')
+  } else if (props.logCategory === 'image') {
+    placeholder = t('Filter by prompt')
+  }
   const hasAdditionalFilters = !!filterValue || !!filters.channel
   const dateRangeFilter = (
     <LogsFilterField wide>
@@ -181,7 +201,7 @@ export function TaskLogsFilterBar<TData>(props: TaskLogsFilterBarProps<TData>) {
   const taskIdFilter = (
     <LogsFilterField>
       <LogsFilterInput
-        aria-label={t('Task ID')}
+        aria-label={props.logCategory === 'image' ? t('Prompt') : t('Task ID')}
         placeholder={placeholder}
         value={filterValue}
         onChange={(e) => handleFilterChange(e.target.value)}

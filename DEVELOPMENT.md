@@ -27,6 +27,7 @@
 | 用户详情弹窗 | 已实现 | 后台用户列表点击用户名可查看基本信息、最近使用日志、总消耗 token。 |
 | 兑换码搜索 | 已实现 | 后台兑换码支持按兑换码 key、生成者用户名/显示名、名称、ID、状态搜索。 |
 | 签到额度预览 | 已实现 | 计费与支付中的签到奖励输入框显示格式化额度预览。 |
+| 生图日志 | 已实现 | 成功的 `/v1/images/generations` 请求可按 root 开关记录提示词和图片，并在任务日志中查看；默认关闭。 |
 | 文档纪律 | 新增 | 以后每次代码改动都必须同步维护本文档。 |
 
 ## 仓库结构
@@ -158,6 +159,9 @@ docker compose up -d
 | `QuotaForInviter` / `QuotaForInvitee` | 同上 | 邀请奖励 | 受支付合规确认约束。 |
 | `SidebarModulesAdmin` | `web/default/src/features/system-settings/maintenance/config.ts` | 控制侧边栏模块显示 | 自定义模块包含 `errorReports`。 |
 | 模型定价订阅抵扣 | `web/default/src/features/system-settings/models/model-pricing-sheet.tsx` 及后端计费设置 | 按次模型是否允许订阅额度抵扣 | 适用于所有模型，不局限于 `gpt-image-2`。 |
+| `ImageGenerationLogEnabled` | `common/constants.go`、`model/option.go`、`log-settings-section.tsx` | 是否记录成功同步生图请求的提示词和图片 | Root 配置，默认 `false`；关闭时不捕获或保存图片。 |
+| `ImageGenerationLogRetentionDays` | 同上、`service/image_generation_log.go` | 生图日志及本地图片自动保留天数 | 默认 `30`，范围 `0-3650`；`0` 表示永久保留，每小时至多触发一次过期清理。 |
+| `IMAGE_LOG_STORAGE_DIR` | `service/image_generation_log.go` | 覆盖生图图片文件目录 | 默认 `image-generation-logs`；Docker `WORKDIR /data` 下位于持久化卷 `/data/image-generation-logs`。 |
 
 ## 架构
 
@@ -411,6 +415,24 @@ curl 'http://localhost:3000/api/redemption/search?keyword=agent001&p=1&page_size
 | GET | `/api/data/flow` | `controller.GetAllFlowQuotaDates` | 流量数据 | 管理员/root | 完成 |
 | GET | `/api/data/flow/self` | `controller.GetUserFlowQuotaDates` | 当前用户流量数据 | 用户 | 完成 |
 
+### 生图日志 API
+
+以下接口均需要 `UserAuth()`。管理员/root 可查看全部日志，普通用户只能查看自己的记录；图片读取接口会再次校验日志所属用户。
+
+| 方法 | 路径 | Handler | 用途 | 参数 | 响应 | 权限 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| GET | `/api/image-generation-logs` | `controller.GetImageGenerationLogs` | 分页查询成功的同步生图记录 | `p`、`page_size`、`model`、`prompt`、`channel_id`、`start_timestamp`、`end_timestamp` | `PageInfo<ImageGenerationLog[]>`，每条包含受保护的 `image_urls` | 用户看自己；管理员/root 看全部 | 完成 |
+| GET | `/api/image-generation-logs/` | `controller.GetImageGenerationLogs` | 兼容尾斜杠 | 同上 | 同上 | 同上 | 完成 |
+| GET | `/api/image-generation-logs/:id/images/:index` | `controller.GetImageGenerationLogImage` | 鉴权读取本地落盘图片 | path `id`、`index` | 图片二进制；不存在 404、越权 403 | 所属用户或管理员/root | 完成 |
+
+调用示例：
+
+```bash
+curl 'http://localhost:3000/api/image-generation-logs?p=1&page_size=20&model=gpt-image-2' \
+  -H 'Cookie: <session-cookie>' \
+  -H 'New-Api-User: 1'
+```
+
 ### 后台设置与运维 API
 
 Root-only `/api/option`：
@@ -508,6 +530,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 | `Channel` | `model/channel.go` | 上游 provider 渠道 | `id`、`type`、`key`、`base_url`、`models`、`group`、状态、priority/weight、计费/override 字段 | 由 distributor middleware 选择。敏感 key 需要脱敏。 | 活跃 |
 | `Ability` | `model/ability.go` | 渠道/模型能力映射 | channel/model/group enabled 字段 | 用于模型可用性和路由。 | 活跃 |
 | `Log` | `model/log.go` | 使用日志和审计日志 | `id`、`user_id`、`created_at`、`type`、`content`、`username`、`token_name`、`model_name`、`quota`、`prompt_tokens`、`completion_tokens`、`channel_id`、`request_id`、`upstream_request_id`、`other` | 可位于独立日志库/ClickHouse。`SumUserUsedToken` 为用户详情总 token 消耗提供数据。 | 活跃 |
+| `ImageGenerationLog` | `model/image_generation_log.go` | 同步生图请求日志 | `id`、索引 `user_id/username/token_id/channel_id/model_name/request_id/created_at`、`prompt`、`size`、`quality`、`image_count`、JSON 字符串 `images`、`quota`、`use_time` | 图片引用存主库；base64 解码后的文件默认存 `image-generation-logs/`，不写入数据库。 | 活跃 |
 | `Redemption` | `model/redemption.go` | 兑换码 | 唯一 `key`、`user_id` 生成者、`status`、`name`、`quota`、`created_time`、`redeemed_time`、`used_user_id`、`expired_time`、`agent_charge`、软删除 | 生成者显示字段是 transient。搜索支持 code、生成者、ID、名称。代理退款使用 `agent_charge`。 | 活跃 |
 | `TopUp` | `model/topup.go` | 在线支付/充值订单 | trade no、user、amount/money、provider、status | 支付回调结算。 | 活跃 |
 | `Checkin` / `CheckinRecord` | `model/checkin.go` | 每日签到奖励记录 | user/date/quota/time 字段 | 设置位于 `checkin_setting.*`。 | 活跃 |
@@ -596,7 +619,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 | `dashboard` | `index.tsx`、`section-registry.tsx`、stats/charts libs | 用户/管理员看板统计 | `/api/data*`、`/api/dashboard*`、`/api/status` | 完成 |
 | `channels` | `channels-table.tsx`、`channels-columns.tsx`、dialogs/drawers、`api.ts` | 上游渠道 CRUD/测试/配置 | `/api/channel*` | 完成 |
 | `keys` | `api-keys-table.tsx`、`api-keys-columns.tsx`、mutate/delete dialogs | 用户 API key 管理 | `/api/token*` | 完成 |
-| `usage-logs` | `usage-logs-table.tsx`、columns/dialogs/filter bars | 普通/绘图/任务使用日志 | `/api/log*`、`/api/mj`、`/api/task` | 完成 |
+| `usage-logs` | `usage-logs-table.tsx`、普通/绘图/生图/任务 columns、图片预览和筛选组件 | 普通消费日志、Midjourney 绘图日志、同步生图日志、异步任务日志 | `/api/log*`、`/api/mj`、`/api/image-generation-logs*`、`/api/task` | 完成 |
 | `wallet` | recharge cards、subscription cards、affiliate rewards、redemption hook | 钱包充值、兑换码、订阅 | `/api/user/topup*`、`/api/subscription*`、支付 API | 完成 |
 | `redemption-codes` | `redemptions-table.tsx`、`redemptions-columns.tsx`、mutate/delete dialogs | 管理员/代理兑换码管理 | `/api/redemption*`、`/api/user/agent/topup-link` | 完成 |
 | `users` | `users-table.tsx`、`users-columns.tsx`、`users-mutate-drawer.tsx`、`agent-detail-dialog.tsx`、`user-detail-dialog.tsx` | 后台用户管理、代理详情、用户详情；详情弹窗包含头像身份摘要、关键指标带、订阅摘要、紧凑信息网格、响应式数据表和加载骨架 | `/api/user*`、`/api/log`、`/api/subscription/admin/*` | 完成 |
@@ -692,6 +715,23 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 
 - 最小和最大签到额度说明显示格式化额度预览，使用 `formatQuota`，与额度设置页面一致。
 
+### 生图日志
+
+相关文件：
+
+- 后端：`model/image_generation_log.go`、`service/image_generation_log.go`、`controller/image_generation_log.go`、`relay/image_handler.go` 及各图片渠道响应适配器。
+- 前端：`web/default/src/features/usage-logs/components/columns/image-generation-logs-columns.tsx`、`image-generation-preview-dialog.tsx`、日志 section/filter/API/types；root 日志维护设置。
+
+行为：
+
+- Root 在“系统设置 → 运营设置 → 日志维护”开启“记录生图日志”，默认关闭。
+- 仅成功的 `/v1/images/generations` 请求写入记录；`/v1/images/edits` 不写入生图日志。
+- 记录用户、Token、渠道、模型、提示词、尺寸、品质、图片数、费用、请求 ID 和耗时。
+- base64 结果先解码为原始图片文件，单张上限 25MB；数据库只保存图片引用，避免 base64 约 33% 的编码膨胀。
+- 上游 URL 结果保存 URL 引用并由浏览器直接展示，避免后端日志预览产生 SSRF 风险；base64 本地文件通过鉴权接口读取。
+- 普通用户只能查看自己的图片，管理员/root 可查看全部。
+- 默认保留 30 天；写入新记录时每小时至多触发一次过期日志和本地图片清理。
+
 ## 已知问题
 
 | 问题 | 影响 | 当前处理方式 | 建议修复 |
@@ -729,6 +769,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 - 后台用户列表点击用户名查看用户详情。
 - 兑换码支持按生成者、兑换码、名称、ID 搜索。
 - 签到奖励额度预览。
+- 可由 root 开关控制、支持图片预览和自动保留清理的生图日志。
 - 新增 UI 文案的多语言同步。
 
 ### 进行中
@@ -750,6 +791,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 
 | 日期 | 变更 | 更新文件/API/模型 | 验证 |
 | --- | --- | --- | --- |
+| 2026-07-12 | 新增同步生图日志：root 开关、保留天数、base64 文件落盘、用户隔离查询/图片接口，以及任务日志中的生图日志和图片预览。 | `ImageGenerationLog`、`ImageGenerationLogEnabled`、`ImageGenerationLogRetentionDays`、`/api/image-generation-logs*`、Relay 图片适配器、`web/default/src/features/usage-logs/*`、日志维护设置、locale files | `go test ./model ./service ./controller ./relay/...`、`bun run typecheck`、`bun run i18n:sync`、`git diff --check` |
 | 2026-07-12 | 在后台用户详情基本信息区增加有效订阅摘要。 | `web/default/src/features/users/components/user-detail-dialog.tsx`、`DEVELOPMENT.md`；复用 `GET /api/subscription/admin/users/:id/subscriptions` 和 `GET /api/subscription/admin/plans` | `bun run typecheck`、`bun run i18n:sync`、Rsbuild 热更新编译、`git diff --check` |
 | 2026-07-12 | 优化代理详情和用户详情弹窗 UI，增加身份摘要、关键指标带、加载骨架、紧凑信息网格及移动端响应式表格。 | `web/default/src/features/users/components/agent-detail-dialog.tsx`、`user-detail-dialog.tsx`、`DEVELOPMENT.md` | `bun run typecheck`、Rsbuild 热更新编译、`git diff --check` |
 | 2026-07-11 | 将 `DEVELOPMENT.md` 翻译为中文。 | `DEVELOPMENT.md` | `git diff --check` |
