@@ -822,6 +822,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 
 | 日期 | 变更 | 更新文件/API/模型 | 验证 |
 | --- | --- | --- | --- |
+| 2026-07-13 | 移除 API 密钥页端点列表上方重复的“自定义端点”标题，保留复制说明、端点条和悬停介绍。 | `keys/components/custom-endpoints.tsx` | `bun run typecheck`、目标 lint、`git diff --check` |
 | 2026-07-13 | 新增自定义端点配置：管理员可在控制台内容/API 地址中维护名称、URL 和介绍；API 密钥页展示可点击复制的端点，悬停显示介绍。 | `console_setting.custom_endpoints`、`CustomEndpointsSection`、`CustomEndpoints`、`/api/status.custom_endpoints` | `go test ./...`、`bun run typecheck`、目标 lint、`bun run i18n:sync`、`git diff --check` |
 | 2026-07-13 | 重做公告自动弹窗 UI：采用通知图标、未读标记、标题/时间头部、正文强调线和标记已读操作区；多条弹窗公告逐条标记已读并切换，关闭按钮不自动标记。 | `announcement-popup.tsx`、locale files | `bun run typecheck`、目标 lint、`bun run i18n:sync`、`git diff --check` |
 | 2026-07-13 | 修复公告编辑器下拉框显示内部枚举值的问题；状态、通知方式、条件类型和运算符通过 Select items 映射显示本地化标签，并补齐草稿、归档、条件翻译。 | `announcements-section.tsx`、locale files | `bun run typecheck`、目标 lint、`bun run i18n:sync`、`git diff --check` |
