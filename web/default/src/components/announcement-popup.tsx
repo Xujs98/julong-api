@@ -17,27 +17,44 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useQuery } from '@tanstack/react-query'
-import { Megaphone } from 'lucide-react'
+import { Bell, Check, Clock3 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { Dialog } from '@/components/dialog'
 import { RichContent } from '@/components/rich-content'
 import { Button } from '@/components/ui/button'
-import { Separator } from '@/components/ui/separator'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { getUserAnnouncements } from '@/features/announcements/api'
 import type { Announcement } from '@/features/announcements/types'
 import { formatDateTimeObject } from '@/lib/time'
 import { useAuthStore } from '@/stores/auth-store'
 
-function hashAnnouncements(announcements: Announcement[]) {
-  const input = JSON.stringify(announcements)
+function hashAnnouncement(announcement: Announcement) {
+  const input = JSON.stringify(announcement)
   let hash = 0
   for (let index = 0; index < input.length; index += 1) {
     hash = (hash << 5) - hash + input.charCodeAt(index)
     hash |= 0
   }
-  return hash.toString(36)
+  return `${announcement.id}:${hash.toString(36)}`
+}
+
+function readStoredKeys(storageKey: string) {
+  try {
+    const value = JSON.parse(window.localStorage.getItem(storageKey) || '[]')
+    return Array.isArray(value)
+      ? value.filter((item) => typeof item === 'string')
+      : []
+  } catch {
+    return []
+  }
 }
 
 export function AnnouncementPopup() {
@@ -48,74 +65,83 @@ export function AnnouncementPopup() {
     staleTime: 60 * 1000,
   })
   const userId = useAuthStore((state) => state.auth.user?.id)
+  const storageKey = `announcement-popup-read:${userId || 'anonymous'}`
+  const [readKeys, setReadKeys] = useState<string[]>([])
   const [open, setOpen] = useState(false)
-  const announcements = useMemo(
+  const popupAnnouncements = useMemo(
     () =>
       (data?.data || [])
         .filter((item) => item.notificationMode === 'popup')
         .slice(0, 20),
     [data?.data]
   )
-  const signature = useMemo(
-    () => hashAnnouncements(announcements),
-    [announcements]
+  const current = popupAnnouncements.find(
+    (announcement) => !readKeys.includes(hashAnnouncement(announcement))
   )
-  const storageKey = `announcement-popup:${userId || 'anonymous'}`
 
   useEffect(() => {
-    if (announcements.length === 0) {
-      setOpen(false)
-      return
-    }
-    setOpen(window.localStorage.getItem(storageKey) !== signature)
-  }, [announcements.length, signature, storageKey])
+    setReadKeys(readStoredKeys(storageKey))
+  }, [storageKey])
 
-  const handleOpenChange = (nextOpen: boolean) => {
-    if (!nextOpen) {
-      window.localStorage.setItem(storageKey, signature)
-    }
-    setOpen(nextOpen)
+  useEffect(() => {
+    if (current) setOpen(true)
+  }, [current])
+
+  const markCurrentRead = () => {
+    if (!current) return
+    const nextKeys = [...new Set([...readKeys, hashAnnouncement(current)])]
+    window.localStorage.setItem(storageKey, JSON.stringify(nextKeys))
+    setReadKeys(nextKeys)
+    setOpen(false)
   }
 
+  if (!current) return null
+
   return (
-    <Dialog
-      open={open}
-      onOpenChange={handleOpenChange}
-      title={
-        <span className='flex items-center gap-2'>
-          <Megaphone className='size-5' />
-          {t('System Announcements')}
-        </span>
-      }
-      contentClassName='sm:max-w-lg'
-      contentHeight='min(60vh, 32rem)'
-      footer={
-        <Button type='button' onClick={() => handleOpenChange(false)}>
-          {t('Close')}
-        </Button>
-      }
-    >
-      <div className='flex flex-col'>
-        {announcements.map((announcement, index) => (
-          <div
-            key={
-              announcement.id ??
-              `announcement-${hashAnnouncements([announcement])}`
-            }
-          >
-            <article className='space-y-2 py-3'>
-              <h3 className='font-semibold'>{announcement.title}</h3>
-              <RichContent breaks content={announcement.content || ''} />
-              {announcement.startTime ? (
-                <time className='text-muted-foreground block text-xs'>
-                  {formatDateTimeObject(new Date(announcement.startTime))}
-                </time>
-              ) : null}
-            </article>
-            {index < announcements.length - 1 ? <Separator /> : null}
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogContent className='gap-0 overflow-hidden rounded-lg p-0 sm:max-w-2xl'>
+        <DialogHeader className='border-b border-amber-200/70 bg-amber-50/70 p-6 text-left sm:p-8 dark:border-amber-900/60 dark:bg-amber-950/20'>
+          <div className='mb-5 flex items-center gap-3'>
+            <div className='flex size-11 items-center justify-center rounded-lg bg-orange-500 text-white shadow-sm'>
+              <Bell className='size-5' />
+            </div>
+            <span className='inline-flex h-8 items-center gap-2 rounded-md bg-orange-500 px-3 text-sm font-medium text-white'>
+              <span className='size-2 rounded-full bg-white ring-4 ring-white/30' />
+              {t('Unread')}
+            </span>
           </div>
-        ))}
-      </div>
+          <DialogTitle className='text-2xl leading-tight font-semibold sm:text-3xl'>
+            {current.title}
+          </DialogTitle>
+          <DialogDescription className='mt-3 flex items-center gap-2 text-sm sm:text-base'>
+            <Clock3 className='size-4 shrink-0' />
+            <span>{t('Just now')}</span>
+            {current.startTime ? (
+              <>
+                <span aria-hidden='true'>·</span>
+                <time>{formatDateTimeObject(new Date(current.startTime))}</time>
+              </>
+            ) : null}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className='min-h-40 p-6 sm:p-8'>
+          <div className='border-l-4 border-amber-500 py-1 pl-5 text-base leading-7 sm:text-lg'>
+            <RichContent breaks content={current.content || ''} />
+          </div>
+        </div>
+
+        <DialogFooter className='bg-muted/30 !m-0 !rounded-none border-t p-5 sm:p-6'>
+          <Button
+            type='button'
+            onClick={markCurrentRead}
+            className='min-w-40 bg-orange-500 text-white hover:bg-orange-600'
+          >
+            <Check className='size-4' />
+            {t('Mark as read')}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
     </Dialog>
   )
 }
