@@ -16,6 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { useQuery } from '@tanstack/react-query'
 import { Megaphone } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -24,16 +25,10 @@ import { Dialog } from '@/components/dialog'
 import { RichContent } from '@/components/rich-content'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
-import { useStatus } from '@/hooks/use-status'
+import { getUserAnnouncements } from '@/features/announcements/api'
+import type { Announcement } from '@/features/announcements/types'
 import { formatDateTimeObject } from '@/lib/time'
 import { useAuthStore } from '@/stores/auth-store'
-
-type Announcement = {
-  id?: number | string
-  content?: string
-  extra?: string
-  publishDate?: string | Date
-}
 
 function hashAnnouncements(announcements: Announcement[]) {
   const input = JSON.stringify(announcements)
@@ -47,13 +42,19 @@ function hashAnnouncements(announcements: Announcement[]) {
 
 export function AnnouncementPopup() {
   const { t } = useTranslation()
-  const { status } = useStatus()
+  const { data } = useQuery({
+    queryKey: ['user-announcements'],
+    queryFn: getUserAnnouncements,
+    staleTime: 60 * 1000,
+  })
   const userId = useAuthStore((state) => state.auth.user?.id)
   const [open, setOpen] = useState(false)
-  const popupEnabled = status?.announcements_popup_enabled === true
   const announcements = useMemo(
-    () => ((status?.announcements || []) as Announcement[]).slice(0, 20),
-    [status?.announcements]
+    () =>
+      (data?.data || [])
+        .filter((item) => item.notificationMode === 'popup')
+        .slice(0, 20),
+    [data?.data]
   )
   const signature = useMemo(
     () => hashAnnouncements(announcements),
@@ -62,12 +63,12 @@ export function AnnouncementPopup() {
   const storageKey = `announcement-popup:${userId || 'anonymous'}`
 
   useEffect(() => {
-    if (!popupEnabled || announcements.length === 0) {
+    if (announcements.length === 0) {
       setOpen(false)
       return
     }
     setOpen(window.localStorage.getItem(storageKey) !== signature)
-  }, [announcements.length, popupEnabled, signature, storageKey])
+  }, [announcements.length, signature, storageKey])
 
   const handleOpenChange = (nextOpen: boolean) => {
     if (!nextOpen) {
@@ -103,15 +104,11 @@ export function AnnouncementPopup() {
             }
           >
             <article className='space-y-2 py-3'>
+              <h3 className='font-semibold'>{announcement.title}</h3>
               <RichContent breaks content={announcement.content || ''} />
-              {announcement.extra ? (
-                <div className='text-muted-foreground text-sm'>
-                  <RichContent breaks content={announcement.extra} />
-                </div>
-              ) : null}
-              {announcement.publishDate ? (
+              {announcement.startTime ? (
                 <time className='text-muted-foreground block text-xs'>
-                  {formatDateTimeObject(new Date(announcement.publishDate))}
+                  {formatDateTimeObject(new Date(announcement.startTime))}
                 </time>
               ) : null}
             </article>

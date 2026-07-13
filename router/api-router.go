@@ -154,6 +154,7 @@ func SetApiRouter(router *gin.Engine) {
 		}
 
 		// Subscription billing (plans, purchase, admin management)
+		apiRouter.GET("/announcements", middleware.UserAuth(), controller.GetUserAnnouncements)
 		subscriptionRoute := apiRouter.Group("/subscription")
 		subscriptionRoute.Use(middleware.UserAuth())
 		{

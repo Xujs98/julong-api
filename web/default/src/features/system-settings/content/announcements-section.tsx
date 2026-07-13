@@ -16,448 +16,333 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { zodResolver } from '@hookform/resolvers/zod'
-import { Plus, Trash2, Save } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
-import { useForm } from 'react-hook-form'
+import { useQuery } from '@tanstack/react-query'
+import { Plus, Trash2 } from 'lucide-react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import * as z from 'zod'
 
 import { StaticDataTable } from '@/components/data-table/static/static-data-table'
 import { StaticRowActions } from '@/components/data-table/static/static-row-actions'
 import { DateTimePicker } from '@/components/datetime-picker'
 import { Dialog } from '@/components/dialog'
+import { MultiSelect } from '@/components/multi-select'
 import { StatusBadge } from '@/components/status-badge'
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
-import { Checkbox } from '@/components/ui/checkbox'
-import {
-  Form,
-  FormControl,
-  FormDescription,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import {
   Select,
   SelectContent,
-  SelectGroup,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
+import type {
+  Announcement,
+  AnnouncementCondition,
+  AnnouncementConditionGroup,
+  AnnouncementConditionType,
+} from '@/features/announcements/types'
+import { getAdminPlans } from '@/features/subscriptions/api'
 import dayjs from '@/lib/dayjs'
 
 import { SettingsSwitchField } from '../components/settings-form-layout'
 import { SettingsSection } from '../components/settings-section'
 import { useUpdateOption } from '../hooks/use-update-option'
 
-type Announcement = {
-  id: number
-  content: string
-  publishDate: string
-  type: 'default' | 'ongoing' | 'success' | 'warning' | 'error'
-  extra?: string
-}
+type AnnouncementsSectionProps = { enabled: boolean; data: string }
 
-type AnnouncementsSectionProps = {
-  enabled: boolean
-  popupEnabled: boolean
-  data: string
-}
-
-const announcementSchema = z.object({
-  content: z
-    .string()
-    .min(1, 'Content is required')
-    .max(500, 'Content must be less than 500 characters'),
-  publishDate: z.string().min(1, 'Publish date is required'),
-  type: z.enum(['default', 'ongoing', 'success', 'warning', 'error']),
-  extra: z
-    .string()
-    .max(100, 'Extra must be less than 100 characters')
-    .optional(),
+const makeKey = () => crypto.randomUUID()
+const newCondition = (): AnnouncementCondition => ({
+  key: makeKey(),
+  type: 'subscription_plan',
+  operator: 'in',
+  planIds: [],
+})
+const newGroup = (): AnnouncementConditionGroup => ({
+  key: makeKey(),
+  conditions: [newCondition()],
+})
+const emptyAnnouncement = (): Announcement => ({
+  id: 0,
+  title: '',
+  content: '',
+  status: 'draft',
+  notificationMode: 'silent',
+  audienceMode: 'all',
+  conditionGroups: [],
 })
 
-type AnnouncementFormValues = z.infer<typeof announcementSchema>
-
-const ANNOUNCEMENT_FORM_ID = 'announcement-form'
-
-const typeOptions = [
-  {
-    value: 'default',
-    label: 'Default',
-    color: 'bg-gray-500',
-    badgeVariant: 'neutral' as const,
-  },
-  {
-    value: 'ongoing',
-    label: 'Ongoing',
-    color: 'bg-blue-500',
-    badgeVariant: 'info' as const,
-  },
-  {
-    value: 'success',
-    label: 'Success',
-    color: 'bg-green-500',
-    badgeVariant: 'success' as const,
-  },
-  {
-    value: 'warning',
-    label: 'Warning',
-    color: 'bg-orange-500',
-    badgeVariant: 'warning' as const,
-  },
-  {
-    value: 'error',
-    label: 'Error',
-    color: 'bg-red-500',
-    badgeVariant: 'danger' as const,
-  },
-]
+function normalizeAnnouncement(item: Partial<Announcement>, index: number) {
+  return {
+    ...emptyAnnouncement(),
+    ...item,
+    id: item.id || index + 1,
+    title: item.title || 'System Announcement',
+    status: item.status || 'active',
+    notificationMode: item.notificationMode || 'silent',
+    audienceMode: item.audienceMode || 'all',
+    startTime: item.startTime || item.publishDate || '',
+    conditionGroups: (item.conditionGroups || []).map((group) => ({
+      ...group,
+      key: group.key || makeKey(),
+      conditions: group.conditions.map((condition) => ({
+        ...condition,
+        key: condition.key || makeKey(),
+      })),
+    })),
+  } as Announcement
+}
 
 export function AnnouncementsSection({
   enabled,
-  popupEnabled,
   data,
 }: AnnouncementsSectionProps) {
   const { t } = useTranslation()
   const updateOption = useUpdateOption()
   const [announcements, setAnnouncements] = useState<Announcement[]>([])
   const [isEnabled, setIsEnabled] = useState(enabled)
-  const [isPopupEnabled, setIsPopupEnabled] = useState(popupEnabled)
-  const [hasChanges, setHasChanges] = useState(false)
-  const [selectedIds, setSelectedIds] = useState<number[]>([])
-  const [showDialog, setShowDialog] = useState(false)
-  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
-  const [editingAnnouncement, setEditingAnnouncement] =
-    useState<Announcement | null>(null)
-  const [deleteTarget, setDeleteTarget] = useState<'single' | 'batch'>('single')
-
-  const form = useForm<AnnouncementFormValues>({
-    resolver: zodResolver(announcementSchema),
-    defaultValues: {
-      content: '',
-      publishDate: new Date().toISOString(),
-      type: 'default',
-      extra: '',
-    },
+  const [isEditorOpen, setIsEditorOpen] = useState(false)
+  const [editing, setEditing] = useState<Announcement | null>(null)
+  const [draft, setDraft] = useState<Announcement>(emptyAnnouncement)
+  const plansQuery = useQuery({
+    queryKey: ['admin-subscription-plans', 'announcement-editor'],
+    queryFn: getAdminPlans,
   })
+  const planOptions = (plansQuery.data?.data || []).map((record) => ({
+    value: String(record.plan.id),
+    label: record.plan.title,
+  }))
 
   useEffect(() => {
     try {
-      const parsed = JSON.parse(data || '[]')
-      if (Array.isArray(parsed)) {
-        setAnnouncements(
-          parsed.map((item, idx) => ({
-            ...item,
-            id: item.id || idx + 1,
-          }))
-        )
-      }
+      const parsed = JSON.parse(data || '[]') as Partial<Announcement>[]
+      setAnnouncements(parsed.map(normalizeAnnouncement))
     } catch {
       setAnnouncements([])
     }
   }, [data])
+  useEffect(() => setIsEnabled(enabled), [enabled])
 
-  useEffect(() => {
-    setIsEnabled(enabled)
-  }, [enabled])
-
-  useEffect(() => {
-    setIsPopupEnabled(popupEnabled)
-  }, [popupEnabled])
-
-  const handleToggleEnabled = async (checked: boolean) => {
-    try {
-      await updateOption.mutateAsync({
-        key: 'console_setting.announcements_enabled',
-        value: checked,
-      })
-      setIsEnabled(checked)
-      toast.success(t('Setting saved'))
-    } catch {
-      toast.error(t('Failed to update setting'))
-    }
+  const openCreate = () => {
+    setEditing(null)
+    setDraft(emptyAnnouncement())
+    setIsEditorOpen(true)
   }
-
-  const handleTogglePopup = async (checked: boolean) => {
-    try {
-      await updateOption.mutateAsync({
-        key: 'console_setting.announcements_popup_enabled',
-        value: checked,
-      })
-      setIsPopupEnabled(checked)
-      toast.success(t('Setting saved'))
-    } catch {
-      toast.error(t('Failed to update setting'))
-    }
+  const openEdit = (announcement: Announcement) => {
+    setEditing(announcement)
+    setDraft(structuredClone(announcement))
+    setIsEditorOpen(true)
   }
+  const closeEditor = () => setIsEditorOpen(false)
 
-  const handleAdd = () => {
-    setEditingAnnouncement(null)
-    form.reset({
-      content: '',
-      publishDate: new Date().toISOString(),
-      type: 'default',
-      extra: '',
+  const setCondition = (
+    groupKey: string,
+    conditionKey: string,
+    patch: Partial<AnnouncementCondition>
+  ) => {
+    setDraft((current) => ({
+      ...current,
+      conditionGroups: (current.conditionGroups || []).map((group) =>
+        group.key === groupKey
+          ? {
+              ...group,
+              conditions: group.conditions.map((condition) =>
+                condition.key === conditionKey
+                  ? { ...condition, ...patch }
+                  : condition
+              ),
+            }
+          : group
+      ),
+    }))
+  }
+  const removeCondition = (groupKey: string, conditionKey: string) => {
+    setDraft((current) => ({
+      ...current,
+      conditionGroups: (current.conditionGroups || []).map((group) =>
+        group.key === groupKey
+          ? {
+              ...group,
+              conditions: group.conditions.filter(
+                (condition) => condition.key !== conditionKey
+              ),
+            }
+          : group
+      ),
+    }))
+  }
+  const persistAnnouncements = async (next: Announcement[]) => {
+    await updateOption.mutateAsync({
+      key: 'console_setting.announcements',
+      value: JSON.stringify(next),
     })
-    setShowDialog(true)
+    setAnnouncements(next)
   }
 
-  const handleEdit = (announcement: Announcement) => {
-    setEditingAnnouncement(announcement)
-    form.reset({
-      content: announcement.content,
-      publishDate: announcement.publishDate,
-      type: announcement.type,
-      extra: announcement.extra || '',
-    })
-    setShowDialog(true)
-  }
-
-  const handleDelete = (announcement: Announcement) => {
-    setEditingAnnouncement(announcement)
-    setDeleteTarget('single')
-    setShowDeleteDialog(true)
-  }
-
-  const handleBatchDelete = () => {
-    if (selectedIds.length === 0) {
-      toast.error(t('Please select items to delete'))
+  const saveDraft = async () => {
+    if (!draft.title.trim() || !draft.content.trim()) {
+      toast.error(t('Title and content are required'))
       return
     }
-    setDeleteTarget('batch')
-    setShowDeleteDialog(true)
-  }
-
-  const confirmDelete = () => {
-    if (deleteTarget === 'single' && editingAnnouncement) {
-      setAnnouncements((prev) =>
-        prev.filter((item) => item.id !== editingAnnouncement.id)
-      )
-      setHasChanges(true)
-      toast.success(t('Announcement deleted. Click "Save Settings" to apply.'))
-    } else if (deleteTarget === 'batch') {
-      setAnnouncements((prev) =>
-        prev.filter((item) => !selectedIds.includes(item.id))
-      )
-      setSelectedIds([])
-      setHasChanges(true)
-      toast.success(
-        t('{{count}} announcements deleted. Click "Save Settings" to apply.', {
-          count: selectedIds.length,
-        })
-      )
+    if (
+      draft.endTime &&
+      draft.startTime &&
+      new Date(draft.endTime) <= new Date(draft.startTime)
+    ) {
+      toast.error(t('End time must be later than start time'))
+      return
     }
-    setShowDeleteDialog(false)
-    setEditingAnnouncement(null)
-  }
-
-  const handleSubmitForm = (values: AnnouncementFormValues) => {
-    if (editingAnnouncement) {
-      setAnnouncements((prev) =>
-        prev.map((item) =>
-          item.id === editingAnnouncement.id ? { ...item, ...values } : item
+    if (
+      draft.audienceMode === 'conditions' &&
+      !(draft.conditionGroups || []).some(
+        (group) => group.conditions.length > 0
+      )
+    ) {
+      toast.error(t('Add at least one display condition'))
+      return
+    }
+    if (
+      draft.audienceMode === 'conditions' &&
+      (draft.conditionGroups || []).some((group) =>
+        group.conditions.some(
+          (condition) =>
+            condition.type === 'subscription_plan' && !condition.planIds?.length
         )
       )
-      toast.success(t('Announcement updated. Click "Save Settings" to apply.'))
-    } else {
-      const newId = Math.max(...announcements.map((item) => item.id), 0) + 1
-      setAnnouncements((prev) => [...prev, { id: newId, ...values }])
-      toast.success(t('Announcement added. Click "Save Settings" to apply.'))
+    ) {
+      toast.error(t('Select at least one subscription plan'))
+      return
     }
-    setHasChanges(true)
-    setShowDialog(false)
-  }
-
-  const handleSaveAll = async () => {
+    const next = {
+      ...draft,
+      id:
+        editing?.id || Math.max(0, ...announcements.map((item) => item.id)) + 1,
+    }
+    const nextAnnouncements = editing
+      ? announcements.map((item) => (item.id === editing.id ? next : item))
+      : [...announcements, next]
     try {
-      await updateOption.mutateAsync({
-        key: 'console_setting.announcements',
-        value: JSON.stringify(announcements),
-      })
-      setHasChanges(false)
+      await persistAnnouncements(nextAnnouncements)
       toast.success(t('Announcements saved successfully'))
+      setEditing(null)
+      setIsEditorOpen(false)
     } catch {
       toast.error(t('Failed to save announcements'))
     }
   }
-
-  const toggleSelectAll = (checked: boolean) => {
-    setSelectedIds(checked ? announcements.map((item) => item.id) : [])
-  }
-
-  const toggleSelectOne = (id: number, checked: boolean) => {
-    setSelectedIds((prev) =>
-      checked ? [...prev, id] : prev.filter((item) => item !== id)
-    )
-  }
-
-  const sortedAnnouncements = useMemo(() => {
-    return [...announcements].sort((a, b) => {
-      return (
-        new Date(b.publishDate).getTime() - new Date(a.publishDate).getTime()
-      )
+  const handleToggle = async (checked: boolean) => {
+    await updateOption.mutateAsync({
+      key: 'console_setting.announcements_enabled',
+      value: checked,
     })
-  }, [announcements])
+    setIsEnabled(checked)
+  }
 
-  const getRelativeTime = (date: string) => {
-    const now = new Date()
-    const past = new Date(date)
-    const diffMs = now.getTime() - past.getTime()
-    const diffMins = Math.floor(diffMs / 60000)
-    const diffHours = Math.floor(diffMins / 60)
-    const diffDays = Math.floor(diffHours / 24)
-
-    if (diffMins < 60) return `${diffMins}m ago`
-    if (diffHours < 24) return `${diffHours}h ago`
-    return `${diffDays}d ago`
+  const statusMeta = {
+    draft: { label: t('Draft'), variant: 'neutral' as const },
+    active: { label: t('Displaying'), variant: 'success' as const },
+    archived: { label: t('Archived'), variant: 'warning' as const },
   }
 
   return (
     <SettingsSection title={t('Announcements')}>
       <div className='space-y-4'>
-        <div className='flex flex-wrap items-center justify-between gap-2'>
-          <div className='flex flex-wrap items-center gap-2'>
-            <Button onClick={handleAdd} size='sm'>
-              <Plus className='mr-2 h-4 w-4' />
-              {t('Add Announcement')}
-            </Button>
-            <Button
-              onClick={handleBatchDelete}
-              size='sm'
-              variant='destructive'
-              disabled={selectedIds.length === 0}
-            >
-              <Trash2 className='mr-2 h-4 w-4' />
-              {t('Delete (')}
-              {selectedIds.length})
-            </Button>
-            <Button
-              onClick={handleSaveAll}
-              size='sm'
-              variant='secondary'
-              disabled={!hasChanges || updateOption.isPending}
-            >
-              <Save className='mr-2 h-4 w-4' />
-              {updateOption.isPending ? t('Saving...') : t('Save Settings')}
+        <div className='flex flex-wrap items-center justify-between gap-3'>
+          <div className='flex flex-wrap gap-2'>
+            <Button size='sm' onClick={openCreate}>
+              <Plus className='size-4' />
+              {t('Create Announcement')}
             </Button>
           </div>
-          <div className='flex flex-wrap items-center gap-x-5 gap-y-2'>
-            <SettingsSwitchField
-              checked={isPopupEnabled}
-              onCheckedChange={handleTogglePopup}
-              label={t('Popup reminder')}
-              disabled={!isEnabled}
-              className='gap-2 py-0'
-            />
-            <SettingsSwitchField
-              checked={isEnabled}
-              onCheckedChange={handleToggleEnabled}
-              label={t('Enabled')}
-              className='gap-2 py-0'
-            />
-          </div>
+          <SettingsSwitchField
+            checked={isEnabled}
+            onCheckedChange={handleToggle}
+            label={t('Enabled')}
+            className='gap-2 py-0'
+          />
         </div>
-
         <StaticDataTable
-          data={sortedAnnouncements}
-          getRowKey={(announcement) => announcement.id}
+          data={announcements}
+          getRowKey={(item) => item.id}
           emptyContent={t(
-            'No announcements yet. Click "Add Announcement" to create one.'
+            'No announcements yet. Click "Create Announcement" to create one.'
           )}
           columns={[
             {
-              id: 'select',
-              header: (
-                <Checkbox
-                  checked={
-                    selectedIds.length === announcements.length &&
-                    announcements.length > 0
-                  }
-                  onCheckedChange={toggleSelectAll}
-                />
-              ),
-              className: 'w-12',
-              cell: (announcement) => (
-                <Checkbox
-                  checked={selectedIds.includes(announcement.id)}
-                  onCheckedChange={(checked) =>
-                    toggleSelectOne(announcement.id, checked as boolean)
-                  }
-                />
-              ),
-            },
-            {
-              id: 'content',
-              header: t('Content'),
-              cellClassName: 'max-w-xs truncate',
-              cell: (announcement) => announcement.content,
-            },
-            {
-              id: 'publish-date',
-              header: t('Publish Date'),
-              cell: (announcement) => (
-                <div className='flex flex-col gap-1'>
-                  <span className='text-sm font-medium'>
-                    {getRelativeTime(announcement.publishDate)}
-                  </span>
-                  <span className='text-muted-foreground text-xs'>
-                    {dayjs(announcement.publishDate).format(
-                      'YYYY-MM-DD HH:mm:ss'
-                    )}
-                  </span>
+              id: 'title',
+              header: t('Title'),
+              cell: (item) => (
+                <div className='max-w-sm'>
+                  <div className='font-medium'>{item.title}</div>
+                  <div className='text-muted-foreground truncate text-xs'>
+                    {item.content}
+                  </div>
                 </div>
               ),
             },
             {
-              id: 'type',
-              header: t('Type'),
-              cell: (announcement) => (
+              id: 'status',
+              header: t('Status'),
+              cell: (item) => (
                 <StatusBadge
-                  label={
-                    typeOptions.find((opt) => opt.value === announcement.type)
-                      ?.label
-                  }
-                  variant={
-                    typeOptions.find((opt) => opt.value === announcement.type)
-                      ?.badgeVariant ?? 'neutral'
-                  }
+                  label={statusMeta[item.status].label}
+                  variant={statusMeta[item.status].variant}
                   copyable={false}
                 />
               ),
             },
             {
-              id: 'extra',
-              header: t('Extra'),
-              cellClassName: 'text-muted-foreground max-w-xs truncate',
-              cell: (announcement) => announcement.extra || '-',
+              id: 'notification',
+              header: t('Notification method'),
+              cell: (item) =>
+                item.notificationMode === 'popup' ? t('Popup') : t('Silent'),
+            },
+            {
+              id: 'time',
+              header: t('Effective time'),
+              cell: (item) => (
+                <div className='text-xs'>
+                  {item.startTime
+                    ? dayjs(item.startTime).format('YYYY-MM-DD HH:mm')
+                    : t('Immediately')}
+                  <br />
+                  {item.endTime
+                    ? dayjs(item.endTime).format('YYYY-MM-DD HH:mm')
+                    : t('Permanent')}
+                </div>
+              ),
+            },
+            {
+              id: 'audience',
+              header: t('Display conditions'),
+              cell: (item) =>
+                item.audienceMode === 'all'
+                  ? t('All users')
+                  : t('By conditions'),
             },
             {
               id: 'actions',
               header: t('Actions'),
-              cell: (announcement) => (
+              cell: (item) => (
                 <StaticRowActions
                   editLabel={t('Edit')}
                   deleteLabel={t('Delete')}
                   menuLabel={t('Open menu')}
-                  onEdit={() => handleEdit(announcement)}
-                  onDelete={() => handleDelete(announcement)}
+                  onEdit={() => openEdit(item)}
+                  onDelete={async () => {
+                    try {
+                      await persistAnnouncements(
+                        announcements.filter((entry) => entry.id !== item.id)
+                      )
+                      toast.success(t('Deleted successfully'))
+                    } catch {
+                      toast.error(t('Failed to save announcements'))
+                    }
+                  }}
                 />
               ),
             },
@@ -466,176 +351,354 @@ export function AnnouncementsSection({
       </div>
 
       <Dialog
-        open={showDialog}
-        onOpenChange={setShowDialog}
-        title={
-          editingAnnouncement ? t('Edit Announcement') : t('Add Announcement')
-        }
-        description={t(
-          'Create or update system announcements for the dashboard'
-        )}
-        contentClassName='max-w-2xl'
-        contentHeight='auto'
-        bodyClassName='space-y-4'
+        open={isEditorOpen}
+        onOpenChange={setIsEditorOpen}
+        title={editing ? t('Edit Announcement') : t('Create Announcement')}
+        contentClassName='sm:max-w-4xl'
+        contentHeight='min(78vh, 52rem)'
         footer={
           <>
-            <Button
-              type='button'
-              variant='outline'
-              onClick={() => setShowDialog(false)}
-            >
+            <Button variant='outline' onClick={closeEditor}>
               {t('Cancel')}
             </Button>
-            <Button type='submit' form={ANNOUNCEMENT_FORM_ID}>
-              {editingAnnouncement ? t('Update') : t('Add')}
+            <Button disabled={updateOption.isPending} onClick={saveDraft}>
+              {t('Save')}
             </Button>
           </>
         }
       >
-        <Form {...form}>
-          <form
-            id={ANNOUNCEMENT_FORM_ID}
-            onSubmit={form.handleSubmit(handleSubmitForm)}
-            className='space-y-4'
-          >
-            <FormField
-              control={form.control}
-              name='content'
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{t('Content')}</FormLabel>
-                  <FormControl>
-                    <Textarea
-                      placeholder={t(
-                        'Enter announcement content (supports Markdown/HTML)'
-                      )}
-                      rows={4}
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormDescription>
-                    {t('Maximum 500 characters. Supports Markdown and HTML.')}
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
+        <div className='space-y-5'>
+          <div className='space-y-2'>
+            <Label>{t('Title')}</Label>
+            <Input
+              value={draft.title}
+              onChange={(event) =>
+                setDraft({ ...draft, title: event.target.value })
+              }
             />
-            <FormField
-              control={form.control}
-              name='publishDate'
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{t('Publish Date')}</FormLabel>
-                  <FormControl>
-                    <DateTimePicker
-                      value={field.value ? new Date(field.value) : undefined}
-                      onChange={(date) =>
-                        field.onChange(date ? date.toISOString() : '')
-                      }
-                      placeholder={t('Select publish date')}
-                    />
-                  </FormControl>
-                  <FormDescription>
-                    {t(
-                      'Date and time when this announcement should be displayed'
-                    )}
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
+          </div>
+          <div className='space-y-2'>
+            <Label>{t('Content (supports Markdown)')}</Label>
+            <Textarea
+              rows={8}
+              value={draft.content}
+              onChange={(event) =>
+                setDraft({ ...draft, content: event.target.value })
+              }
             />
-            <FormField
-              control={form.control}
-              name='type'
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{t('Type')}</FormLabel>
-                  <Select
-                    items={typeOptions.map((option) => ({
-                      value: option.value,
-                      label: (
-                        <div className='flex items-center gap-2'>
-                          <div
-                            className={`h-3 w-3 rounded-full ${option.color}`}
-                          />
-                          {option.label}
-                        </div>
-                      ),
-                    }))}
-                    onValueChange={field.onChange}
-                    value={field.value}
+          </div>
+          <div className='grid gap-4 md:grid-cols-2'>
+            <div className='space-y-2'>
+              <Label>{t('Status')}</Label>
+              <Select
+                value={draft.status}
+                onValueChange={(value) =>
+                  setDraft({
+                    ...draft,
+                    status: value as Announcement['status'],
+                  })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value='draft'>{t('Draft')}</SelectItem>
+                  <SelectItem value='active'>{t('Displaying')}</SelectItem>
+                  <SelectItem value='archived'>{t('Archived')}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className='space-y-2'>
+              <Label>{t('Notification method')}</Label>
+              <Select
+                value={draft.notificationMode}
+                onValueChange={(value) =>
+                  setDraft({
+                    ...draft,
+                    notificationMode: value as Announcement['notificationMode'],
+                  })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value='silent'>{t('Silent')}</SelectItem>
+                  <SelectItem value='popup'>{t('Popup')}</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className='text-muted-foreground text-xs'>
+                {t(
+                  'Popup mode automatically shows this announcement to matching users.'
+                )}
+              </p>
+            </div>
+            <div className='space-y-2'>
+              <Label>{t('Start time')}</Label>
+              <DateTimePicker
+                value={draft.startTime ? new Date(draft.startTime) : undefined}
+                onChange={(date) =>
+                  setDraft({ ...draft, startTime: date?.toISOString() || '' })
+                }
+              />
+              <p className='text-muted-foreground text-xs'>
+                {t('Leave empty to take effect immediately')}
+              </p>
+            </div>
+            <div className='space-y-2'>
+              <Label>{t('End time')}</Label>
+              <DateTimePicker
+                value={draft.endTime ? new Date(draft.endTime) : undefined}
+                onChange={(date) =>
+                  setDraft({ ...draft, endTime: date?.toISOString() || '' })
+                }
+              />
+              <p className='text-muted-foreground text-xs'>
+                {t('Leave empty to remain active permanently')}
+              </p>
+            </div>
+          </div>
+          <section className='bg-muted/20 space-y-5 rounded-md border p-4'>
+            <div className='flex flex-wrap items-center justify-between gap-4'>
+              <div>
+                <h3 className='font-medium'>{t('Display conditions')}</h3>
+                <p className='text-muted-foreground text-sm'>
+                  {draft.audienceMode === 'all'
+                    ? t('All users')
+                    : t('By conditions')}
+                </p>
+              </div>
+              <RadioGroup
+                value={draft.audienceMode}
+                onValueChange={(value) =>
+                  setDraft({
+                    ...draft,
+                    audienceMode: value as Announcement['audienceMode'],
+                    conditionGroups:
+                      value === 'conditions' && !draft.conditionGroups?.length
+                        ? [newGroup()]
+                        : draft.conditionGroups,
+                  })
+                }
+                className='flex gap-4'
+              >
+                <label className='flex items-center gap-2'>
+                  <RadioGroupItem value='all' />
+                  {t('All users')}
+                </label>
+                <label className='flex items-center gap-2'>
+                  <RadioGroupItem value='conditions' />
+                  {t('By conditions')}
+                </label>
+              </RadioGroup>
+            </div>
+            {draft.audienceMode === 'conditions' ? (
+              <div className='space-y-4'>
+                <div className='flex items-center justify-between'>
+                  <span className='font-medium'>
+                    OR ({draft.conditionGroups?.length || 0}/50)
+                  </span>
+                  <Button
+                    variant='outline'
+                    size='sm'
+                    onClick={() =>
+                      setDraft({
+                        ...draft,
+                        conditionGroups: [
+                          ...(draft.conditionGroups || []),
+                          newGroup(),
+                        ],
+                      })
+                    }
                   >
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue
-                          placeholder={t('Select announcement type')}
-                        />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent alignItemWithTrigger={false}>
-                      <SelectGroup>
-                        {typeOptions.map((option) => (
-                          <SelectItem key={option.value} value={option.value}>
-                            <div className='flex items-center gap-2'>
-                              <div
-                                className={`h-3 w-3 rounded-full ${option.color}`}
-                              />
-                              {option.label}
-                            </div>
-                          </SelectItem>
-                        ))}
-                      </SelectGroup>
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name='extra'
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{t('Extra Notes (Optional)')}</FormLabel>
-                  <FormControl>
-                    <Input
-                      placeholder={t('Additional information')}
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormDescription>
-                    {t(
-                      'Optional supplementary information (max 100 characters)'
-                    )}
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          </form>
-        </Form>
+                    <Plus className='size-4' />
+                    {t('Add OR condition group')}
+                  </Button>
+                </div>
+                {(draft.conditionGroups || []).map((group, groupIndex) => (
+                  <div
+                    key={group.key}
+                    className='bg-background space-y-3 rounded-md border p-4'
+                  >
+                    <div className='flex items-center justify-between'>
+                      <div>
+                        <span className='font-medium'>
+                          {t('Condition')} #{groupIndex + 1}
+                        </span>
+                        <span className='text-muted-foreground ml-3 text-sm'>
+                          AND ({group.conditions.length}/50)
+                        </span>
+                      </div>
+                      <Button
+                        variant='ghost'
+                        size='sm'
+                        onClick={() =>
+                          setDraft({
+                            ...draft,
+                            conditionGroups: draft.conditionGroups?.filter(
+                              (entry) => entry.key !== group.key
+                            ),
+                          })
+                        }
+                      >
+                        <Trash2 className='size-4' />
+                        {t('Delete')}
+                      </Button>
+                    </div>
+                    {group.conditions.map((condition) => (
+                      <div
+                        key={condition.key}
+                        className='bg-muted/30 grid items-end gap-3 rounded-md p-3 md:grid-cols-[1fr_1fr_2fr_auto]'
+                      >
+                        <div className='space-y-2'>
+                          <Label>{t('Condition type')}</Label>
+                          <Select
+                            value={condition.type}
+                            onValueChange={(value) =>
+                              setCondition(
+                                group.key,
+                                condition.key,
+                                value === 'balance'
+                                  ? {
+                                      type: value as AnnouncementConditionType,
+                                      operator: 'gte',
+                                      value: 0,
+                                      planIds: undefined,
+                                    }
+                                  : {
+                                      type: value as AnnouncementConditionType,
+                                      operator: 'in',
+                                      planIds: [],
+                                      value: undefined,
+                                    }
+                              )
+                            }
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value='subscription_plan'>
+                                {t('Subscription plan')}
+                              </SelectItem>
+                              <SelectItem value='balance'>
+                                {t('Balance')}
+                              </SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className='space-y-2'>
+                          <Label>{t('Operator')}</Label>
+                          <Select
+                            value={condition.operator}
+                            onValueChange={(value) =>
+                              setCondition(group.key, condition.key, {
+                                operator:
+                                  value as AnnouncementCondition['operator'],
+                              })
+                            }
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {condition.type === 'subscription_plan' ? (
+                                <>
+                                  <SelectItem value='in'>
+                                    {t('Includes any')}
+                                  </SelectItem>
+                                  <SelectItem value='not_in'>
+                                    {t('Excludes all')}
+                                  </SelectItem>
+                                </>
+                              ) : (
+                                <>
+                                  <SelectItem value='gte'>≥</SelectItem>
+                                  <SelectItem value='lte'>≤</SelectItem>
+                                  <SelectItem value='gt'>&gt;</SelectItem>
+                                  <SelectItem value='lt'>&lt;</SelectItem>
+                                  <SelectItem value='eq'>=</SelectItem>
+                                </>
+                              )}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className='space-y-2'>
+                          <Label>
+                            {condition.type === 'subscription_plan'
+                              ? t('Select plans')
+                              : t('Balance threshold')}
+                          </Label>
+                          {condition.type === 'subscription_plan' ? (
+                            <MultiSelect
+                              options={planOptions}
+                              selected={(condition.planIds || []).map(String)}
+                              onChange={(values) =>
+                                setCondition(group.key, condition.key, {
+                                  planIds: values.map(Number),
+                                })
+                              }
+                              placeholder={t('Select subscription plans')}
+                            />
+                          ) : (
+                            <Input
+                              type='number'
+                              min={0}
+                              value={condition.value || 0}
+                              onChange={(event) =>
+                                setCondition(group.key, condition.key, {
+                                  value: Number(event.target.value),
+                                })
+                              }
+                            />
+                          )}
+                        </div>
+                        <Button
+                          variant='ghost'
+                          size='icon'
+                          onClick={() =>
+                            removeCondition(group.key, condition.key)
+                          }
+                          title={t('Delete')}
+                        >
+                          <Trash2 className='size-4' />
+                        </Button>
+                      </div>
+                    ))}
+                    <div className='flex justify-end'>
+                      <Button
+                        variant='outline'
+                        size='sm'
+                        onClick={() =>
+                          setDraft({
+                            ...draft,
+                            conditionGroups: draft.conditionGroups?.map(
+                              (entry) =>
+                                entry.key === group.key
+                                  ? {
+                                      ...entry,
+                                      conditions: [
+                                        ...entry.conditions,
+                                        newCondition(),
+                                      ],
+                                    }
+                                  : entry
+                            ),
+                          })
+                        }
+                      >
+                        <Plus className='size-4' />
+                        {t('Add AND condition')}
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </section>
+        </div>
       </Dialog>
-
-      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{t('Are you sure?')}</AlertDialogTitle>
-            <AlertDialogDescription>
-              {deleteTarget === 'single'
-                ? t('This announcement will be removed from the list.')
-                : t('{{count}} announcements will be removed from the list.', {
-                    count: selectedIds.length,
-                  })}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>{t('Cancel')}</AlertDialogCancel>
-            <AlertDialogAction variant='destructive' onClick={confirmDelete}>
-              {t('Delete')}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </SettingsSection>
   )
 }

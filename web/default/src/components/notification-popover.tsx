@@ -46,10 +46,12 @@ import { cn } from '@/lib/utils'
 
 interface AnnouncementItem {
   id?: number | string
+  title?: string
   type?: string
   content?: string
   extra?: string
   publishDate?: string | Date
+  startTime?: string | Date
 }
 
 interface NotificationPopoverProps {
@@ -243,9 +245,10 @@ function AnnouncementsContent({
       <div className='flex flex-col'>
         {announcements.map((item, idx) => {
           const announcementKey = getAnnouncementRenderKey(item)
-          const publishDate = item.publishDate
-            ? new Date(item.publishDate)
-            : null
+          const publishDate =
+            item.startTime || item.publishDate
+              ? new Date(item.startTime || item.publishDate || '')
+              : null
           const relativeTime = publishDate
             ? getRelativeTime(publishDate, t)
             : ''
@@ -259,6 +262,9 @@ function AnnouncementsContent({
                 <div className='flex items-start gap-3'>
                   <AnnouncementDot type={item.type} />
                   <div className='flex min-w-0 flex-1 flex-col gap-2'>
+                    {item.title ? (
+                      <div className='text-sm font-semibold'>{item.title}</div>
+                    ) : null}
                     <div className='text-sm'>
                       <RichContent breaks content={item.content || ''} />
                     </div>

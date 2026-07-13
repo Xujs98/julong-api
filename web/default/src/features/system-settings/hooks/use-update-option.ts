@@ -31,7 +31,6 @@ const STATUS_RELATED_KEYS = new Set([
   'Notice',
   'console_setting.announcements',
   'console_setting.announcements_enabled',
-  'console_setting.announcements_popup_enabled',
   'LogConsumeEnabled',
   'QuotaPerUnit',
   'USDExchangeRate',
@@ -51,6 +50,9 @@ export function useUpdateOption() {
       if (data.success) {
         // Always refresh system-options
         queryClient.invalidateQueries({ queryKey: ['system-options'] })
+        if (variables.key === 'console_setting.announcements') {
+          queryClient.invalidateQueries({ queryKey: ['user-announcements'] })
+        }
 
         // If updating frontend-display-related config, also refresh status
         if (STATUS_RELATED_KEYS.has(variables.key)) {

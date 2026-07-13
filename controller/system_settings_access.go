@@ -48,7 +48,7 @@ func optionAllowedForSystemSettingsAction(key, action string) bool {
 		"security.ssrf":              {"fetch_setting.enable_ssrf_protection", "fetch_setting.allow_private_ip", "fetch_setting.domain_filter_mode", "fetch_setting.ip_filter_mode", "fetch_setting.domain_list", "fetch_setting.ip_list", "fetch_setting.allowed_ports", "fetch_setting.apply_ip_filter_for_domain"},
 		"security.token-limits":      {"token_setting.max_user_tokens"},
 		"content.dashboard":          {"DataExportEnabled", "DataExportDefaultTime", "DataExportInterval"},
-		"content.announcements":      {"console_setting.announcements", "console_setting.announcements_enabled", "console_setting.announcements_popup_enabled"},
+		"content.announcements":      {"console_setting.announcements", "console_setting.announcements_enabled"},
 		"content.api-info":           {"console_setting.api_info", "console_setting.api_info_enabled"},
 		"content.faq":                {"console_setting.faq", "console_setting.faq_enabled"},
 		"content.uptime-kuma":        {"console_setting.uptime_kuma_groups", "console_setting.uptime_kuma_enabled"},
