@@ -223,7 +223,7 @@ type ApiResponse<T> = {
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | GET | `/api/setup` | `controller.GetSetup` | 读取安装/初始化状态 | 无 | setup 元数据 | 公开 | 完成 |
 | POST | `/api/setup` | `controller.PostSetup` | 初始化安装 | setup payload | success | 公开 + body limit | 完成 |
-| GET | `/api/status` | `controller.GetStatus` | 系统状态/健康检查 | 无 | status 对象；公告启用时仅含当前有效且面向所有用户的 `announcements`，并返回 `announcements_enabled` | 公开 | 完成 |
+| GET | `/api/status` | `controller.GetStatus` | 系统状态/健康检查 | 无 | status 对象；包含 `custom_endpoints`；公告启用时仅含当前有效且面向所有用户的 `announcements`，并返回 `announcements_enabled` | 公开 | 完成 |
 | GET | `/api/announcements` | `controller.GetUserAnnouncements` | 获取当前用户可见公告 | 无 | 已展示、时间有效且命中套餐/余额 OR-AND 条件的 `Announcement[]` | 登录用户 | 完成 |
 | GET | `/api/uptime/status` | `controller.GetUptimeKumaStatus` | Uptime Kuma 集成 | 无 | uptime 状态 | 公开 | 完成 |
 | GET | `/api/notice` | `controller.GetNotice` | 站点公告 | 无 | 内容 | 公开 | 完成 |
@@ -578,7 +578,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 | `ErrorReport` | `model/error_report.go` | 500 页面反馈 | `id`、`created_at`、索引 `user_id`、`username`、`title`、`message`、`page_url`、`error_status`、`user_agent`、`stack`、`ip` | Julong 二开。已加入两种迁移流程。 | 活跃 |
 | `QuotaData` / `FlowQuotaData` | `model/usedata.go`、`model/usedata_flow.go` | Dashboard 聚合用量 | date/user/quota/flow 字段 | 数据看板。 | 活跃 |
 
-`setting/console_setting/config.go:ConsoleSetting` 是存储于 `Option` 的运行时 JSON 配置结构，不单独建表。公告相关字段为 `announcements`（JSON 数组字符串）和 `announcements_enabled`（公告总开关）。单条公告包含 `id/title/content/status/notificationMode/startTime/endTime/audienceMode/conditionGroups`；状态为 `draft/active/archived`，通知方式为 `silent/popup`，条件组之间为 OR、组内条件为 AND，当前支持订阅套餐包含/排除和余额比较。旧公告读取时自动归一化为展示中、静默、所有用户，无需数据库迁移。
+`setting/console_setting/config.go:ConsoleSetting` 是存储于 `Option` 的运行时 JSON 配置结构，不单独建表。`custom_endpoints` 保存最多 20 条 `{id,name,url,description}`，经 URL、长度和危险内容校验后通过公开状态接口下发。公告相关字段为 `announcements`（JSON 数组字符串）和 `announcements_enabled`（公告总开关）。单条公告包含 `id/title/content/status/notificationMode/startTime/endTime/audienceMode/conditionGroups`；状态为 `draft/active/archived`，通知方式为 `silent/popup`，条件组之间为 OR、组内条件为 AND，当前支持订阅套餐包含/排除和余额比较。旧公告读取时自动归一化为展示中、静默、所有用户，无需数据库迁移。
 
 余额条件的阈值使用前端展示额度单位；匹配时后端以 `user.quota / QuotaPerUnit` 换算。套餐条件只匹配状态为 active 且未过期的 `UserSubscription.plan_id`。开始/结束时间使用 RFC3339，空开始时间表示立即生效，空结束时间表示永久有效。
 
@@ -643,6 +643,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 | `home` | `index.tsx`、hero/gateway/stat 组件 | 公开首页内容 | `/api/home_page_content` | 完成 |
 | `dashboard` | `index.tsx`、`section-registry.tsx`、stats/charts libs | 用户/管理员看板统计 | `/api/data*`、`/api/dashboard*`、`/api/status` | 完成 |
 | `announcements` | `api.ts`、`types.ts` | 公告类型和当前用户公告查询；供顶部通知中心、自动弹窗和后台公告编辑器共享 | `/api/announcements` | 完成 |
+| `custom-endpoints` | `types.ts`、`system-settings/content/custom-endpoints-section.tsx`、`keys/components/custom-endpoints.tsx` | 自定义端点共享类型、后台编辑器、API 密钥页复制条和悬停介绍 | `/api/option`、`/api/status` | 完成 |
 | `channels` | `channels-table.tsx`、`channels-columns.tsx`、dialogs/drawers、`api.ts` | 上游渠道 CRUD/测试/配置 | `/api/channel*` | 完成 |
 | `keys` | `api-keys-table.tsx`、`api-keys-columns.tsx`、mutate/delete dialogs | 用户 API key 管理 | `/api/token*` | 完成 |
 | `usage-logs` | `usage-logs-table.tsx`、普通/绘图/生图/任务 columns、图片预览和筛选组件 | 普通消费日志、Midjourney 绘图日志、同步生图日志、异步任务日志 | `/api/log*`、`/api/mj`、`/api/image-generation-logs*`、`/api/task` | 完成 |
@@ -821,6 +822,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 
 | 日期 | 变更 | 更新文件/API/模型 | 验证 |
 | --- | --- | --- | --- |
+| 2026-07-13 | 新增自定义端点配置：管理员可在控制台内容/API 地址中维护名称、URL 和介绍；API 密钥页展示可点击复制的端点，悬停显示介绍。 | `console_setting.custom_endpoints`、`CustomEndpointsSection`、`CustomEndpoints`、`/api/status.custom_endpoints` | `go test ./...`、`bun run typecheck`、目标 lint、`bun run i18n:sync`、`git diff --check` |
 | 2026-07-13 | 重做公告自动弹窗 UI：采用通知图标、未读标记、标题/时间头部、正文强调线和标记已读操作区；多条弹窗公告逐条标记已读并切换，关闭按钮不自动标记。 | `announcement-popup.tsx`、locale files | `bun run typecheck`、目标 lint、`bun run i18n:sync`、`git diff --check` |
 | 2026-07-13 | 修复公告编辑器下拉框显示内部枚举值的问题；状态、通知方式、条件类型和运算符通过 Select items 映射显示本地化标签，并补齐草稿、归档、条件翻译。 | `announcements-section.tsx`、locale files | `bun run typecheck`、目标 lint、`bun run i18n:sync`、`git diff --check` |
 | 2026-07-13 | 将公告升级为单条发布策略：支持草稿/展示中/已归档、静默/弹窗、起止时间、所有用户或 OR-AND 条件；条件支持订阅套餐和余额。新增当前用户公告过滤接口，通知中心与弹窗只展示命中公告。 | `Announcement`/`AnnouncementConditionGroup`、`GET /api/announcements`、`AnnouncementsSection`、`AnnouncementPopup`、`useNotifications` | `go test ./...`、`bun run typecheck`、目标 lint、`bun run i18n:sync`、`git diff --check` |

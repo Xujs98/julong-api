@@ -31,6 +31,7 @@ const STATUS_RELATED_KEYS = new Set([
   'Notice',
   'console_setting.announcements',
   'console_setting.announcements_enabled',
+  'console_setting.custom_endpoints',
   'LogConsumeEnabled',
   'QuotaPerUnit',
   'USDExchangeRate',

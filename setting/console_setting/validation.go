@@ -65,6 +65,8 @@ func ValidateConsoleSettings(settingsStr string, settingType string) error {
 	switch settingType {
 	case "ApiInfo":
 		return validateApiInfo(settingsStr)
+	case "CustomEndpoints":
+		return validateCustomEndpoints(settingsStr)
 	case "Announcements":
 		return validateAnnouncements(settingsStr)
 	case "FAQ":
@@ -74,6 +76,44 @@ func ValidateConsoleSettings(settingsStr string, settingType string) error {
 	default:
 		return fmt.Errorf("未知的设置类型：%s", settingType)
 	}
+}
+
+func validateCustomEndpoints(raw string) error {
+	endpoints, err := parseJSONArray(raw, "自定义端点")
+	if err != nil {
+		return err
+	}
+	if len(endpoints) > 20 {
+		return fmt.Errorf("自定义端点数量不能超过20个")
+	}
+	for index, endpoint := range endpoints {
+		name, nameOK := endpoint["name"].(string)
+		urlValue, urlOK := endpoint["url"].(string)
+		description, descriptionOK := endpoint["description"].(string)
+		if !nameOK || strings.TrimSpace(name) == "" || len([]rune(name)) > 64 {
+			return fmt.Errorf("第%d个自定义端点名称无效", index+1)
+		}
+		if !urlOK || len(urlValue) > 500 {
+			return fmt.Errorf("第%d个自定义端点地址无效", index+1)
+		}
+		if err := validateURL(urlValue, index+1, "自定义端点"); err != nil {
+			return err
+		}
+		if !descriptionOK || strings.TrimSpace(description) == "" || len([]rune(description)) > 200 {
+			return fmt.Errorf("第%d个自定义端点介绍无效", index+1)
+		}
+		if err := checkDangerousContent(name, index+1, "自定义端点"); err != nil {
+			return err
+		}
+		if err := checkDangerousContent(description, index+1, "自定义端点"); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func GetCustomEndpoints() []map[string]interface{} {
+	return getJSONList(GetConsoleSetting().CustomEndpoints)
 }
 
 func validateApiInfo(apiInfoStr string) error {

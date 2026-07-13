@@ -24,6 +24,7 @@ import { ApiKeysDialogs } from './components/api-keys-dialogs'
 import { ApiKeysPrimaryButtons } from './components/api-keys-primary-buttons'
 import { ApiKeysProvider } from './components/api-keys-provider'
 import { ApiKeysTable } from './components/api-keys-table'
+import { CustomEndpoints } from './components/custom-endpoints'
 
 export function ApiKeys() {
   const { t } = useTranslation()
@@ -35,7 +36,10 @@ export function ApiKeys() {
           <ApiKeysPrimaryButtons />
         </SectionPageLayout.Actions>
         <SectionPageLayout.Content>
-          <ApiKeysTable />
+          <div className='space-y-5'>
+            <CustomEndpoints />
+            <ApiKeysTable />
+          </div>
         </SectionPageLayout.Content>
       </SectionPageLayout>
 

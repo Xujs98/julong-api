@@ -21,6 +21,7 @@ import { createSectionRegistry } from '../utils/section-registry'
 import { AnnouncementsSection } from './announcements-section'
 import { ApiInfoSection } from './api-info-section'
 import { ChatSettingsSection } from './chat-settings-section'
+import { CustomEndpointsSection } from './custom-endpoints-section'
 import { DashboardSection } from './dashboard-section'
 import { DrawingSettingsSection } from './drawing-settings-section'
 import { FAQSection } from './faq-section'
@@ -73,10 +74,15 @@ const CONTENT_SECTIONS = [
     id: 'api-info',
     titleKey: 'API Addresses',
     build: (settings: ContentSettings) => (
-      <ApiInfoSection
-        enabled={settings['console_setting.api_info_enabled']}
-        data={settings['console_setting.api_info']}
-      />
+      <div className='space-y-6'>
+        <ApiInfoSection
+          enabled={settings['console_setting.api_info_enabled']}
+          data={settings['console_setting.api_info']}
+        />
+        <CustomEndpointsSection
+          data={settings['console_setting.custom_endpoints']}
+        />
+      </div>
     ),
   },
   {
