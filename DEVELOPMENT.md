@@ -821,6 +821,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 
 | 日期 | 变更 | 更新文件/API/模型 | 验证 |
 | --- | --- | --- | --- |
+| 2026-07-13 | 修复公告编辑器下拉框显示内部枚举值的问题；状态、通知方式、条件类型和运算符通过 Select items 映射显示本地化标签，并补齐草稿、归档、条件翻译。 | `announcements-section.tsx`、locale files | `bun run typecheck`、目标 lint、`bun run i18n:sync`、`git diff --check` |
 | 2026-07-13 | 将公告升级为单条发布策略：支持草稿/展示中/已归档、静默/弹窗、起止时间、所有用户或 OR-AND 条件；条件支持订阅套餐和余额。新增当前用户公告过滤接口，通知中心与弹窗只展示命中公告。 | `Announcement`/`AnnouncementConditionGroup`、`GET /api/announcements`、`AnnouncementsSection`、`AnnouncementPopup`、`useNotifications` | `go test ./...`、`bun run typecheck`、目标 lint、`bun run i18n:sync`、`git diff --check` |
 | 2026-07-13 | 客服弹窗中的 QQ 联系方式支持点击后通过桌面 QQ 注册的 `tencent://message` 协议唤起本机 QQ 并打开对应聊天；保留独立复制按钮。 | `support-contact-button.tsx` | `bun run typecheck`、目标 lint、`git diff --check` |
 | 2026-07-12 | 将管理员系统设置权限扩展到全部 41 个二级菜单；增加菜单/路由过滤、`/api/option` 按页面过滤及配置键归属校验，并保护自定义 OAuth、性能、日志、支付、渠道亲和与价格同步专用接口。 | `service/authz/resources_system_settings.go`、`controller/system_settings_access.go`、`controller/option.go`、`router/api-router.go`、系统设置 permissions/routes/sidebar/settings API、管理员权限编辑器 | `go test ./...`、`bun run typecheck`、目标 lint、`bun run i18n:sync`、`git diff --check` |

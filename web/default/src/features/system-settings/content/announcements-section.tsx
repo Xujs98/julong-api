@@ -247,6 +247,19 @@ export function AnnouncementsSection({
     active: { label: t('Displaying'), variant: 'success' as const },
     archived: { label: t('Archived'), variant: 'warning' as const },
   }
+  const statusOptions = [
+    { value: 'draft', label: t('Draft') },
+    { value: 'active', label: t('Displaying') },
+    { value: 'archived', label: t('Archived') },
+  ]
+  const notificationOptions = [
+    { value: 'silent', label: t('Silent') },
+    { value: 'popup', label: t('Popup') },
+  ]
+  const conditionTypeOptions = [
+    { value: 'subscription_plan', label: t('Subscription plan') },
+    { value: 'balance', label: t('Balance') },
+  ]
 
   return (
     <SettingsSection title={t('Announcements')}>
@@ -391,6 +404,7 @@ export function AnnouncementsSection({
             <div className='space-y-2'>
               <Label>{t('Status')}</Label>
               <Select
+                items={statusOptions}
                 value={draft.status}
                 onValueChange={(value) =>
                   setDraft({
@@ -412,6 +426,7 @@ export function AnnouncementsSection({
             <div className='space-y-2'>
               <Label>{t('Notification method')}</Label>
               <Select
+                items={notificationOptions}
                 value={draft.notificationMode}
                 onValueChange={(value) =>
                   setDraft({
@@ -554,6 +569,7 @@ export function AnnouncementsSection({
                         <div className='space-y-2'>
                           <Label>{t('Condition type')}</Label>
                           <Select
+                            items={conditionTypeOptions}
                             value={condition.type}
                             onValueChange={(value) =>
                               setCondition(
@@ -591,6 +607,23 @@ export function AnnouncementsSection({
                         <div className='space-y-2'>
                           <Label>{t('Operator')}</Label>
                           <Select
+                            items={
+                              condition.type === 'subscription_plan'
+                                ? [
+                                    { value: 'in', label: t('Includes any') },
+                                    {
+                                      value: 'not_in',
+                                      label: t('Excludes all'),
+                                    },
+                                  ]
+                                : [
+                                    { value: 'gte', label: '≥' },
+                                    { value: 'lte', label: '≤' },
+                                    { value: 'gt', label: '>' },
+                                    { value: 'lt', label: '<' },
+                                    { value: 'eq', label: '=' },
+                                  ]
+                            }
                             value={condition.operator}
                             onValueChange={(value) =>
                               setCondition(group.key, condition.key, {
