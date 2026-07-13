@@ -15,6 +15,8 @@ func TestOptionAllowedForSystemSettingsAction(t *testing.T) {
 		{"WaffoPrivateKey", "billing.payment", true},
 		{"GitHubClientSecret", "auth.oauth", true},
 		{"GitHubClientSecret", "content.dashboard", false},
+		{"console_setting.announcements_popup_enabled", "content.announcements", true},
+		{"console_setting.announcements_popup_enabled", "content.dashboard", false},
 		{"unknown.option", "site.system-info", false},
 	}
 	for _, test := range tests {

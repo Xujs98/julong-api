@@ -3422,6 +3422,7 @@
     "Polling": "Sondage",
     "Polling mode requires Redis and memory cache, otherwise performance will be significantly degraded": "Le mode d'interrogation nécessite Redis et un cache mémoire, sinon les performances seront considérablement dégradées",
     "Poor": "Mauvais",
+    "Popup reminder": "Rappel contextuel",
     "Port": "Port",
     "Port must be a positive integer": "Le port doit être un entier positif",
     "Position {{position}}": "Position {{position}}",

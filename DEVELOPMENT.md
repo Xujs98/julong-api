@@ -223,7 +223,7 @@ type ApiResponse<T> = {
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | GET | `/api/setup` | `controller.GetSetup` | 读取安装/初始化状态 | 无 | setup 元数据 | 公开 | 完成 |
 | POST | `/api/setup` | `controller.PostSetup` | 初始化安装 | setup payload | success | 公开 + body limit | 完成 |
-| GET | `/api/status` | `controller.GetStatus` | 系统状态/健康检查 | 无 | status 对象 | 公开 | 完成 |
+| GET | `/api/status` | `controller.GetStatus` | 系统状态/健康检查 | 无 | status 对象；公告启用时含 `announcements`，并返回 `announcements_enabled`、`announcements_popup_enabled` | 公开 | 完成 |
 | GET | `/api/uptime/status` | `controller.GetUptimeKumaStatus` | Uptime Kuma 集成 | 无 | uptime 状态 | 公开 | 完成 |
 | GET | `/api/notice` | `controller.GetNotice` | 站点公告 | 无 | 内容 | 公开 | 完成 |
 | GET | `/api/user-agreement` | `controller.GetUserAgreement` | 用户协议 | 无 | markdown/html | 公开 | 完成 |
@@ -556,7 +556,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 | `SubscriptionOrder` | `model/subscription.go` | 订阅支付订单 | order id/user/plan/payment status 字段 | 支付回调使用。 | 活跃 |
 | `UserSubscription` | `model/subscription.go` | 用户有效订阅 | user/plan/quota/period/status，以及生图日志权限和条数快照字段 | 创建订阅时从套餐复制权益；多个有效订阅任一为 0 则无限，否则取最大条数。 | 活跃 |
 | `SubscriptionPreConsumeRecord` | `model/subscription.go` | 订阅预扣记录 | subscription/request/pre/post quota 字段 | 请求结算使用。 | 活跃 |
-| `Option` | `model/option.go` | 运行时设置 | `key`、`value` | Root 设置 API。 | 活跃 |
+| `Option` | `model/option.go` | 运行时设置 | `key`、`value` | Root 或获授权管理员通过设置 API 修改；`console_setting.announcements_popup_enabled` 默认 `false`，控制公告弹窗提醒。 | 活跃 |
 | `Setup` | `model/setup.go` | 安装/初始化状态 | setup timestamp/status | `/api/setup`。 | 活跃 |
 | `PasskeyCredential` | `model/passkey.go` | WebAuthn 凭据 | user/credential 字段 | Passkey 登录。 | 活跃 |
 | `TwoFA` / `TwoFABackupCode` | `model/twofa.go` | 2FA 密钥和备份码 | user secret/status/codes | 2FA 登录和管理员重置。 | 活跃 |
@@ -568,6 +568,8 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 | `CasbinRule` / `AuthzRole` | `model/casbin_rule.go`、`model/authz_role.go` | 细粒度管理员权限 | casbin p/v 字段和角色分配 | Admin authz catalog。 | 活跃 |
 | `ErrorReport` | `model/error_report.go` | 500 页面反馈 | `id`、`created_at`、索引 `user_id`、`username`、`title`、`message`、`page_url`、`error_status`、`user_agent`、`stack`、`ip` | Julong 二开。已加入两种迁移流程。 | 活跃 |
 | `QuotaData` / `FlowQuotaData` | `model/usedata.go`、`model/usedata_flow.go` | Dashboard 聚合用量 | date/user/quota/flow 字段 | 数据看板。 | 活跃 |
+
+`setting/console_setting/config.go:ConsoleSetting` 是存储于 `Option` 的运行时 JSON 配置结构，不单独建表。公告相关字段为 `announcements`（JSON 数组字符串）、`announcements_enabled`（是否向用户下发公告）和 `announcements_popup_enabled`（是否自动弹窗，默认关闭）；新增字段由全局配置管理器按默认值兼容旧数据库，无需数据库迁移。
 
 ### 迁移注意事项
 
@@ -618,7 +620,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 | Data table | `data-table/core/*`、`data-table/layout/*`、`data-table/toolbar/*`、`data-table/hooks/*`、`data-table/static/*` | 响应式表格系统：桌面表格、移动卡片、分页、工具栏、过滤器、视图模式、批量操作。 | TanStack Table、media query hooks、UI primitives | 完成 |
 | Layout | `layout/components/*`、`layout/config/*`、`layout/lib/*`、`layout/types.ts` | 登录后/公开布局、侧边栏、顶部导航、SectionPageLayout、系统品牌。 | TanStack Router、sidebar config hooks、auth store | 完成 |
 | AI elements | `ai-elements/*` | Playground/chat 响应渲染、prompt input、artifact、reasoning、tool、sources、code block。 | React、markdown/shiki、AI SDK 风格组件 | 完成 |
-| Utility widgets | `copy-button.tsx`、`confirm-dialog.tsx`、`date-picker.tsx`、`datetime-picker.tsx`、`empty-state.tsx`、`error-state.tsx`、`group-badge.tsx`、`json-editor.tsx`、`json-code-editor.tsx`、`language-switcher.tsx`、`long-text.tsx`、`masked-value-display.tsx`、`model-group-selector.tsx`、`multi-select.tsx`、`password-input.tsx`、`profile-dropdown.tsx`、`provider-badge.tsx`、`status-badge.tsx`、`table-id.tsx`、`tag-input.tsx`、`theme-switch.tsx`、`turnstile.tsx` | 跨功能控件和显示组件。 | UI primitives、i18n、本地格式化工具 | 完成 |
+| Utility widgets | `announcement-popup.tsx`、`copy-button.tsx`、`confirm-dialog.tsx`、`date-picker.tsx`、`datetime-picker.tsx`、`empty-state.tsx`、`error-state.tsx`、`group-badge.tsx`、`json-editor.tsx`、`json-code-editor.tsx`、`language-switcher.tsx`、`long-text.tsx`、`masked-value-display.tsx`、`model-group-selector.tsx`、`multi-select.tsx`、`password-input.tsx`、`profile-dropdown.tsx`、`provider-badge.tsx`、`status-badge.tsx`、`table-id.tsx`、`tag-input.tsx`、`theme-switch.tsx`、`turnstile.tsx` | 跨功能控件和显示组件；`AnnouncementPopup` 读取 `/api/status`，按登录用户和公告内容签名在 localStorage 记录关闭状态。 | UI primitives、React Query status hook、auth store、i18n、本地格式化工具 | 完成 |
 
 ### Feature 模块
 
@@ -807,6 +809,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 
 | 日期 | 变更 | 更新文件/API/模型 | 验证 |
 | --- | --- | --- | --- |
+| 2026-07-13 | 公告设置新增默认关闭的弹窗提醒开关；开启后登录用户进入控制台会看到公告弹窗，关闭后按用户和公告内容记录已读，公告变化时再次提醒。 | `ConsoleSetting.AnnouncementsPopupEnabled`、`console_setting.announcements_popup_enabled`、`/api/status`、`AnnouncementsSection`、`AnnouncementPopup` | `go test ./...`、`bun run typecheck`、目标 lint、`bun run i18n:sync`、`git diff --check` |
 | 2026-07-13 | 客服弹窗中的 QQ 联系方式支持点击后通过桌面 QQ 注册的 `tencent://message` 协议唤起本机 QQ 并打开对应聊天；保留独立复制按钮。 | `support-contact-button.tsx` | `bun run typecheck`、目标 lint、`git diff --check` |
 | 2026-07-12 | 将管理员系统设置权限扩展到全部 41 个二级菜单；增加菜单/路由过滤、`/api/option` 按页面过滤及配置键归属校验，并保护自定义 OAuth、性能、日志、支付、渠道亲和与价格同步专用接口。 | `service/authz/resources_system_settings.go`、`controller/system_settings_access.go`、`controller/option.go`、`router/api-router.go`、系统设置 permissions/routes/sidebar/settings API、管理员权限编辑器 | `go test ./...`、`bun run typecheck`、目标 lint、`bun run i18n:sync`、`git diff --check` |
 | 2026-07-12 | 新增概览页联系客服弹窗、客服联系方式后台配置，以及 root 可分配给管理员的客服设置权限；QQ、微信和手机使用对应类型图标。 | `SupportContacts`、`GET/PUT /api/support-contacts`、`system_settings.content.support`、`support-contacts-section.tsx`、`support-contact-button.tsx`、系统设置路由/侧边栏、locale files | `go test ./...`、`bun run typecheck`、目标 lint、`bun run i18n:sync`、`git diff --check` |

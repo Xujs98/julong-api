@@ -3422,6 +3422,7 @@
     "Polling": "輪詢",
     "Polling mode requires Redis and memory cache, otherwise performance will be significantly degraded": "輪詢模式需要 Redis 和記憶體緩存，否則效能將顯著下降",
     "Poor": "差",
+    "Popup reminder": "彈窗提醒",
     "Port": "端口",
     "Port must be a positive integer": "端口必須為正整數",
     "Position {{position}}": "第 {{position}} 位",

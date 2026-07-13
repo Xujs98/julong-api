@@ -3422,6 +3422,7 @@
     "Polling": "Thăm dò",
     "Polling mode requires Redis and memory cache, otherwise performance will be significantly degraded": "Chế độ thăm dò yêu cầu Redis và bộ nhớ đệm, nếu không hiệu suất sẽ bị suy giảm đáng kể.",
     "Poor": "Nghèo",
+    "Popup reminder": "Nhắc nhở bật lên",
     "Port": "Cảng",
     "Port must be a positive integer": "Cổng phải là số nguyên dương",
     "Position {{position}}": "Vị trí {{position}}",

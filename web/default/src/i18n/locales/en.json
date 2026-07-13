@@ -3422,6 +3422,7 @@
     "Polling": "Polling",
     "Polling mode requires Redis and memory cache, otherwise performance will be significantly degraded": "Polling mode requires Redis and memory cache, otherwise performance will be significantly degraded",
     "Poor": "Poor",
+    "Popup reminder": "Popup reminder",
     "Port": "Port",
     "Port must be a positive integer": "Port must be a positive integer",
     "Position {{position}}": "Position {{position}}",

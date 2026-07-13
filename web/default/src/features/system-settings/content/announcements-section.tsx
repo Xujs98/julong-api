@@ -76,6 +76,7 @@ type Announcement = {
 
 type AnnouncementsSectionProps = {
   enabled: boolean
+  popupEnabled: boolean
   data: string
 }
 
@@ -131,12 +132,14 @@ const typeOptions = [
 
 export function AnnouncementsSection({
   enabled,
+  popupEnabled,
   data,
 }: AnnouncementsSectionProps) {
   const { t } = useTranslation()
   const updateOption = useUpdateOption()
   const [announcements, setAnnouncements] = useState<Announcement[]>([])
   const [isEnabled, setIsEnabled] = useState(enabled)
+  const [isPopupEnabled, setIsPopupEnabled] = useState(popupEnabled)
   const [hasChanges, setHasChanges] = useState(false)
   const [selectedIds, setSelectedIds] = useState<number[]>([])
   const [showDialog, setShowDialog] = useState(false)
@@ -175,6 +178,10 @@ export function AnnouncementsSection({
     setIsEnabled(enabled)
   }, [enabled])
 
+  useEffect(() => {
+    setIsPopupEnabled(popupEnabled)
+  }, [popupEnabled])
+
   const handleToggleEnabled = async (checked: boolean) => {
     try {
       await updateOption.mutateAsync({
@@ -182,6 +189,19 @@ export function AnnouncementsSection({
         value: checked,
       })
       setIsEnabled(checked)
+      toast.success(t('Setting saved'))
+    } catch {
+      toast.error(t('Failed to update setting'))
+    }
+  }
+
+  const handleTogglePopup = async (checked: boolean) => {
+    try {
+      await updateOption.mutateAsync({
+        key: 'console_setting.announcements_popup_enabled',
+        value: checked,
+      })
+      setIsPopupEnabled(checked)
       toast.success(t('Setting saved'))
     } catch {
       toast.error(t('Failed to update setting'))
@@ -338,12 +358,21 @@ export function AnnouncementsSection({
               {updateOption.isPending ? t('Saving...') : t('Save Settings')}
             </Button>
           </div>
-          <SettingsSwitchField
-            checked={isEnabled}
-            onCheckedChange={handleToggleEnabled}
-            label={t('Enabled')}
-            className='py-0'
-          />
+          <div className='flex flex-wrap items-center gap-x-5 gap-y-2'>
+            <SettingsSwitchField
+              checked={isPopupEnabled}
+              onCheckedChange={handleTogglePopup}
+              label={t('Popup reminder')}
+              disabled={!isEnabled}
+              className='gap-2 py-0'
+            />
+            <SettingsSwitchField
+              checked={isEnabled}
+              onCheckedChange={handleToggleEnabled}
+              label={t('Enabled')}
+              className='gap-2 py-0'
+            />
+          </div>
         </div>
 
         <StaticDataTable

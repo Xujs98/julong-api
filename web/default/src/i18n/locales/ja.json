@@ -3422,6 +3422,7 @@
     "Polling": "ポーリング",
     "Polling mode requires Redis and memory cache, otherwise performance will be significantly degraded": "ポーリングモードにはRedisとメモリキャッシュが必要です。そうでない場合、パフォーマンスが大幅に低下します",
     "Poor": "悪い",
+    "Popup reminder": "ポップアップ通知",
     "Port": "ポート",
     "Port must be a positive integer": "ポートは正の整数でなければなりません",
     "Position {{position}}": "{{position}} 番目",

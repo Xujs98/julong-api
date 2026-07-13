@@ -3422,6 +3422,7 @@
     "Polling": "Опрос",
     "Polling mode requires Redis and memory cache, otherwise performance will be significantly degraded": "Режим опроса требует Redis и кэш памяти, в противном случае производительность будет значительно снижена",
     "Poor": "Плохо",
+    "Popup reminder": "Всплывающее уведомление",
     "Port": "Порт",
     "Port must be a positive integer": "Порт должен быть положительным целым числом",
     "Position {{position}}": "Позиция {{position}}",
