@@ -103,7 +103,7 @@ func TestUpdateUserLastLoginStoresTimestampAndIP(t *testing.T) {
 	}
 	require.NoError(t, DB.Create(&user).Error)
 
-	UpdateUserLastLogin(user.Id, "2001:db8::1")
+	UpdateUserLastLogin(user.Id, "2001:0db8:0:0:0:0:0:1")
 
 	var got User
 	require.NoError(t, DB.First(&got, user.Id).Error)

@@ -80,6 +80,14 @@ type Log struct {
 	Other             string `json:"other"`
 }
 
+type UserLoginIPStat struct {
+	IP              string `json:"ip"`
+	LastLoginAt     int64  `json:"last_login_at"`
+	LoginCount      int64  `json:"login_count"`
+	Blocked         bool   `json:"blocked" gorm:"-:all"`
+	SharedUserCount int64  `json:"shared_user_count" gorm:"-:all"`
+}
+
 // don't use iota, avoid change log type value
 const (
 	LogTypeUnknown = 0
@@ -232,6 +240,9 @@ func buildOpField(action string, params map[string]interface{}) map[string]inter
 // content 为英文兜底文本（用于导出/经典前端）；action+params 供前端本地化渲染。
 // extra 可携带 login_method、user_agent 等附加信息（普通用户可见）。
 func RecordLoginLog(userId int, username string, content string, ip string, action string, params map[string]interface{}, extra map[string]interface{}) {
+	if normalized, err := NormalizeIPAddress(ip); err == nil {
+		ip = normalized
+	}
 	other := map[string]interface{}{}
 	for k, v := range extra {
 		other[k] = v
@@ -249,6 +260,17 @@ func RecordLoginLog(userId int, username string, content string, ip string, acti
 	if err := createLog(log); err != nil {
 		common.SysLog("failed to record login log: " + err.Error())
 	}
+}
+
+func GetUserLoginIPStats(userId int) ([]UserLoginIPStat, error) {
+	stats := make([]UserLoginIPStat, 0)
+	err := LOG_DB.Model(&Log{}).
+		Select("ip, MAX(created_at) AS last_login_at, COUNT(*) AS login_count").
+		Where("user_id = ? AND type = ? AND ip <> ''", userId, LogTypeLogin).
+		Group("ip").
+		Order("last_login_at DESC").
+		Scan(&stats).Error
+	return stats, err
 }
 
 // RecordOperationAuditLog 记录管理/高危操作审计日志（type=LogTypeManage）。

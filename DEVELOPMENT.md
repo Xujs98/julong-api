@@ -24,7 +24,7 @@
 | Docker 部署 | 进行中 | `docker-compose.yml` 使用 `qq1371446705/julong-api:latest`，包含 Postgres、Redis，宿主端口 `3388`。 |
 | 代理功能 | 已实现，仍需持续 QA | 代理折扣、代理生成兑换码、代理所属用户、代理充值链接、退款日志等。 |
 | 错误反馈工单 | 已实现 | 500 页面跳转 `/error-report`，管理员/root 在 `/error-reports` 查看。 |
-| 用户详情弹窗 | 已实现 | 后台用户列表点击用户名可查看基本信息、最近登录时间/IP、未登录天数、最近使用日志、总消耗 token。 |
+| 用户详情与 IP 管理 | 已实现 | 后台用户详情显示登录 IP 历史并支持多选封禁/解封；用户列表标记共享 IP 和已封 IP。 |
 | 兑换码搜索 | 已实现 | 后台兑换码支持按兑换码 key、生成者用户名/显示名、名称、ID、状态搜索。 |
 | 签到额度预览 | 已实现 | 计费与支付中的签到奖励输入框显示格式化额度预览。 |
 | 生图日志 | 已实现 | 成功的 `/v1/images/generations` 请求可按 root 开关记录提示词和图片，并在任务日志中查看；默认关闭。 |
@@ -296,9 +296,11 @@ curl http://localhost:3000/api/error-reports \
 | POST | `/api/user/` | `controller.CreateUser` | 创建用户 | `UserFormData` | `User` | 完成 |
 | PUT | `/api/user/` | `controller.UpdateUser` | 更新用户 | `UserFormData & {id}` | partial `User` | 完成 |
 | DELETE | `/api/user/:id` | `controller.DeleteUser` | 删除用户 | path `id` | success | 完成 |
-| POST | `/api/user/manage` | `controller.ManageUser` | 晋升/降级/启用/禁用/删除/额度调整 | `{id,action,...}` | partial `User` | 完成 |
+| POST | `/api/user/manage` | `controller.ManageUser` | 晋升/降级/启用/禁用/删除/额度调整；`disable` 同时封禁全部已知登录 IP | `{id,action,...}` | partial `User` | 完成 |
 | GET | `/api/user/agent-detail/:id` | `controller.AdminGetAgentDetail` | 代理详情弹窗 | path `id` | `{agent,users,redemptions}` | 完成 |
 | GET | `/api/user/:id/usage-summary` | `controller.AdminGetUserUsageSummary` | 用户详情弹窗总 token 消耗 | path `id` | `{total_tokens:number}` | 完成 |
+| GET | `/api/user/:id/login-ips` | `controller.AdminGetUserLoginIPs` | 用户历史登录 IP、登录次数、最后使用时间、封禁和共享状态 | path `id` | `UserLoginIPStat[]` | 完成；管理员仅可查看低权限用户，root 可查看全部 |
+| PUT | `/api/user/:id/login-ips` | `controller.AdminUpdateUserLoginIPs` | 批量封禁或解封登录 IP | path `id`；`{ips:string[],blocked:boolean}`，1-100 个标准 IPv4/IPv6 | success | 完成；管理员仅可操作低权限用户，root 可操作全部；非法 IP 返回参数错误 |
 | GET | `/api/user/topup` | `controller.GetAllTopUps` | 管理员充值列表 | `p`, `page_size` | top-up page | 完成 |
 | POST | `/api/user/topup/complete` | `controller.AdminCompleteTopUp` | 手动完成充值订单 | `{trade_no}` | success | 完成 |
 | GET | `/api/user/:id/oauth/bindings` | `controller.GetUserOAuthBindingsByAdmin` | OAuth 绑定列表 | path `id` | binding list | 完成 |
@@ -307,6 +309,22 @@ curl http://localhost:3000/api/error-reports \
 | DELETE | `/api/user/:id/reset_passkey` | `controller.AdminResetPasskey` | 重置 Passkey | path `id` | success | 完成 |
 | GET | `/api/user/2fa/stats` | `controller.Admin2FAStats` | 2FA 统计 | 无 | stats | 完成 |
 | DELETE | `/api/user/:id/2fa` | `controller.AdminDisable2FA` | 禁用用户 2FA | path `id` | success | 完成 |
+
+IP 管理调用示例：
+
+```bash
+curl 'http://localhost:3000/api/user/12/login-ips' \
+  -H 'Cookie: <admin-session-cookie>' \
+  -H 'New-Api-User: <admin-user-id>'
+
+curl -X PUT 'http://localhost:3000/api/user/12/login-ips' \
+  -H 'Content-Type: application/json' \
+  -H 'Cookie: <admin-session-cookie>' \
+  -H 'New-Api-User: <admin-user-id>' \
+  -d '{"ips":["203.0.113.8","2001:db8::8"],"blocked":true}'
+```
+
+错误处理：空列表、超过 100 个 IP 或任一非法 IP 返回参数错误且不写入；目标用户不存在返回查询错误；管理员操作同级/更高角色返回权限错误；主库或日志库异常返回数据库错误。写接口经过管理员审计中间件，并由 `recordManageAuditFor` 记录目标用户、操作数量和封禁状态。
 
 调用示例：
 
@@ -546,11 +564,12 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 
 | 模型 | 文件 | 表用途 | 关键字段和约束 | 关系/说明 | 状态 |
 | --- | --- | --- | --- | --- | --- |
-| `User` | `model/user.go` | Dashboard 用户 | `id`、唯一索引 `username`、`password`、`display_name`、`role`、`status`、`email`、`quota`、`used_quota`、`request_count`、`group`、唯一 `aff_code`、`inviter_id`、`is_agent`、`agent_discount`、`agent_topup_link`、`stripe_customer`、`last_login_at`、IPv4/IPv6 `last_login_ip`、时间戳 | 列表/详情必须隐藏 password/access token。登录成功统一在 `setupLogin` 更新最近登录时间和 IP；代理字段为 Julong 二开。`AdminPermissions` 是 transient 字段。 | 活跃 |
+| `User` | `model/user.go` | Dashboard 用户 | `id`、唯一索引 `username`、`password`、`display_name`、`role`、`status`、`email`、`quota`、`used_quota`、`request_count`、`group`、唯一 `aff_code`、`inviter_id`、`is_agent`、`agent_discount`、`agent_topup_link`、`stripe_customer`、`last_login_at`、IPv4/IPv6 `last_login_ip`、时间戳 | 列表/详情必须隐藏 password/access token。登录成功统一在 `setupLogin` 更新时间/IP；`shared_ip_user_count`、`last_login_ip_blocked`、`AdminPermissions` 均为 transient 字段。 | 活跃 |
+| `BlockedIP` | `model/blocked_ip.go` | 全局 IP 黑名单 | 唯一 `ip varchar(45)`、索引 `user_id` 来源用户、索引 `operator_id` 操作者、`reason varchar(255)`、创建/更新时间 | IP 经 `net.ParseIP` 标准化；封禁状态使用 Redis 或 60 秒本地缓存。普通用户登录、注册、Dashboard 会话和 API Token 鉴权均拦截；管理员/root Dashboard 登录豁免。 | 活跃 |
 | `Token` | `model/token.go` | API keys | `id`、`user_id`、`key`、`name`、额度字段、模型限制、group、allow IPs | Relay 鉴权和计费使用。 | 活跃 |
 | `Channel` | `model/channel.go` | 上游 provider 渠道 | `id`、`type`、`key`、`base_url`、`models`、`group`、状态、priority/weight、计费/override 字段 | 由 distributor middleware 选择。敏感 key 需要脱敏。 | 活跃 |
 | `Ability` | `model/ability.go` | 渠道/模型能力映射 | channel/model/group enabled 字段 | 用于模型可用性和路由。 | 活跃 |
-| `Log` | `model/log.go` | 使用日志和审计日志 | `id`、`user_id`、`created_at`、`type`、`content`、`username`、`token_name`、`model_name`、`quota`、`prompt_tokens`、`completion_tokens`、`channel_id`、`request_id`、`upstream_request_id`、`other` | 可位于独立日志库/ClickHouse。`SumUserUsedToken` 为用户详情总 token 消耗提供数据。 | 活跃 |
+| `Log` | `model/log.go` | 使用日志和审计日志 | `id`、`user_id`、`created_at`、`type`、`content`、`username`、`token_name`、`model_name`、`quota`、`prompt_tokens`、`completion_tokens`、`channel_id`、`ip`、`request_id`、`upstream_request_id`、`other` | 可位于独立日志库/ClickHouse。`GetUserLoginIPStats` 聚合登录 IP、次数和最后时间；`SumUserUsedToken` 提供总 token 消耗。 | 活跃 |
 | `ImageGenerationLog` | `model/image_generation_log.go` | 同步生图请求日志 | `id`、索引 `user_id/username/token_id/channel_id/model_name/request_id/created_at`、`prompt`、`size`、`quality`、`image_count`、JSON 字符串 `images`、`quota`、`use_time` | 图片引用存主库；base64 解码后的文件默认存 `image-generation-logs/`，不写入数据库。 | 活跃 |
 | `Redemption` | `model/redemption.go` | 兑换码 | 唯一 `key`、`user_id` 生成者、`status`、`name`、`quota`、`created_time`、`redeemed_time`、`used_user_id`、`expired_time`、`agent_charge`、软删除 | 生成者显示字段是 transient。搜索支持 code、生成者、ID、名称。代理退款使用 `agent_charge`。 | 活跃 |
 | `TopUp` | `model/topup.go` | 在线支付/充值订单 | trade no、user、amount/money、provider、status | 支付回调结算。 | 活跃 |
@@ -590,6 +609,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 - SQLite 字段变更必须用已有本地 `one-api.db` 测试迁移。
 - 仅用于 JSON 响应、不入库的字段要加 `gorm:"-:all"`。
 - `User.last_login_ip` 由现有 `User` AutoMigrate 在服务启动时自动补列，无需注册新的迁移模型；长度 45，可保存 IPv4 和 IPv6。
+- `BlockedIP` 已加入 `migrateDB()` 和 `migrateDBFast()`；部署新版本启动后自动创建 `blocked_ips` 表，不改动现有用户和日志数据。
 
 ## 前端路由
 
@@ -709,7 +729,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 相关文件：
 
 - 前端：`web/default/src/features/users/components/user-detail-dialog.tsx`、`users-columns.tsx`、`users/index.tsx`。
-- 后端：`controller/user.go:AdminGetUserUsageSummary`、`model/log.go:SumUserUsedToken`、路由 `/api/user/:id/usage-summary`。
+- 后端：`controller/user.go:AdminGetUserUsageSummary/AdminGetUserLoginIPs/AdminUpdateUserLoginIPs`、`model/log.go:GetUserLoginIPStats/SumUserUsedToken`、`model/blocked_ip.go`。
 
 行为：
 
@@ -719,6 +739,11 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 - 代理详情和用户详情采用统一的紧凑弹窗布局：身份摘要置顶，关键额度/用量指标独立展示，基本信息使用单一网格面板。
 - 弹窗限制在可视区域内滚动；移动端详情单列显示，日志、兑换码和所属用户表格支持横向滚动。
 - 用户详情基本信息区显示有效订阅摘要；前端并行读取用户订阅与套餐列表，展示套餐名称、状态、剩余额度、到期时间和有效订阅数量。
+- “登录 IP”页签聚合每个历史 IP 的登录次数和最后使用时间，可多选封禁/解封；同一最近登录 IP 被多个未删除用户使用时显示共享人数。
+- `LoginIPPanel` 依赖 `getUserLoginIPs/updateUserLoginIPs` 和 React Query，关键参数为 `userId/onUpdated`；`LoginIPRow` 负责移动端/桌面 IP、次数、时间、共享和封禁状态展示，均已完成。
+- 禁用用户会在同一个主库事务中禁用账号并封禁该用户全部登录审计 IP 及最近 IP。重新启用账号不会自动解封 IP，必须在登录 IP 页签手动选择解封。
+- 用户列表执行禁用前显示破坏性确认弹窗，明确提示 IP 联动封禁及重新启用不会自动解封。
+- 黑名单阻止普通用户注册、登录、已有 Dashboard 会话和 API Token 请求；管理员/root 的 Dashboard 登录豁免，避免共享办公出口 IP 导致后台锁死。
 
 ### 兑换码搜索增强
 
@@ -773,6 +798,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 | 生产 Compose 包含示例密码 | 若直接公开部署存在安全风险 | 部署前手动修改密码 | 移到 `.env` 或 Docker secrets。 |
 | 错误反馈提交接口公开 | 可能被刷反馈 | 当前有全局限流和 body limit | 如被滥用，增加专用限流或验证码。 |
 | 代理规则需要更多回归测试 | 计费/退款 bug 风险高 | 当前依赖手动 QA 和已有测试 | 增加 agent 创建/删除/退款/兑换限制的 model/controller 测试。 |
+| 未启用 Redis 的多实例部署中，IP 黑名单负缓存最多延迟 60 秒同步 | 另一实例可能短暂继续放行刚封禁的 IP | 单实例立即失效；Redis 部署使用共享缓存并立即失效 | 生产多实例必须启用 Redis，或增加数据库通知机制。 |
 
 ## 技术债
 
@@ -797,6 +823,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 - 兑换码列表移动端操作优化。
 - 从 500 页面提交/后台查看错误反馈。
 - 后台用户列表点击用户名查看用户详情。
+- 管理员/root 可查看、批量封禁/解封用户历史登录 IP；禁用用户自动封禁其已有 IP，用户列表标记共享和已封 IP。
 - 兑换码支持按生成者、兑换码、名称、ID 搜索。
 - 签到奖励额度预览。
 - 可由 root 开关控制、支持图片预览和自动保留清理的生图日志。
@@ -823,6 +850,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 
 | 日期 | 变更 | 更新文件/API/模型 | 验证 |
 | --- | --- | --- | --- |
+| 2026-07-16 | 新增管理员/root 用户 IP 管理：历史登录 IP 多选封禁/解封、禁用用户事务联动封禁、普通用户登录/注册/会话/API Token 拦截，以及用户列表共享 IP/已封 IP 标记。 | `BlockedIP`、`GetUserLoginIPStats`、`ManageUser`、`AdminGetUserLoginIPs`、`AdminUpdateUserLoginIPs`、`middleware/auth.go`、用户详情/列表、locale files | `go test ./...`、`bun run typecheck`、`bun run build`、`oxfmt --check`、`bun run i18n:sync`、`git diff --check`；目标组件 lint 的 5 项既有问题单独记录 |
 | 2026-07-16 | 用户详情在最近登录时间下显示未登录天数；按当前时间与 `last_login_at` 的完整 24 小时间隔动态计算，无登录记录时显示“从未登录”。 | `user-detail-dialog.tsx`、locale files | `bun run typecheck`、`oxfmt --check`、`bun run i18n:sync`、`git diff --check`；目标组件 lint 仅命中 5 项既有规则问题 |
 | 2026-07-16 | 用户登录成功时记录最近登录 IP，并在管理员/root 用户详情基本信息中展示；统一登录收口覆盖密码、2FA、OAuth、微信、Telegram 和 Passkey。 | `User.last_login_ip`、`model.UpdateUserLastLogin`、`controller.setupLogin`、`user-detail-dialog.tsx` | `go test ./...`、`bun run typecheck`、`bun run i18n:sync`、`git diff --check`；目标组件 lint 仅命中 5 项既有规则问题 |
 | 2026-07-14 | 新增 Docker 线上部署手册，记录本地构建/推送、服务器更新、数据备份、安全注意事项、回滚和常见故障处理。 | `docker线上部署.md` | 文件存在检查、Compose 参数核对、`git diff --check` |

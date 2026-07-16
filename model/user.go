@@ -21,44 +21,46 @@ const UserNameMaxLength = 20
 // User if you add sensitive fields, don't forget to clean them in setupLogin function.
 // Otherwise, the sensitive information will be saved on local storage in plain text!
 type User struct {
-	Id               int                        `json:"id"`
-	Username         string                     `json:"username" gorm:"unique;index" validate:"max=20"`
-	Password         string                     `json:"password" gorm:"not null;" validate:"min=8,max=20"`
-	OriginalPassword string                     `json:"original_password" gorm:"-:all"` // this field is only for Password change verification, don't save it to database!
-	DisplayName      string                     `json:"display_name" gorm:"index" validate:"max=20"`
-	Role             int                        `json:"role" gorm:"type:int;default:1"`   // admin, common
-	Status           int                        `json:"status" gorm:"type:int;default:1"` // enabled, disabled
-	Email            string                     `json:"email" gorm:"index" validate:"max=50"`
-	GitHubId         string                     `json:"github_id" gorm:"column:github_id;index"`
-	DiscordId        string                     `json:"discord_id" gorm:"column:discord_id;index"`
-	OidcId           string                     `json:"oidc_id" gorm:"column:oidc_id;index"`
-	WeChatId         string                     `json:"wechat_id" gorm:"column:wechat_id;index"`
-	TelegramId       string                     `json:"telegram_id" gorm:"column:telegram_id;index"`
-	VerificationCode string                     `json:"verification_code" gorm:"-:all"`                         // this field is only for Email verification, don't save it to database!
-	AccessToken      *string                    `json:"-" gorm:"type:char(32);column:access_token;uniqueIndex"` // this token is for system management
-	Quota            int                        `json:"quota" gorm:"type:int;default:0"`
-	UsedQuota        int                        `json:"used_quota" gorm:"type:int;default:0;column:used_quota"` // used quota
-	RequestCount     int                        `json:"request_count" gorm:"type:int;default:0;"`               // request number
-	Group            string                     `json:"group" gorm:"type:varchar(64);default:'default'"`
-	AffCode          string                     `json:"aff_code" gorm:"type:varchar(32);column:aff_code;uniqueIndex"`
-	AffCount         int                        `json:"aff_count" gorm:"type:int;default:0;column:aff_count"`
-	AffQuota         int                        `json:"aff_quota" gorm:"type:int;default:0;column:aff_quota"`           // 邀请剩余额度
-	AffHistoryQuota  int                        `json:"aff_history_quota" gorm:"type:int;default:0;column:aff_history"` // 邀请历史额度
-	InviterId        int                        `json:"inviter_id" gorm:"type:int;column:inviter_id;index"`
-	IsAgent          bool                       `json:"is_agent" gorm:"type:bool;default:false;column:is_agent"`
-	AgentDiscount    int                        `json:"agent_discount" gorm:"type:int;default:100;column:agent_discount"`
-	AgentTopUpLink   string                     `json:"agent_topup_link" gorm:"type:varchar(255);column:agent_topup_link" validate:"max=255"`
-	AgentId          int                        `json:"agent_id,omitempty" gorm:"-:all"`
-	AgentUsername    string                     `json:"agent_username,omitempty" gorm:"-:all"`
-	DeletedAt        gorm.DeletedAt             `gorm:"index"`
-	LinuxDOId        string                     `json:"linux_do_id" gorm:"column:linux_do_id;index"`
-	Setting          string                     `json:"setting" gorm:"type:text;column:setting"`
-	Remark           string                     `json:"remark,omitempty" gorm:"type:varchar(255)" validate:"max=255"`
-	StripeCustomer   string                     `json:"stripe_customer" gorm:"type:varchar(64);column:stripe_customer;index"`
-	CreatedAt        int64                      `json:"created_at" gorm:"autoCreateTime;column:created_at"`
-	LastLoginAt      int64                      `json:"last_login_at" gorm:"default:0;column:last_login_at"`
-	LastLoginIP      string                     `json:"last_login_ip" gorm:"type:varchar(45);default:'';column:last_login_ip"`
-	AdminPermissions map[string]map[string]bool `json:"admin_permissions,omitempty" gorm:"-:all"`
+	Id                 int                        `json:"id"`
+	Username           string                     `json:"username" gorm:"unique;index" validate:"max=20"`
+	Password           string                     `json:"password" gorm:"not null;" validate:"min=8,max=20"`
+	OriginalPassword   string                     `json:"original_password" gorm:"-:all"` // this field is only for Password change verification, don't save it to database!
+	DisplayName        string                     `json:"display_name" gorm:"index" validate:"max=20"`
+	Role               int                        `json:"role" gorm:"type:int;default:1"`   // admin, common
+	Status             int                        `json:"status" gorm:"type:int;default:1"` // enabled, disabled
+	Email              string                     `json:"email" gorm:"index" validate:"max=50"`
+	GitHubId           string                     `json:"github_id" gorm:"column:github_id;index"`
+	DiscordId          string                     `json:"discord_id" gorm:"column:discord_id;index"`
+	OidcId             string                     `json:"oidc_id" gorm:"column:oidc_id;index"`
+	WeChatId           string                     `json:"wechat_id" gorm:"column:wechat_id;index"`
+	TelegramId         string                     `json:"telegram_id" gorm:"column:telegram_id;index"`
+	VerificationCode   string                     `json:"verification_code" gorm:"-:all"`                         // this field is only for Email verification, don't save it to database!
+	AccessToken        *string                    `json:"-" gorm:"type:char(32);column:access_token;uniqueIndex"` // this token is for system management
+	Quota              int                        `json:"quota" gorm:"type:int;default:0"`
+	UsedQuota          int                        `json:"used_quota" gorm:"type:int;default:0;column:used_quota"` // used quota
+	RequestCount       int                        `json:"request_count" gorm:"type:int;default:0;"`               // request number
+	Group              string                     `json:"group" gorm:"type:varchar(64);default:'default'"`
+	AffCode            string                     `json:"aff_code" gorm:"type:varchar(32);column:aff_code;uniqueIndex"`
+	AffCount           int                        `json:"aff_count" gorm:"type:int;default:0;column:aff_count"`
+	AffQuota           int                        `json:"aff_quota" gorm:"type:int;default:0;column:aff_quota"`           // 邀请剩余额度
+	AffHistoryQuota    int                        `json:"aff_history_quota" gorm:"type:int;default:0;column:aff_history"` // 邀请历史额度
+	InviterId          int                        `json:"inviter_id" gorm:"type:int;column:inviter_id;index"`
+	IsAgent            bool                       `json:"is_agent" gorm:"type:bool;default:false;column:is_agent"`
+	AgentDiscount      int                        `json:"agent_discount" gorm:"type:int;default:100;column:agent_discount"`
+	AgentTopUpLink     string                     `json:"agent_topup_link" gorm:"type:varchar(255);column:agent_topup_link" validate:"max=255"`
+	AgentId            int                        `json:"agent_id,omitempty" gorm:"-:all"`
+	AgentUsername      string                     `json:"agent_username,omitempty" gorm:"-:all"`
+	DeletedAt          gorm.DeletedAt             `gorm:"index"`
+	LinuxDOId          string                     `json:"linux_do_id" gorm:"column:linux_do_id;index"`
+	Setting            string                     `json:"setting" gorm:"type:text;column:setting"`
+	Remark             string                     `json:"remark,omitempty" gorm:"type:varchar(255)" validate:"max=255"`
+	StripeCustomer     string                     `json:"stripe_customer" gorm:"type:varchar(64);column:stripe_customer;index"`
+	CreatedAt          int64                      `json:"created_at" gorm:"autoCreateTime;column:created_at"`
+	LastLoginAt        int64                      `json:"last_login_at" gorm:"default:0;column:last_login_at"`
+	LastLoginIP        string                     `json:"last_login_ip" gorm:"type:varchar(45);default:'';column:last_login_ip"`
+	SharedIPUserCount  int64                      `json:"shared_ip_user_count,omitempty" gorm:"-:all"`
+	LastLoginIPBlocked bool                       `json:"last_login_ip_blocked,omitempty" gorm:"-:all"`
+	AdminPermissions   map[string]map[string]bool `json:"admin_permissions,omitempty" gorm:"-:all"`
 }
 
 func (user *User) ToBaseUser() *UserBase {
@@ -324,6 +326,7 @@ func GetAllUsers(pageInfo *common.PageInfo) (users []*User, total int64, err err
 	}
 
 	fillAgentInfo(users)
+	fillUserIPInfo(users)
 
 	return users, total, nil
 }
@@ -394,6 +397,7 @@ func SearchUsers(keyword string, group string, role *int, status *int, startIdx 
 	}
 
 	fillAgentInfo(users)
+	fillUserIPInfo(users)
 
 	return users, total, nil
 }
@@ -452,6 +456,37 @@ func fillAgentInfo(users []*User) {
 		if agent, ok := agentById[user.InviterId]; ok {
 			user.AgentId = agent.Id
 			user.AgentUsername = agent.Username
+		}
+	}
+}
+
+func fillUserIPInfo(users []*User) {
+	ips := make([]string, 0, len(users))
+	seen := make(map[string]struct{}, len(users))
+	for _, user := range users {
+		if user.LastLoginIP == "" {
+			continue
+		}
+		if _, ok := seen[user.LastLoginIP]; ok {
+			continue
+		}
+		seen[user.LastLoginIP] = struct{}{}
+		ips = append(ips, user.LastLoginIP)
+	}
+	if len(ips) == 0 {
+		return
+	}
+	counts, countErr := GetSharedLastLoginIPCounts(ips)
+	blocked, blockedErr := GetBlockedIPSet(ips)
+	if countErr != nil && blockedErr != nil {
+		return
+	}
+	for _, user := range users {
+		if countErr == nil {
+			user.SharedIPUserCount = counts[user.LastLoginIP]
+		}
+		if blockedErr == nil {
+			user.LastLoginIPBlocked = blocked[user.LastLoginIP]
 		}
 	}
 }
@@ -1193,6 +1228,9 @@ func GetRootUser() (user *User) {
 }
 
 func UpdateUserLastLogin(id int, ip string) {
+	if normalized, err := NormalizeIPAddress(ip); err == nil {
+		ip = normalized
+	}
 	if err := DB.Model(&User{}).Where("id = ?", id).Updates(map[string]interface{}{
 		"last_login_at": common.GetTimestamp(),
 		"last_login_ip": ip,

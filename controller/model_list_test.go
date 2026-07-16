@@ -49,7 +49,7 @@ func setupModelListControllerTestDB(t *testing.T) *gorm.DB {
 	model.DB = db
 	model.LOG_DB = db
 
-	require.NoError(t, db.AutoMigrate(&model.User{}, &model.Channel{}, &model.Ability{}, &model.Model{}, &model.Vendor{}))
+	require.NoError(t, db.AutoMigrate(&model.User{}, &model.BlockedIP{}, &model.Channel{}, &model.Ability{}, &model.Model{}, &model.Vendor{}))
 
 	t.Cleanup(func() {
 		sqlDB, err := db.DB()
@@ -364,4 +364,35 @@ func TestSetupLoginDoesNotTouchPasswordWhenPasswordFieldOmitted(t *testing.T) {
 	var stored model.User
 	require.NoError(t, db.First(&stored, user.Id).Error)
 	assert.Equal(t, hashedPassword, stored.Password)
+}
+
+func TestSetupLoginRejectsBlockedIPForCommonUser(t *testing.T) {
+	db := setupModelListControllerTestDB(t)
+	require.NoError(t, db.AutoMigrate(&model.Log{}))
+	require.NoError(t, model.BlockIPAddresses([]string{"192.0.2.1"}, 1, 99, "test"))
+
+	user := &model.User{
+		Username: "blocked-login-user",
+		Password: "password",
+		Role:     common.RoleCommonUser,
+		Status:   common.UserStatusEnabled,
+		Group:    "default",
+	}
+	require.NoError(t, db.Create(user).Error)
+
+	router := gin.New()
+	store := cookie.NewStore([]byte("test-session-secret"))
+	router.Use(sessions.Sessions("session", store))
+	router.GET("/", func(c *gin.Context) {
+		setupLogin(user, c)
+	})
+
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/", nil)
+	router.ServeHTTP(recorder, request)
+
+	assert.Equal(t, http.StatusForbidden, recorder.Code)
+	var stored model.User
+	require.NoError(t, db.First(&stored, user.Id).Error)
+	assert.Zero(t, stored.LastLoginAt)
 }

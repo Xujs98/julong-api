@@ -137,6 +137,8 @@ func SetApiRouter(router *gin.Engine) {
 				adminRoute.GET("/search", controller.SearchUsers)
 				adminRoute.GET("/agent-detail/:id", controller.AdminGetAgentDetail)
 				adminRoute.GET("/:id/usage-summary", controller.AdminGetUserUsageSummary)
+				adminRoute.GET("/:id/login-ips", controller.AdminGetUserLoginIPs)
+				adminRoute.PUT("/:id/login-ips", controller.AdminUpdateUserLoginIPs)
 				adminRoute.GET("/:id/oauth/bindings", controller.GetUserOAuthBindingsByAdmin)
 				adminRoute.DELETE("/:id/oauth/bindings/:provider_id", controller.UnbindCustomOAuthByAdmin)
 				adminRoute.DELETE("/:id/bindings/:binding_type", controller.AdminClearUserBinding)

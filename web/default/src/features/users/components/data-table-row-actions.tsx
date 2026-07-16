@@ -70,6 +70,7 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
   const { setOpen, setCurrentRow, triggerRefresh } = useUsers()
   const [resetPasskeyOpen, setResetPasskeyOpen] = useState(false)
   const [resetTwoFAOpen, setResetTwoFAOpen] = useState(false)
+  const [disableUserOpen, setDisableUserOpen] = useState(false)
   const [bindingDialogOpen, setBindingDialogOpen] = useState(false)
   const [subscriptionsDialogOpen, setSubscriptionsDialogOpen] = useState(false)
 
@@ -170,7 +171,10 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
           </DropdownMenuItem>
         ) : (
           <DropdownMenuItem
-            onClick={() => handleManage('disable')}
+            onSelect={(event) => {
+              event.preventDefault()
+              setDisableUserOpen(true)
+            }}
             disabled={isRoot}
           >
             {t('Disable')}
@@ -263,6 +267,22 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
           </DropdownMenuShortcut>
         </DropdownMenuItem>
       </DataTableRowActionMenu>
+
+      <ConfirmDialog
+        open={disableUserOpen}
+        onOpenChange={setDisableUserOpen}
+        title={t('Disable user and block IPs?')}
+        desc={t(
+          'Disabling {{username}} will also block all known login IP addresses. Re-enabling the user will not unblock them automatically.',
+          { username: user.username }
+        )}
+        confirmText={t('Disable')}
+        destructive
+        handleConfirm={async () => {
+          await handleManage('disable')
+          setDisableUserOpen(false)
+        }}
+      />
 
       <ConfirmDialog
         open={resetPasskeyOpen}

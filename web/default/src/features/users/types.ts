@@ -64,6 +64,8 @@ export const userSchema = z.object({
   updated_at: z.number().optional(),
   last_login_at: z.number().optional(),
   last_login_ip: z.string().optional(),
+  shared_ip_user_count: z.number().optional(),
+  last_login_ip_blocked: z.boolean().optional(),
   DeletedAt: z.any().nullable().optional(),
   remark: z.string().optional(),
   admin_permissions: z
@@ -153,6 +155,14 @@ export interface AgentDetailData {
 
 export interface UserUsageSummary {
   total_tokens: number
+}
+
+export interface UserLoginIP {
+  ip: string
+  last_login_at: number
+  login_count: number
+  blocked: boolean
+  shared_user_count: number
 }
 
 export type UsersDialogType =

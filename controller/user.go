@@ -136,6 +136,9 @@ func recordLoginAudit(user *model.User, c *gin.Context) {
 
 // setup session & cookies and then return user info
 func setupLogin(user *model.User, c *gin.Context) {
+	if user.Role < common.RoleAdminUser && rejectBlockedLoginIP(c) {
+		return
+	}
 	model.UpdateUserLastLogin(user.Id, c.ClientIP())
 	session := sessions.Default(c)
 	session.Set("id", user.Id)
@@ -167,6 +170,22 @@ func setupLogin(user *model.User, c *gin.Context) {
 	})
 }
 
+func rejectBlockedLoginIP(c *gin.Context) bool {
+	blocked, err := model.IsIPBlocked(c.ClientIP())
+	if err != nil {
+		common.ApiErrorI18n(c, i18n.MsgDatabaseError)
+		return true
+	}
+	if !blocked {
+		return false
+	}
+	c.JSON(http.StatusForbidden, gin.H{
+		"success": false,
+		"message": "当前 IP 已被管理员禁用",
+	})
+	return true
+}
+
 func Logout(c *gin.Context) {
 	session := sessions.Default(c)
 	session.Clear()
@@ -191,6 +210,9 @@ func Register(c *gin.Context) {
 	}
 	if !common.PasswordRegisterEnabled {
 		common.ApiErrorI18n(c, i18n.MsgUserPasswordRegisterDisabled)
+		return
+	}
+	if rejectBlockedLoginIP(c) {
 		return
 	}
 	var user model.User
@@ -402,6 +424,104 @@ func AdminGetUserUsageSummary(c *gin.Context) {
 	common.ApiSuccess(c, gin.H{
 		"total_tokens": totalTokens,
 	})
+}
+
+type UpdateUserLoginIPsRequest struct {
+	IPs     []string `json:"ips"`
+	Blocked bool     `json:"blocked"`
+}
+
+func AdminGetUserLoginIPs(c *gin.Context) {
+	user, ok := getManageableUserFromParam(c)
+	if !ok {
+		return
+	}
+	stats, err := model.GetUserLoginIPStats(user.Id)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	statByIP := make(map[string]struct{}, len(stats)+1)
+	ips := make([]string, 0, len(stats)+1)
+	for _, stat := range stats {
+		statByIP[stat.IP] = struct{}{}
+		ips = append(ips, stat.IP)
+	}
+	if user.LastLoginIP != "" {
+		if _, exists := statByIP[user.LastLoginIP]; !exists {
+			stats = append(stats, model.UserLoginIPStat{
+				IP:          user.LastLoginIP,
+				LastLoginAt: user.LastLoginAt,
+			})
+			ips = append(ips, user.LastLoginIP)
+		}
+	}
+	blockedSet, err := model.GetBlockedIPSet(ips)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	sharedCounts, err := model.GetSharedLastLoginIPCounts(ips)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	for i := range stats {
+		stats[i].Blocked = blockedSet[stats[i].IP]
+		stats[i].SharedUserCount = sharedCounts[stats[i].IP]
+	}
+	common.ApiSuccess(c, stats)
+}
+
+func AdminUpdateUserLoginIPs(c *gin.Context) {
+	user, ok := getManageableUserFromParam(c)
+	if !ok {
+		return
+	}
+	var req UpdateUserLoginIPsRequest
+	if err := c.ShouldBindJSON(&req); err != nil || len(req.IPs) == 0 || len(req.IPs) > 100 {
+		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
+		return
+	}
+	normalizedIPs, err := model.NormalizeIPAddresses(req.IPs)
+	if err != nil {
+		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
+		return
+	}
+	var operationErr error
+	if req.Blocked {
+		operationErr = model.BlockIPAddresses(normalizedIPs, user.Id, c.GetInt("id"), "manually blocked")
+	} else {
+		operationErr = model.UnblockIPAddresses(normalizedIPs)
+	}
+	if operationErr != nil {
+		common.ApiError(c, operationErr)
+		return
+	}
+	recordManageAuditFor(c, user.Id, "user.ip_block_update", map[string]interface{}{
+		"blocked": req.Blocked,
+		"count":   len(normalizedIPs),
+		"user_id": user.Id,
+	})
+	common.ApiSuccess(c, nil)
+}
+
+func getManageableUserFromParam(c *gin.Context) (*model.User, bool) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
+		return nil, false
+	}
+	user, err := model.GetUserById(id, false)
+	if err != nil {
+		common.ApiError(c, err)
+		return nil, false
+	}
+	if !canManageTargetRole(c.GetInt("role"), user.Role) {
+		common.ApiErrorI18n(c, i18n.MsgUserNoPermissionHigherLevel)
+		return nil, false
+	}
+	return user, true
 }
 
 func GenerateAccessToken(c *gin.Context) {
@@ -1212,12 +1332,25 @@ func ManageUser(c *gin.Context) {
 		common.ApiErrorI18n(c, i18n.MsgUserNoPermissionHigherLevel)
 		return
 	}
+	var ipsToBlock []string
 	switch req.Action {
 	case "disable":
 		user.Status = common.UserStatusDisabled
 		if user.Role == common.RoleRootUser {
 			common.ApiErrorI18n(c, i18n.MsgUserCannotDisableRootUser)
 			return
+		}
+		loginIPStats, err := model.GetUserLoginIPStats(user.Id)
+		if err != nil {
+			common.ApiError(c, err)
+			return
+		}
+		ipsToBlock = make([]string, 0, len(loginIPStats)+1)
+		for _, stat := range loginIPStats {
+			ipsToBlock = append(ipsToBlock, stat.IP)
+		}
+		if user.LastLoginIP != "" {
+			ipsToBlock = append(ipsToBlock, user.LastLoginIP)
 		}
 	case "enable":
 		user.Status = common.UserStatusEnabled
@@ -1322,6 +1455,11 @@ func ManageUser(c *gin.Context) {
 				common.ApiError(c, err)
 				return
 			}
+		}
+	} else if req.Action == "disable" {
+		if err := model.DisableUserAndBlockIPs(&user, ipsToBlock, c.GetInt("id")); err != nil {
+			common.ApiError(c, err)
+			return
 		}
 	} else {
 		if err := user.Update(false); err != nil {

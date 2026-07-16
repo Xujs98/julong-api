@@ -30,6 +30,7 @@ import type {
   ApiResponse,
   AgentDetailData,
   UserUsageSummary,
+  UserLoginIP,
 } from './types'
 
 // ============================================================================
@@ -176,6 +177,25 @@ export async function getUserUsageSummary(
   userId: number
 ): Promise<ApiResponse<UserUsageSummary>> {
   const res = await api.get(`/api/user/${userId}/usage-summary`)
+  return res.data
+}
+
+export async function getUserLoginIPs(
+  userId: number
+): Promise<ApiResponse<UserLoginIP[]>> {
+  const res = await api.get(`/api/user/${userId}/login-ips`)
+  return res.data
+}
+
+export async function updateUserLoginIPs(
+  userId: number,
+  ips: string[],
+  blocked: boolean
+): Promise<ApiResponse> {
+  const res = await api.put(`/api/user/${userId}/login-ips`, {
+    ips,
+    blocked,
+  })
   return res.data
 }
 

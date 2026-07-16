@@ -145,6 +145,9 @@ func authHelper(c *gin.Context, minRole int) {
 		c.Abort()
 		return
 	}
+	if role.(int) < common.RoleAdminUser && abortBlockedDashboardIP(c) {
+		return
+	}
 	// 防止不同newapi版本冲突，导致数据不通用
 	c.Header("Auth-Version", "864b7076dbcd0a3c01b5520316720ebf")
 	c.Set("username", username)
@@ -192,6 +195,27 @@ func UserAuth() func(c *gin.Context) {
 	}
 }
 
+func abortBlockedDashboardIP(c *gin.Context) bool {
+	blocked, err := model.IsIPBlocked(c.ClientIP())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"message": common.TranslateMessage(c, i18n.MsgDatabaseError),
+		})
+		c.Abort()
+		return true
+	}
+	if !blocked {
+		return false
+	}
+	c.JSON(http.StatusForbidden, gin.H{
+		"success": false,
+		"message": "当前 IP 已被管理员禁用",
+	})
+	c.Abort()
+	return true
+}
+
 func AdminAuth() func(c *gin.Context) {
 	return func(c *gin.Context) {
 		authHelper(c, common.RoleAdminUser)
@@ -232,6 +256,10 @@ func TokenOrUserAuth() func(c *gin.Context) {
 		session := sessions.Default(c)
 		if id := session.Get("id"); id != nil {
 			if status, ok := session.Get("status").(int); ok && status == common.UserStatusEnabled {
+				role, _ := session.Get("role").(int)
+				if role < common.RoleAdminUser && abortBlockedDashboardIP(c) {
+					return
+				}
 				c.Set("id", id)
 				c.Next()
 				return
@@ -307,6 +335,23 @@ func TokenAuthReadOnly() func(c *gin.Context) {
 			c.JSON(http.StatusForbidden, gin.H{
 				"success": false,
 				"message": common.TranslateMessage(c, i18n.MsgAuthUserBanned),
+			})
+			c.Abort()
+			return
+		}
+		blocked, blockedErr := model.IsIPBlocked(c.ClientIP())
+		if blockedErr != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"success": false,
+				"message": common.TranslateMessage(c, i18n.MsgDatabaseError),
+			})
+			c.Abort()
+			return
+		}
+		if blocked {
+			c.JSON(http.StatusForbidden, gin.H{
+				"success": false,
+				"message": "当前 IP 已被管理员禁用",
 			})
 			c.Abort()
 			return
@@ -420,6 +465,16 @@ func TokenAuth() func(c *gin.Context) {
 		userEnabled := userCache.Status == common.UserStatusEnabled
 		if !userEnabled {
 			abortWithOpenAiMessage(c, http.StatusForbidden, common.TranslateMessage(c, i18n.MsgAuthUserBanned))
+			return
+		}
+		blocked, blockedErr := model.IsIPBlocked(c.ClientIP())
+		if blockedErr != nil {
+			abortWithOpenAiMessage(c, http.StatusInternalServerError,
+				common.TranslateMessage(c, i18n.MsgDatabaseError))
+			return
+		}
+		if blocked {
+			abortWithOpenAiMessage(c, http.StatusForbidden, "当前 IP 已被管理员禁用", types.ErrorCodeAccessDenied)
 			return
 		}
 

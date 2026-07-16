@@ -131,6 +131,33 @@ export function useUsersColumns(): ColumnDef<User>[] {
                 {displayName}
               </LongText>
             )}
+            <div className='flex flex-wrap gap-1'>
+              {(user.shared_ip_user_count ?? 0) > 1 && (
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <StatusBadge
+                        label={t('Shared IP: {{count}} users', {
+                          count: user.shared_ip_user_count,
+                        })}
+                        variant='warning'
+                        copyable={false}
+                        size='sm'
+                      />
+                    }
+                  />
+                  <TooltipContent>{user.last_login_ip}</TooltipContent>
+                </Tooltip>
+              )}
+              {user.last_login_ip_blocked && (
+                <StatusBadge
+                  label={t('IP blocked')}
+                  variant='danger'
+                  copyable={false}
+                  size='sm'
+                />
+              )}
+            </div>
           </div>
         )
       },
@@ -148,7 +175,7 @@ export function useUsersColumns(): ColumnDef<User>[] {
             {user.is_agent ? (
               <button
                 type='button'
-                className='text-success w-fit min-w-[2.5rem] cursor-pointer whitespace-nowrap text-left text-sm font-medium'
+                className='text-success w-fit min-w-[2.5rem] cursor-pointer text-left text-sm font-medium whitespace-nowrap'
                 onClick={() => {
                   setCurrentRow(user)
                   setOpen('agent-detail')
