@@ -47,6 +47,16 @@ import {
 import { useUsers } from './users-provider'
 
 const RECENT_LOG_LIMIT = 20
+const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000
+
+function getDaysSinceLastLogin(timestamp?: number) {
+  if (!timestamp || timestamp <= 0) return null
+
+  return Math.max(
+    0,
+    Math.floor((Date.now() - timestamp * 1000) / MILLISECONDS_PER_DAY)
+  )
+}
 
 function InfoItem(props: {
   label: string
@@ -157,6 +167,7 @@ export function UserDetailDialog() {
     : null
   const totalTokens = summaryQuery.data?.total_tokens ?? 0
   const logs = logsQuery.data || []
+  const daysSinceLastLogin = getDaysSinceLastLogin(user?.last_login_at)
 
   return (
     <Dialog open={isOpen} onOpenChange={(value) => !value && setOpen(null)}>
@@ -244,7 +255,18 @@ export function UserDetailDialog() {
                 />
                 <InfoItem
                   label={t('Last Login')}
-                  value={formatTimestampToDate(user?.last_login_at)}
+                  value={
+                    <div>
+                      <div>{formatTimestampToDate(user?.last_login_at)}</div>
+                      <div className='text-muted-foreground mt-0.5 text-xs font-normal'>
+                        {daysSinceLastLogin === null
+                          ? t('Never logged in')
+                          : t('{{count}} days without login', {
+                              count: daysSinceLastLogin,
+                            })}
+                      </div>
+                    </div>
+                  }
                 />
                 <InfoItem
                   label={t('Last Login IP')}

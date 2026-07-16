@@ -24,7 +24,7 @@
 | Docker 部署 | 进行中 | `docker-compose.yml` 使用 `qq1371446705/julong-api:latest`，包含 Postgres、Redis，宿主端口 `3388`。 |
 | 代理功能 | 已实现，仍需持续 QA | 代理折扣、代理生成兑换码、代理所属用户、代理充值链接、退款日志等。 |
 | 错误反馈工单 | 已实现 | 500 页面跳转 `/error-report`，管理员/root 在 `/error-reports` 查看。 |
-| 用户详情弹窗 | 已实现 | 后台用户列表点击用户名可查看基本信息、最近登录时间/IP、最近使用日志、总消耗 token。 |
+| 用户详情弹窗 | 已实现 | 后台用户列表点击用户名可查看基本信息、最近登录时间/IP、未登录天数、最近使用日志、总消耗 token。 |
 | 兑换码搜索 | 已实现 | 后台兑换码支持按兑换码 key、生成者用户名/显示名、名称、ID、状态搜索。 |
 | 签到额度预览 | 已实现 | 计费与支付中的签到奖励输入框显示格式化额度预览。 |
 | 生图日志 | 已实现 | 成功的 `/v1/images/generations` 请求可按 root 开关记录提示词和图片，并在任务日志中查看；默认关闭。 |
@@ -714,7 +714,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 行为：
 
 - 后台用户表点击用户名打开详情弹窗。
-- 显示基本信息、最近登录时间和 IP、格式化额度、请求数、总 token 消耗及最近 20 条消费日志。
+- 显示基本信息、最近登录时间和 IP、动态计算的未登录天数、格式化额度、请求数、总 token 消耗及最近 20 条消费日志；无成功登录记录时显示“从未登录”。
 - 总 token 消耗按 `user_id` 从日志表求和。
 - 代理详情和用户详情采用统一的紧凑弹窗布局：身份摘要置顶，关键额度/用量指标独立展示，基本信息使用单一网格面板。
 - 弹窗限制在可视区域内滚动；移动端详情单列显示，日志、兑换码和所属用户表格支持横向滚动。
@@ -823,6 +823,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 
 | 日期 | 变更 | 更新文件/API/模型 | 验证 |
 | --- | --- | --- | --- |
+| 2026-07-16 | 用户详情在最近登录时间下显示未登录天数；按当前时间与 `last_login_at` 的完整 24 小时间隔动态计算，无登录记录时显示“从未登录”。 | `user-detail-dialog.tsx`、locale files | `bun run typecheck`、`oxfmt --check`、`bun run i18n:sync`、`git diff --check`；目标组件 lint 仅命中 5 项既有规则问题 |
 | 2026-07-16 | 用户登录成功时记录最近登录 IP，并在管理员/root 用户详情基本信息中展示；统一登录收口覆盖密码、2FA、OAuth、微信、Telegram 和 Passkey。 | `User.last_login_ip`、`model.UpdateUserLastLogin`、`controller.setupLogin`、`user-detail-dialog.tsx` | `go test ./...`、`bun run typecheck`、`bun run i18n:sync`、`git diff --check`；目标组件 lint 仅命中 5 项既有规则问题 |
 | 2026-07-14 | 新增 Docker 线上部署手册，记录本地构建/推送、服务器更新、数据备份、安全注意事项、回滚和常见故障处理。 | `docker线上部署.md` | 文件存在检查、Compose 参数核对、`git diff --check` |
 | 2026-07-13 | 移除 API 密钥页端点列表上方重复的“自定义端点”标题，保留复制说明、端点条和悬停介绍。 | `keys/components/custom-endpoints.tsx` | `bun run typecheck`、目标 lint、`git diff --check` |
