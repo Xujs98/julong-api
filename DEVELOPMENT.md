@@ -24,7 +24,7 @@
 | Docker 部署 | 进行中 | `docker-compose.yml` 使用 `qq1371446705/julong-api:latest`，包含 Postgres、Redis，宿主端口 `3388`。 |
 | 代理功能 | 已实现，仍需持续 QA | 代理折扣、代理生成兑换码、代理所属用户、代理充值链接、退款日志等。 |
 | 错误反馈工单 | 已实现 | 500 页面跳转 `/error-report`，管理员/root 在 `/error-reports` 查看。 |
-| 用户详情弹窗 | 已实现 | 后台用户列表点击用户名可查看基本信息、最近使用日志、总消耗 token。 |
+| 用户详情弹窗 | 已实现 | 后台用户列表点击用户名可查看基本信息、最近登录时间/IP、最近使用日志、总消耗 token。 |
 | 兑换码搜索 | 已实现 | 后台兑换码支持按兑换码 key、生成者用户名/显示名、名称、ID、状态搜索。 |
 | 签到额度预览 | 已实现 | 计费与支付中的签到奖励输入框显示格式化额度预览。 |
 | 生图日志 | 已实现 | 成功的 `/v1/images/generations` 请求可按 root 开关记录提示词和图片，并在任务日志中查看；默认关闭。 |
@@ -292,7 +292,7 @@ curl http://localhost:3000/api/error-reports \
 | --- | --- | --- | --- | --- | --- | --- |
 | GET | `/api/user/` | `controller.GetAllUsers` | 分页用户列表 | `p`, `page_size` | `PageInfo<User[]>` | 完成 |
 | GET | `/api/user/search` | `controller.SearchUsers` | 搜索用户 | `keyword`, `group`, `role`, `status`, `p`, `page_size` | `PageInfo<User[]>` | 完成 |
-| GET | `/api/user/:id` | `controller.GetUser` | 可编辑用户详情 | path `id` | `User` | 完成；同级/更高角色受限 |
+| GET | `/api/user/:id` | `controller.GetUser` | 可编辑用户详情 | path `id` | `User`（包含 `last_login_at`、`last_login_ip`） | 完成；管理员/root，同级/更高角色受限 |
 | POST | `/api/user/` | `controller.CreateUser` | 创建用户 | `UserFormData` | `User` | 完成 |
 | PUT | `/api/user/` | `controller.UpdateUser` | 更新用户 | `UserFormData & {id}` | partial `User` | 完成 |
 | DELETE | `/api/user/:id` | `controller.DeleteUser` | 删除用户 | path `id` | success | 完成 |
@@ -546,7 +546,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 
 | 模型 | 文件 | 表用途 | 关键字段和约束 | 关系/说明 | 状态 |
 | --- | --- | --- | --- | --- | --- |
-| `User` | `model/user.go` | Dashboard 用户 | `id`、唯一索引 `username`、`password`、`display_name`、`role`、`status`、`email`、`quota`、`used_quota`、`request_count`、`group`、唯一 `aff_code`、`inviter_id`、`is_agent`、`agent_discount`、`agent_topup_link`、`stripe_customer`、时间戳 | 列表/详情必须隐藏 password/access token。代理字段为 Julong 二开。`AdminPermissions` 是 transient 字段。 | 活跃 |
+| `User` | `model/user.go` | Dashboard 用户 | `id`、唯一索引 `username`、`password`、`display_name`、`role`、`status`、`email`、`quota`、`used_quota`、`request_count`、`group`、唯一 `aff_code`、`inviter_id`、`is_agent`、`agent_discount`、`agent_topup_link`、`stripe_customer`、`last_login_at`、IPv4/IPv6 `last_login_ip`、时间戳 | 列表/详情必须隐藏 password/access token。登录成功统一在 `setupLogin` 更新最近登录时间和 IP；代理字段为 Julong 二开。`AdminPermissions` 是 transient 字段。 | 活跃 |
 | `Token` | `model/token.go` | API keys | `id`、`user_id`、`key`、`name`、额度字段、模型限制、group、allow IPs | Relay 鉴权和计费使用。 | 活跃 |
 | `Channel` | `model/channel.go` | 上游 provider 渠道 | `id`、`type`、`key`、`base_url`、`models`、`group`、状态、priority/weight、计费/override 字段 | 由 distributor middleware 选择。敏感 key 需要脱敏。 | 活跃 |
 | `Ability` | `model/ability.go` | 渠道/模型能力映射 | channel/model/group enabled 字段 | 用于模型可用性和路由。 | 活跃 |
@@ -589,6 +589,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 - PostgreSQL 保留字字段（如 `key`）要像 `model/redemption.go` 一样做数据库类型判断并加引号。
 - SQLite 字段变更必须用已有本地 `one-api.db` 测试迁移。
 - 仅用于 JSON 响应、不入库的字段要加 `gorm:"-:all"`。
+- `User.last_login_ip` 由现有 `User` AutoMigrate 在服务启动时自动补列，无需注册新的迁移模型；长度 45，可保存 IPv4 和 IPv6。
 
 ## 前端路由
 
@@ -713,7 +714,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 行为：
 
 - 后台用户表点击用户名打开详情弹窗。
-- 显示基本信息、格式化额度、请求数、总 token 消耗和最近 20 条消费日志。
+- 显示基本信息、最近登录时间和 IP、格式化额度、请求数、总 token 消耗及最近 20 条消费日志。
 - 总 token 消耗按 `user_id` 从日志表求和。
 - 代理详情和用户详情采用统一的紧凑弹窗布局：身份摘要置顶，关键额度/用量指标独立展示，基本信息使用单一网格面板。
 - 弹窗限制在可视区域内滚动；移动端详情单列显示，日志、兑换码和所属用户表格支持横向滚动。
@@ -822,6 +823,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 
 | 日期 | 变更 | 更新文件/API/模型 | 验证 |
 | --- | --- | --- | --- |
+| 2026-07-16 | 用户登录成功时记录最近登录 IP，并在管理员/root 用户详情基本信息中展示；统一登录收口覆盖密码、2FA、OAuth、微信、Telegram 和 Passkey。 | `User.last_login_ip`、`model.UpdateUserLastLogin`、`controller.setupLogin`、`user-detail-dialog.tsx` | `go test ./...`、`bun run typecheck`、`bun run i18n:sync`、`git diff --check`；目标组件 lint 仅命中 5 项既有规则问题 |
 | 2026-07-14 | 新增 Docker 线上部署手册，记录本地构建/推送、服务器更新、数据备份、安全注意事项、回滚和常见故障处理。 | `docker线上部署.md` | 文件存在检查、Compose 参数核对、`git diff --check` |
 | 2026-07-13 | 移除 API 密钥页端点列表上方重复的“自定义端点”标题，保留复制说明、端点条和悬停介绍。 | `keys/components/custom-endpoints.tsx` | `bun run typecheck`、目标 lint、`git diff --check` |
 | 2026-07-13 | 新增自定义端点配置：管理员可在控制台内容/API 地址中维护名称、URL 和介绍；API 密钥页展示可点击复制的端点，悬停显示介绍。 | `console_setting.custom_endpoints`、`CustomEndpointsSection`、`CustomEndpoints`、`/api/status.custom_endpoints` | `go test ./...`、`bun run typecheck`、目标 lint、`bun run i18n:sync`、`git diff --check` |

@@ -57,6 +57,7 @@ type User struct {
 	StripeCustomer   string                     `json:"stripe_customer" gorm:"type:varchar(64);column:stripe_customer;index"`
 	CreatedAt        int64                      `json:"created_at" gorm:"autoCreateTime;column:created_at"`
 	LastLoginAt      int64                      `json:"last_login_at" gorm:"default:0;column:last_login_at"`
+	LastLoginIP      string                     `json:"last_login_ip" gorm:"type:varchar(45);default:'';column:last_login_ip"`
 	AdminPermissions map[string]map[string]bool `json:"admin_permissions,omitempty" gorm:"-:all"`
 }
 
@@ -1191,9 +1192,12 @@ func GetRootUser() (user *User) {
 	return user
 }
 
-func UpdateUserLastLoginAt(id int) {
-	if err := DB.Model(&User{}).Where("id = ?", id).Update("last_login_at", common.GetTimestamp()).Error; err != nil {
-		common.SysLog("failed to update user last_login_at: " + err.Error())
+func UpdateUserLastLogin(id int, ip string) {
+	if err := DB.Model(&User{}).Where("id = ?", id).Updates(map[string]interface{}{
+		"last_login_at": common.GetTimestamp(),
+		"last_login_ip": ip,
+	}).Error; err != nil {
+		common.SysLog("failed to update user last login: " + err.Error())
 	}
 }
 

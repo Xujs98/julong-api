@@ -18,8 +18,8 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { z } from 'zod'
 
-import type { AdminPermissionMatrix } from '@/lib/admin-permissions'
 import type { Redemption } from '@/features/redemption-codes/types'
+import type { AdminPermissionMatrix } from '@/lib/admin-permissions'
 
 // ============================================================================
 // User Schema & Types
@@ -63,6 +63,7 @@ export const userSchema = z.object({
   created_at: z.number().optional(),
   updated_at: z.number().optional(),
   last_login_at: z.number().optional(),
+  last_login_ip: z.string().optional(),
   DeletedAt: z.any().nullable().optional(),
   remark: z.string().optional(),
   admin_permissions: z

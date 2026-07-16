@@ -247,6 +247,11 @@ export function UserDetailDialog() {
                   value={formatTimestampToDate(user?.last_login_at)}
                 />
                 <InfoItem
+                  label={t('Last Login IP')}
+                  value={user?.last_login_ip || '-'}
+                />
+                <InfoItem
+                  className='sm:col-span-3 sm:border-r-0'
                   label={t('Subscriptions')}
                   value={
                     <SubscriptionInfo

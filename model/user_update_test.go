@@ -92,6 +92,25 @@ func TestUpdateUserSettingOnlyUpdatesSetting(t *testing.T) {
 	assert.Equal(t, "zh", got.GetSetting().Language)
 }
 
+func TestUpdateUserLastLoginStoresTimestampAndIP(t *testing.T) {
+	setupUserUpdateTestState(t)
+
+	user := User{
+		Id:       3,
+		Username: "login-ip-user",
+		Password: "password",
+		Status:   common.UserStatusEnabled,
+	}
+	require.NoError(t, DB.Create(&user).Error)
+
+	UpdateUserLastLogin(user.Id, "2001:db8::1")
+
+	var got User
+	require.NoError(t, DB.First(&got, user.Id).Error)
+	assert.Greater(t, got.LastLoginAt, int64(0))
+	assert.Equal(t, "2001:db8::1", got.LastLoginIP)
+}
+
 func TestEnsureEmailAvailableRejectsExistingEmailCaseInsensitive(t *testing.T) {
 	setupUserUpdateTestState(t)
 
