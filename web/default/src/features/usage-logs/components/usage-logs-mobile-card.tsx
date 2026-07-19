@@ -331,6 +331,12 @@ function ImageGenerationLogsCard<TData>({
         <CompactCell cell={cells.get('image_count')} className='shrink-0' />
       </div>
       <div className='grid grid-cols-2 gap-1.5'>
+        <SummaryField
+          label={t('Task ID')}
+          cell={cells.get('task_id')}
+          className='col-span-2'
+        />
+        <SummaryField label={t('Status')} cell={cells.get('status')} />
         <SummaryField label={t('Time')} cell={cells.get('created_at')} />
         <SummaryField label={t('User')} cell={cells.get('username')} />
         <SummaryField

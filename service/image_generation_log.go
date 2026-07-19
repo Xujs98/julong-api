@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
@@ -25,12 +26,20 @@ import (
 var lastImageGenerationLogCleanup atomic.Int64
 
 const (
-	imageGenerationResultKey = "image_generation_log_results"
-	maxLoggedImageBytes      = 25 * 1024 * 1024
+	imageGenerationResultKey      = "image_generation_log_results"
+	maxLoggedImageBytes           = 25 * 1024 * 1024
+	maxImageTaskErrorBytes        = 256 * 1024
+	ImageGenerationTaskContextKey = "image_generation_task_id"
 )
 
+type ImageGenerationTaskURLBuilder func(index int) string
+
+func shouldCaptureImageGeneration(c *gin.Context) bool {
+	return common.ImageGenerationLogEnabled || (c != nil && c.GetString(ImageGenerationTaskContextKey) != "")
+}
+
 func CaptureImageGenerationResult(c *gin.Context, images []dto.ImageData) {
-	if c == nil || !common.ImageGenerationLogEnabled || len(images) == 0 {
+	if c == nil || !shouldCaptureImageGeneration(c) || len(images) == 0 {
 		return
 	}
 	existing, _ := c.Get(imageGenerationResultKey)
@@ -74,14 +83,14 @@ func CaptureResponsesImageGenerationOutput(c *gin.Context, output *dto.Responses
 }
 
 func RecordImageGenerationLog(c *gin.Context, info *relaycommon.RelayInfo, request *dto.ImageRequest, quota int) {
-	if c == nil || info == nil || request == nil || !common.ImageGenerationLogEnabled {
+	if c == nil || info == nil || request == nil || !shouldCaptureImageGeneration(c) {
 		return
 	}
 	RecordCapturedImageGenerationLog(c, info, request.Prompt, request.Size, request.Quality, quota)
 }
 
 func RecordCapturedImageGenerationLog(c *gin.Context, info *relaycommon.RelayInfo, prompt, size, quality string, quota int) {
-	if c == nil || info == nil || !common.ImageGenerationLogEnabled {
+	if c == nil || info == nil || !shouldCaptureImageGeneration(c) {
 		return
 	}
 	value, exists := c.Get(imageGenerationResultKey)
@@ -123,10 +132,239 @@ func RecordCapturedImageGenerationLog(c *gin.Context, info *relaycommon.RelayInf
 	log.Quota = quota
 	log.RequestId = c.GetString(common.RequestIdKey)
 	log.UseTime = int(time.Since(info.StartTime).Seconds())
-	if err := log.Insert(); err != nil {
+	if taskId := c.GetString(ImageGenerationTaskContextKey); taskId != "" {
+		taskLog, taskErr := model.GetUserImageGenerationLogByTaskId(info.UserId, taskId)
+		if taskErr != nil {
+			logger.LogError(c, "failed to find image generation task: "+taskErr.Error())
+			return
+		}
+		if err := taskLog.UpdateTask(map[string]any{
+			"status":        model.ImageGenerationStatusSuccess,
+			"token_id":      log.TokenId,
+			"token_name":    log.TokenName,
+			"channel_id":    log.ChannelId,
+			"model_name":    log.ModelName,
+			"prompt":        log.Prompt,
+			"size":          log.Size,
+			"quality":       log.Quality,
+			"image_count":   log.ImageCount,
+			"images":        log.Images,
+			"quota":         log.Quota,
+			"use_time":      log.UseTime,
+			"error_message": "",
+		}); err != nil {
+			logger.LogError(c, "failed to complete image generation task: "+err.Error())
+		}
+	} else if err := log.Insert(); err != nil {
 		logger.LogError(c, "failed to record image generation log: "+err.Error())
 	}
 	cleanupExpiredImageGenerationLogs(c)
+}
+
+func CreateImageGenerationTask(c *gin.Context, request *dto.ImageRequest) (*model.ImageGenerationLog, error) {
+	key, err := common.GenerateRandomCharsKey(32)
+	if err != nil {
+		return nil, err
+	}
+	log := model.NewImageGenerationLog(c.GetInt("id"))
+	log.TaskId = "img_" + key
+	log.Status = model.ImageGenerationStatusPending
+	log.TokenId = c.GetInt("token_id")
+	log.TokenName = c.GetString("token_name")
+	log.ChannelId = common.GetContextKeyInt(c, constant.ContextKeyChannelId)
+	log.ModelName = request.Model
+	log.Prompt = truncateImageLogPrompt(request.Prompt)
+	log.Size = request.Size
+	log.Quality = request.Quality
+	log.RequestId = c.GetString(common.RequestIdKey)
+	if err := log.Insert(); err != nil {
+		return nil, err
+	}
+	return log, nil
+}
+
+func MarkImageGenerationTaskProcessing(taskId string, userId int) error {
+	log, err := model.GetUserImageGenerationLogByTaskId(userId, taskId)
+	if err != nil {
+		return err
+	}
+	return log.UpdateTask(map[string]any{"status": model.ImageGenerationStatusProcessing})
+}
+
+func CompleteImageGenerationTask(taskId string, userId int, responseBody []byte) error {
+	log, err := model.GetUserImageGenerationLogByTaskId(userId, taskId)
+	if err != nil {
+		return err
+	}
+	refs, err := log.ImageRefs()
+	if err != nil {
+		return err
+	}
+	if len(refs) == 0 {
+		var response dto.ImageResponse
+		if err := common.Unmarshal(responseBody, &response); err != nil {
+			return fmt.Errorf("invalid image generation response: %w", err)
+		}
+		for _, image := range response.Data {
+			ref, persistErr := persistImageGenerationResult(image)
+			if persistErr != nil {
+				return persistErr
+			}
+			refs = append(refs, ref)
+		}
+		if len(refs) == 0 {
+			return fmt.Errorf("image generation response contains no images")
+		}
+		encodedRefs, marshalErr := json.Marshal(refs)
+		if marshalErr != nil {
+			return marshalErr
+		}
+		log.Images = string(encodedRefs)
+		log.ImageCount = len(refs)
+	}
+	sanitized, err := sanitizeImageGenerationTaskResponse(responseBody, refs)
+	if err != nil {
+		return err
+	}
+	return log.UpdateTask(map[string]any{
+		"status":        model.ImageGenerationStatusSuccess,
+		"image_count":   len(refs),
+		"images":        log.Images,
+		"response":      sanitized,
+		"error_message": "",
+	})
+}
+
+func FailImageGenerationTask(taskId string, userId int, responseBody []byte, fallbackMessage string) error {
+	log, err := model.GetUserImageGenerationLogByTaskId(userId, taskId)
+	if err != nil {
+		return err
+	}
+	message := imageGenerationTaskErrorMessage(responseBody, fallbackMessage)
+	if len(responseBody) > maxImageTaskErrorBytes {
+		responseBody = responseBody[:maxImageTaskErrorBytes]
+	}
+	return log.UpdateTask(map[string]any{
+		"status":        model.ImageGenerationStatusFailed,
+		"error_message": message,
+		"response":      string(responseBody),
+	})
+}
+
+func BuildImageGenerationTaskPayload(log *model.ImageGenerationLog, buildURL ImageGenerationTaskURLBuilder) (map[string]any, error) {
+	refs, err := log.ImageRefs()
+	if err != nil {
+		return nil, err
+	}
+	data := make([]map[string]any, 0, len(refs))
+	for index, ref := range refs {
+		url := ref.Value
+		if ref.Type == "local" && buildURL != nil {
+			url = buildURL(index)
+		}
+		item := map[string]any{"url": url}
+		if ref.RevisedPrompt != "" {
+			item["revised_prompt"] = ref.RevisedPrompt
+		}
+		data = append(data, item)
+	}
+	progress := 0
+	switch log.Status {
+	case model.ImageGenerationStatusProcessing:
+		progress = 10
+	case model.ImageGenerationStatusSuccess, model.ImageGenerationStatusFailed:
+		progress = 100
+	}
+	payload := map[string]any{
+		"task_id":     log.TaskId,
+		"object":      "image.generation.task",
+		"status":      log.Status,
+		"progress":    progress,
+		"created_at":  log.CreatedAt,
+		"updated_at":  log.UpdatedAt,
+		"request_id":  log.RequestId,
+		"model":       log.ModelName,
+		"image_count": log.ImageCount,
+		"data":        data,
+	}
+	if log.ErrorMessage != "" {
+		payload["error"] = map[string]any{"message": log.ErrorMessage}
+	} else {
+		payload["error"] = nil
+	}
+	if log.Response != "" {
+		var response map[string]any
+		if err := common.Unmarshal([]byte(log.Response), &response); err == nil {
+			response["data"] = data
+			payload["response"] = response
+		}
+	}
+	return payload, nil
+}
+
+func ReadImageGenerationLogImage(log *model.ImageGenerationLog, index int) ([]byte, string, error) {
+	refs, err := log.ImageRefs()
+	if err != nil || index < 0 || index >= len(refs) {
+		return nil, "", fmt.Errorf("image not found")
+	}
+	ref := refs[index]
+	if ref.Type != "local" || filepath.Base(ref.Value) != ref.Value {
+		return nil, "", fmt.Errorf("local image not found")
+	}
+	data, err := os.ReadFile(filepath.Join(ImageGenerationLogStorageDir(), ref.Value))
+	if err != nil {
+		return nil, "", err
+	}
+	mimeType := ref.MimeType
+	if mimeType == "" {
+		mimeType = http.DetectContentType(data)
+	}
+	return data, mimeType, nil
+}
+
+func sanitizeImageGenerationTaskResponse(responseBody []byte, refs []model.ImageGenerationImage) (string, error) {
+	var response map[string]any
+	if err := common.Unmarshal(responseBody, &response); err != nil {
+		return "", err
+	}
+	items, _ := response["data"].([]any)
+	for index, raw := range items {
+		item, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		delete(item, "b64_json")
+		if index < len(refs) {
+			if refs[index].Type == "remote" {
+				item["url"] = refs[index].Value
+			} else {
+				item["url"] = ""
+			}
+		}
+	}
+	encoded, err := common.Marshal(response)
+	return string(encoded), err
+}
+
+func imageGenerationTaskErrorMessage(responseBody []byte, fallback string) string {
+	var payload struct {
+		Error struct {
+			Message string `json:"message"`
+		} `json:"error"`
+		Message string `json:"message"`
+	}
+	if err := common.Unmarshal(responseBody, &payload); err == nil {
+		if strings.TrimSpace(payload.Error.Message) != "" {
+			return payload.Error.Message
+		}
+		if strings.TrimSpace(payload.Message) != "" {
+			return payload.Message
+		}
+	}
+	if strings.TrimSpace(fallback) != "" {
+		return fallback
+	}
+	return "image generation failed"
 }
 
 func cleanupExpiredImageGenerationLogs(c *gin.Context) {

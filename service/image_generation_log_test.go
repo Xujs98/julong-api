@@ -2,8 +2,10 @@ package service
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -119,5 +121,91 @@ func TestCaptureResponsesImageGenerationResult(t *testing.T) {
 	}
 	if c.GetString("image_generation_call_quality") != "high" || c.GetString("image_generation_call_size") != "1024x1024" {
 		t.Fatal("responses image metadata was not captured")
+	}
+}
+
+func TestImageGenerationTaskLifecycleStoresSanitizedResponse(t *testing.T) {
+	truncate(t)
+	seedUser(t, 711, 100000)
+	seedToken(t, 712, 711, "image-task-token", 100000)
+	t.Setenv("IMAGE_LOG_STORAGE_DIR", t.TempDir())
+
+	c, _ := gin.CreateTestContext(nil)
+	c.Set("id", 711)
+	c.Set("token_id", 712)
+	c.Set("token_name", "image-task-token")
+	c.Set(common.RequestIdKey, "req_image_task_test")
+	task, err := CreateImageGenerationTask(c, &dto.ImageRequest{
+		Model:  "gpt-image-2",
+		Prompt: "minimal product poster",
+		Size:   "1024x1024",
+	})
+	if err != nil {
+		t.Fatalf("create image generation task: %v", err)
+	}
+	if task.Status != model.ImageGenerationStatusPending || task.TaskId == "" {
+		t.Fatalf("unexpected pending task: %+v", task)
+	}
+	if err := MarkImageGenerationTaskProcessing(task.TaskId, 711); err != nil {
+		t.Fatalf("mark processing: %v", err)
+	}
+
+	png := []byte{0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a}
+	encoded := base64.StdEncoding.EncodeToString(png)
+	responseBody, _ := json.Marshal(dto.ImageResponse{
+		Created: 123456,
+		Data:    []dto.ImageData{{B64Json: encoded, RevisedPrompt: "revised"}},
+	})
+	if err := CompleteImageGenerationTask(task.TaskId, 711, responseBody); err != nil {
+		t.Fatalf("complete task: %v", err)
+	}
+
+	completed, err := model.GetUserImageGenerationLogByTaskId(711, task.TaskId)
+	if err != nil {
+		t.Fatalf("reload completed task: %v", err)
+	}
+	if completed.Status != model.ImageGenerationStatusSuccess || completed.ImageCount != 1 {
+		t.Fatalf("unexpected completed task: %+v", completed)
+	}
+	if strings.Contains(completed.Response, encoded) || strings.Contains(completed.Response, "b64_json") {
+		t.Fatalf("response still contains base64 image data: %s", completed.Response)
+	}
+	payload, err := BuildImageGenerationTaskPayload(completed, func(index int) string {
+		return "/v1/images/generations/" + completed.TaskId + "/images/0"
+	})
+	if err != nil {
+		t.Fatalf("build task payload: %v", err)
+	}
+	data := payload["data"].([]map[string]any)
+	if data[0]["url"] == "" || payload["status"] != model.ImageGenerationStatusSuccess {
+		t.Fatalf("unexpected task payload: %+v", payload)
+	}
+	response := payload["response"].(map[string]any)
+	responseData := response["data"].([]map[string]any)
+	if responseData[0]["url"] != data[0]["url"] {
+		t.Fatalf("response URL was not rewritten: %+v", response)
+	}
+}
+
+func TestFailImageGenerationTaskStoresError(t *testing.T) {
+	truncate(t)
+	seedUser(t, 721, 100000)
+	seedToken(t, 722, 721, "failed-image-task-token", 100000)
+	c, _ := gin.CreateTestContext(nil)
+	c.Set("id", 721)
+	c.Set("token_id", 722)
+	task, err := CreateImageGenerationTask(c, &dto.ImageRequest{Model: "gpt-image-2", Prompt: "poster"})
+	if err != nil {
+		t.Fatalf("create task: %v", err)
+	}
+	if err := FailImageGenerationTask(task.TaskId, 721, []byte(`{"error":{"message":"upstream failed"}}`), "fallback"); err != nil {
+		t.Fatalf("fail task: %v", err)
+	}
+	failed, err := model.GetUserImageGenerationLogByTaskId(721, task.TaskId)
+	if err != nil {
+		t.Fatalf("reload failed task: %v", err)
+	}
+	if failed.Status != model.ImageGenerationStatusFailed || failed.ErrorMessage != "upstream failed" {
+		t.Fatalf("unexpected failed task: %+v", failed)
 	}
 }

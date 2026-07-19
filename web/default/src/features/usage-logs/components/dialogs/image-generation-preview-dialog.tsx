@@ -1,3 +1,21 @@
+/*
+Copyright (C) 2023-2026 QuantumNous
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as
+published by the Free Software Foundation, either version 3 of the
+License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+For commercial licensing, please contact support@quantumnous.com
+*/
 import { Download, FileJson } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -70,8 +88,11 @@ export function ImageGenerationPreviewDialog(props: Props) {
   const jsonData = useMemo(
     () => ({
       id: props.log.id,
+      task_id: props.log.task_id,
+      status: props.log.status,
       request_id: props.log.request_id,
       created_at: props.log.created_at,
+      updated_at: props.log.updated_at,
       user_id: props.log.user_id,
       username: props.log.username,
       token_id: props.log.token_id,
@@ -86,6 +107,7 @@ export function ImageGenerationPreviewDialog(props: Props) {
       image_urls: props.log.image_urls,
       quota: props.log.quota,
       duration_seconds: props.log.use_time,
+      error_message: props.log.error_message,
     }),
     [props.log]
   )

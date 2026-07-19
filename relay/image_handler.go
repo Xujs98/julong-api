@@ -33,6 +33,8 @@ func ImageHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *type
 	if err != nil {
 		return types.NewError(fmt.Errorf("failed to copy request to ImageRequest: %w", err), types.ErrorCodeInvalidRequest, types.ErrOptionWithSkipRetry())
 	}
+	// async is a Julong-API control parameter and must never be forwarded upstream.
+	request.Async = nil
 
 	err = helper.ModelMappedHelper(c, info, request)
 	if err != nil {
@@ -52,7 +54,25 @@ func ImageHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *type
 		if err != nil {
 			return types.NewErrorWithStatusCode(err, types.ErrorCodeReadRequestBodyFailed, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
 		}
-		requestBody = common.ReaderOnly(storage)
+		if imageReq.Async != nil {
+			original, readErr := storage.Bytes()
+			if readErr != nil {
+				return types.NewError(readErr, types.ErrorCodeReadRequestBodyFailed, types.ErrOptionWithSkipRetry())
+			}
+			var payload map[string]any
+			if unmarshalErr := common.Unmarshal(original, &payload); unmarshalErr != nil {
+				return types.NewError(unmarshalErr, types.ErrorCodeInvalidRequest, types.ErrOptionWithSkipRetry())
+			}
+			delete(payload, "async")
+			sanitized, marshalErr := common.Marshal(payload)
+			if marshalErr != nil {
+				return types.NewError(marshalErr, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
+			}
+			requestBody = bytes.NewReader(sanitized)
+			info.UpstreamRequestBodySize = int64(len(sanitized))
+		} else {
+			requestBody = common.ReaderOnly(storage)
+		}
 	} else {
 		convertedRequest, err := adaptor.ConvertImageRequest(c, info, *request)
 		if err != nil {

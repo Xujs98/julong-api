@@ -2,8 +2,16 @@ package model
 
 import (
 	"encoding/json"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
+)
+
+const (
+	ImageGenerationStatusPending    = "pending"
+	ImageGenerationStatusProcessing = "processing"
+	ImageGenerationStatusSuccess    = "success"
+	ImageGenerationStatusFailed     = "failed"
 )
 
 type ImageGenerationImage struct {
@@ -25,24 +33,29 @@ func (log *ImageGenerationLog) ImageRefs() ([]ImageGenerationImage, error) {
 }
 
 type ImageGenerationLog struct {
-	Id          int      `json:"id"`
-	UserId      int      `json:"user_id" gorm:"index"`
-	Username    string   `json:"username" gorm:"type:varchar(64);index"`
-	TokenId     int      `json:"token_id" gorm:"index"`
-	TokenName   string   `json:"token_name" gorm:"type:varchar(128)"`
-	ChannelId   int      `json:"channel_id" gorm:"index"`
-	ModelName   string   `json:"model_name" gorm:"type:varchar(191);index"`
-	Prompt      string   `json:"prompt" gorm:"type:text"`
-	Size        string   `json:"size" gorm:"type:varchar(32)"`
-	Quality     string   `json:"quality" gorm:"type:varchar(32)"`
-	ImageCount  int      `json:"image_count"`
-	Images      string   `json:"-" gorm:"type:text"`
-	ImageUrls   []string `json:"image_urls" gorm:"-:all"`
-	Quota       int      `json:"quota"`
-	RequestId   string   `json:"request_id" gorm:"type:varchar(64);index"`
-	CreatedAt   int64    `json:"created_at" gorm:"index"`
-	UseTime     int      `json:"use_time"`
-	ChannelName string   `json:"channel_name" gorm:"-:all"`
+	Id           int      `json:"id"`
+	TaskId       string   `json:"task_id" gorm:"type:varchar(64);index"`
+	Status       string   `json:"status" gorm:"type:varchar(20);index;default:success"`
+	UserId       int      `json:"user_id" gorm:"index"`
+	Username     string   `json:"username" gorm:"type:varchar(64);index"`
+	TokenId      int      `json:"token_id" gorm:"index"`
+	TokenName    string   `json:"token_name" gorm:"type:varchar(128)"`
+	ChannelId    int      `json:"channel_id" gorm:"index"`
+	ModelName    string   `json:"model_name" gorm:"type:varchar(191);index"`
+	Prompt       string   `json:"prompt" gorm:"type:text"`
+	Size         string   `json:"size" gorm:"type:varchar(32)"`
+	Quality      string   `json:"quality" gorm:"type:varchar(32)"`
+	ImageCount   int      `json:"image_count"`
+	Images       string   `json:"-" gorm:"type:text"`
+	ImageUrls    []string `json:"image_urls" gorm:"-:all"`
+	Quota        int      `json:"quota"`
+	RequestId    string   `json:"request_id" gorm:"type:varchar(64);index"`
+	CreatedAt    int64    `json:"created_at" gorm:"index"`
+	UpdatedAt    int64    `json:"updated_at" gorm:"index"`
+	UseTime      int      `json:"use_time"`
+	ErrorMessage string   `json:"error_message,omitempty" gorm:"type:text"`
+	Response     string   `json:"-" gorm:"type:text"`
+	ChannelName  string   `json:"channel_name" gorm:"-:all"`
 }
 
 func (log *ImageGenerationLog) Insert() error {
@@ -109,11 +122,37 @@ func GetImageGenerationLogById(id int) (*ImageGenerationLog, error) {
 	return &log, nil
 }
 
+func GetImageGenerationLogByTaskId(taskId string) (*ImageGenerationLog, error) {
+	var log ImageGenerationLog
+	if err := DB.Where("task_id = ?", taskId).First(&log).Error; err != nil {
+		return nil, err
+	}
+	return &log, nil
+}
+
+func GetUserImageGenerationLogByTaskId(userId int, taskId string) (*ImageGenerationLog, error) {
+	var log ImageGenerationLog
+	if err := DB.Where("user_id = ? AND task_id = ?", userId, taskId).First(&log).Error; err != nil {
+		return nil, err
+	}
+	return &log, nil
+}
+
+func (log *ImageGenerationLog) UpdateTask(fields map[string]any) error {
+	if fields == nil {
+		fields = make(map[string]any)
+	}
+	fields["updated_at"] = time.Now().Unix()
+	return DB.Model(log).Updates(fields).Error
+}
+
 func NewImageGenerationLog(userId int) *ImageGenerationLog {
 	username, _ := GetUsernameById(userId, false)
 	return &ImageGenerationLog{
 		UserId:    userId,
 		Username:  username,
+		Status:    ImageGenerationStatusSuccess,
 		CreatedAt: common.GetTimestamp(),
+		UpdatedAt: common.GetTimestamp(),
 	}
 }

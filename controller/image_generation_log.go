@@ -1,9 +1,8 @@
 package controller
 
 import (
+	"fmt"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -93,29 +92,49 @@ func GetImageGenerationLogImage(c *gin.Context) {
 			return
 		}
 	}
-	refs, err := log.ImageRefs()
-	if err != nil || index >= len(refs) {
+	data, mimeType, err := service.ReadImageGenerationLogImage(log, index)
+	if err != nil {
 		c.Status(http.StatusNotFound)
 		return
 	}
-	ref := refs[index]
 	c.Header("Cache-Control", "private, max-age=3600")
-	if ref.Type == "local" {
-		if filepath.Base(ref.Value) != ref.Value {
-			c.Status(http.StatusBadRequest)
-			return
-		}
-		data, readErr := os.ReadFile(filepath.Join(service.ImageGenerationLogStorageDir(), ref.Value))
-		if readErr != nil {
-			c.Status(http.StatusNotFound)
-			return
-		}
-		mimeType := ref.MimeType
-		if mimeType == "" {
-			mimeType = http.DetectContentType(data)
-		}
-		c.Data(http.StatusOK, mimeType, data)
+	c.Data(http.StatusOK, mimeType, data)
+}
+
+func GetImageGenerationLogTask(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil || id <= 0 {
+		common.ApiErrorMsg(c, "无效的生图日志参数")
 		return
 	}
-	c.Status(http.StatusNotFound)
+	log, err := model.GetImageGenerationLogById(id)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	if !canAccessImageGenerationLog(c, log) {
+		c.Status(http.StatusForbidden)
+		return
+	}
+	payload, err := service.BuildImageGenerationTaskPayload(log, func(index int) string {
+		return fmt.Sprintf("/api/image-generation-logs/%d/images/%d", log.Id, index)
+	})
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, payload)
+}
+
+func canAccessImageGenerationLog(c *gin.Context, log *model.ImageGenerationLog) bool {
+	if c.GetInt("role") >= common.RoleAdminUser {
+		return true
+	}
+	userId := c.GetInt("id")
+	allowed, limit, err := model.GetUserImageGenerationLogAccess(userId)
+	if err != nil || !allowed || log.UserId != userId {
+		return false
+	}
+	visible, err := model.IsImageGenerationLogVisibleToUser(log.Id, userId, limit)
+	return err == nil && visible
 }

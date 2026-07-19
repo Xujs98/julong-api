@@ -59,6 +59,15 @@ func SetRelayRouter(router *gin.Engine) {
 		})
 	}
 
+	imageGenerationTaskRouter := router.Group("/v1/images/generations")
+	imageGenerationTaskRouter.Use(middleware.RouteTag("relay"))
+	imageGenerationTaskRouter.Use(middleware.SystemPerformanceCheck())
+	imageGenerationTaskRouter.Use(middleware.TokenAuthReadOnly())
+	{
+		imageGenerationTaskRouter.GET("/:task_id", controller.GetImageGenerationTask)
+		imageGenerationTaskRouter.GET("/:task_id/images/:index", controller.GetImageGenerationTaskImage)
+	}
+
 	playgroundRouter := router.Group("/pg")
 	playgroundRouter.Use(middleware.RouteTag("relay"))
 	playgroundRouter.Use(middleware.SystemPerformanceCheck())
@@ -110,7 +119,7 @@ func SetRelayRouter(router *gin.Engine) {
 			controller.Relay(c, types.RelayFormatOpenAIImage)
 		})
 		httpRouter.POST("/images/generations", func(c *gin.Context) {
-			controller.Relay(c, types.RelayFormatOpenAIImage)
+			controller.RelayImageGeneration(c)
 		})
 		httpRouter.POST("/images/edits", func(c *gin.Context) {
 			controller.Relay(c, types.RelayFormatOpenAIImage)

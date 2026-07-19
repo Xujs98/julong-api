@@ -1907,6 +1907,7 @@
     "Failed to load error reports.": "エラー報告一覧を読み込めませんでした。",
     "Failed to load home page content": "ホームページの内容の読み込みに失敗しました",
     "Failed to load image": "画像の読み込みに失敗しました",
+    "Failed to load image generation task": "画像生成タスクの読み込みに失敗しました",
     "Failed to load key status": "キー状態の読み込みに失敗しました",
     "Failed to load login IPs": "ログイン IP の読み込みに失敗しました",
     "Failed to load logs": "ログの読み込みに失敗しました",

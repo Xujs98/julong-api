@@ -204,6 +204,7 @@ func SetApiRouter(router *gin.Engine) {
 		{
 			imageGenerationLogsRoute.GET("", controller.GetImageGenerationLogs)
 			imageGenerationLogsRoute.GET("/", controller.GetImageGenerationLogs)
+			imageGenerationLogsRoute.GET("/:id/task", controller.GetImageGenerationLogTask)
 			imageGenerationLogsRoute.GET("/:id/images/:index", controller.GetImageGenerationLogImage)
 		}
 		supportContactsRoute := apiRouter.Group("/support-contacts")

@@ -1907,6 +1907,7 @@
     "Failed to load error reports.": "加载错误反馈列表失败。",
     "Failed to load home page content": "加载首页内容失败",
     "Failed to load image": "无法加载图像",
+    "Failed to load image generation task": "加载生图任务失败",
     "Failed to load key status": "加载密钥状态失败",
     "Failed to load login IPs": "加载登录 IP 失败",
     "Failed to load logs": "加载日志失败",

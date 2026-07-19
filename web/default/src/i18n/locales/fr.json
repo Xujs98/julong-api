@@ -1907,6 +1907,7 @@
     "Failed to load error reports.": "Impossible de charger les rapports d'erreur.",
     "Failed to load home page content": "Échec du chargement du contenu de la page d'accueil",
     "Failed to load image": "Échec du chargement de l'image",
+    "Failed to load image generation task": "Échec du chargement de la tâche de génération d'image",
     "Failed to load key status": "Échec du chargement du statut des clés",
     "Failed to load login IPs": "Échec du chargement des IP de connexion",
     "Failed to load logs": "Échec du chargement des journaux",

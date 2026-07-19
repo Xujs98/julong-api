@@ -295,6 +295,8 @@ export interface TaskLog {
 
 export interface ImageGenerationLog {
   id: number
+  task_id: string
+  status: 'pending' | 'processing' | 'success' | 'failed'
   user_id: number
   username: string
   token_id: number
@@ -310,7 +312,27 @@ export interface ImageGenerationLog {
   quota: number
   request_id: string
   created_at: number
+  updated_at: number
   use_time: number
+  error_message?: string
+}
+
+export interface ImageGenerationTaskPayload {
+  task_id: string
+  object: 'image.generation.task'
+  status: ImageGenerationLog['status']
+  progress: number
+  created_at: number
+  updated_at: number
+  request_id: string
+  model: string
+  image_count: number
+  data: Array<{
+    url: string
+    revised_prompt?: string
+  }>
+  error: { message: string } | null
+  response?: Record<string, unknown>
 }
 
 // ============================================================================

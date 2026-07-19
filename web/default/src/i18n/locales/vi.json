@@ -1907,6 +1907,7 @@
     "Failed to load error reports.": "Không thể tải danh sách báo cáo lỗi.",
     "Failed to load home page content": "Không thể tải nội dung trang chủ",
     "Failed to load image": "Không thể tải ảnh",
+    "Failed to load image generation task": "Không thể tải tác vụ tạo hình ảnh",
     "Failed to load key status": "Không thể tải trạng thái khóa",
     "Failed to load login IPs": "Không thể tải IP đăng nhập",
     "Failed to load logs": "Không tải được nhật ký",

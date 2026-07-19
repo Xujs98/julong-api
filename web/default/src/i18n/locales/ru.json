@@ -1907,6 +1907,7 @@
     "Failed to load error reports.": "Не удалось загрузить отчеты об ошибках.",
     "Failed to load home page content": "Не удалось загрузить содержимое главной страницы",
     "Failed to load image": "Не удалось загрузить изображение",
+    "Failed to load image generation task": "Не удалось загрузить задачу генерации изображения",
     "Failed to load key status": "Не удалось загрузить статус ключей",
     "Failed to load login IPs": "Не удалось загрузить IP входов",
     "Failed to load logs": "Не удалось загрузить логи",
