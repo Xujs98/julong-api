@@ -773,7 +773,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 | `custom-endpoints` | `types.ts`、`system-settings/content/custom-endpoints-section.tsx`、`keys/components/custom-endpoints.tsx` | 自定义端点共享类型、后台编辑器、API 密钥页复制条和悬停介绍 | `/api/option`、`/api/status` | 完成 |
 | `channels` | `channels-table.tsx`、`channels-columns.tsx`、dialogs/drawers、`api.ts` | 上游渠道 CRUD/测试/配置 | `/api/channel*` | 完成 |
 | `keys` | `api-keys-table.tsx`、`api-keys-columns.tsx`、mutate/delete dialogs | 用户 API key 管理 | `/api/token*` | 完成 |
-| `usage-logs` | `usage-logs-table.tsx`、普通/绘图/生图/任务 columns、`image-generation-task-dialog.tsx`、图片预览和筛选组件 | 普通消费日志、Midjourney 绘图日志、同步/异步生图日志、媒体任务日志；未完成生图每 2 秒刷新，任务 ID 弹窗按需请求 JSON | `/api/log*`、`/api/mj`、`/api/image-generation-logs*`、`/api/task` | 完成 |
+| `usage-logs` | `usage-logs-table.tsx`、普通/绘图/生图/任务 columns、`image-generation-task-dialog.tsx`、图片预览和筛选组件 | 普通消费日志、Midjourney 绘图日志、同步/异步生图日志、媒体任务日志；未完成生图每 2 秒刷新，任务 ID 弹窗由页面级状态持有并按需请求 JSON，不受表格轮询重建影响 | `/api/log*`、`/api/mj`、`/api/image-generation-logs*`、`/api/task` | 完成 |
 | `wallet` | recharge cards、subscription cards、affiliate rewards、redemption hook | 钱包充值、兑换码、订阅 | `/api/user/topup*`、`/api/subscription*`、支付 API | 完成 |
 | `redemption-codes` | `redemptions-table.tsx`、`redemptions-columns.tsx`、mutate/delete dialogs | 管理员/代理兑换码管理 | `/api/redemption*`、`/api/user/agent/topup-link` | 完成 |
 | `users` | `users-table.tsx`、`users-columns.tsx`、`users-mutate-drawer.tsx`、`agent-detail-dialog.tsx`、`user-detail-dialog.tsx` | 后台用户管理、代理详情、用户详情；详情弹窗包含头像身份摘要、关键指标带、订阅摘要、紧凑信息网格、响应式数据表和加载骨架 | `/api/user*`、`/api/log`、`/api/subscription/admin/*` | 完成 |
@@ -960,6 +960,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 
 | 日期 | 变更 | 更新文件/API/模型 | 验证 |
 | --- | --- | --- | --- |
+| 2026-07-19 | 修复异步生图任务 ID 弹窗在列表自动轮询后自行关闭：将选中任务和弹窗生命周期从表格单元格提升到日志页面，桌面和移动端共用稳定弹窗。 | `usage-logs-table.tsx`、`image-generation-logs-columns.tsx`、`lib/columns.ts` | `bun run typecheck`、目标 `oxlint`/`oxfmt`、`git diff --check` |
 | 2026-07-19 | 为 `/v1/images/generations` 增加 `async: true` 本地异步任务模式：提交即写生图日志并返回任务 ID，复用同步 Relay 后台执行，支持用户隔离轮询、受保护图片读取、`pending/processing/success/failed` 状态、脱敏响应 JSON；后台生图日志增加可点击任务 ID、状态弹窗和未完成任务自动刷新。 | `ImageRequest.async`、`ImageGenerationLog` 任务字段、`controller/image_generation_task.go`、`GET /v1/images/generations/:task_id*`、`GET /api/image-generation-logs/:id/task`、`image-generation-task-dialog.tsx`、locale files | `go test ./...`、`bun run typecheck`、目标 `oxlint`/`oxfmt`、`bun run build`、`bun run i18n:sync`、`git diff --check` |
 | 2026-07-16 | 新增管理员/root 用户 IP 管理：历史登录 IP 多选封禁/解封、禁用用户事务联动封禁、普通用户登录/注册/会话/API Token 拦截，以及用户列表共享 IP/已封 IP 标记。 | `BlockedIP`、`GetUserLoginIPStats`、`ManageUser`、`AdminGetUserLoginIPs`、`AdminUpdateUserLoginIPs`、`middleware/auth.go`、用户详情/列表、locale files | `go test ./...`、`bun run typecheck`、`bun run build`、`oxfmt --check`、`bun run i18n:sync`、`git diff --check`；目标组件 lint 的 5 项既有问题单独记录 |
 | 2026-07-16 | 用户详情在最近登录时间下显示未登录天数；按当前时间与 `last_login_at` 的完整 24 小时间隔动态计算，无登录记录时显示“从未登录”。 | `user-detail-dialog.tsx`、locale files | `bun run typecheck`、`oxfmt --check`、`bun run i18n:sync`、`git diff --check`；目标组件 lint 仅命中 5 项既有规则问题 |

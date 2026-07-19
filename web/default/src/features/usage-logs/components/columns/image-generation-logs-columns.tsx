@@ -26,12 +26,12 @@ import { formatQuota, formatTimestampToDate } from '@/lib/format'
 
 import type { ImageGenerationLog } from '../../types'
 import { ImageGenerationPreviewDialog } from '../dialogs/image-generation-preview-dialog'
-import { ImageGenerationTaskDialog } from '../dialogs/image-generation-task-dialog'
 import { PromptDialog } from '../dialogs/prompt-dialog'
 import { createChannelColumn } from './column-helpers'
 
 export function useImageGenerationLogsColumns(
-  isAdmin: boolean
+  isAdmin: boolean,
+  onOpenTask: (log: ImageGenerationLog) => void
 ): ColumnDef<ImageGenerationLog>[] {
   const { t } = useTranslation()
   const columns: ColumnDef<ImageGenerationLog>[] = [
@@ -61,29 +61,21 @@ export function useImageGenerationLogsColumns(
     {
       accessorKey: 'task_id',
       header: t('Task ID'),
-      cell: function TaskIdCell({ row }) {
-        const [open, setOpen] = useState(false)
+      cell: ({ row }) => {
         const log = row.original
         if (!log.task_id) {
           return <span className='text-muted-foreground text-xs'>-</span>
         }
         return (
-          <>
-            <button
-              type='button'
-              className='text-foreground hover:bg-muted inline-flex max-w-[180px] items-center gap-1.5 rounded-md px-1.5 py-1 font-mono text-xs'
-              title={t('JSON data')}
-              onClick={() => setOpen(true)}
-            >
-              <FileJson className='size-3.5 shrink-0' />
-              <span className='truncate'>{log.task_id}</span>
-            </button>
-            <ImageGenerationTaskDialog
-              log={log}
-              open={open}
-              onOpenChange={setOpen}
-            />
-          </>
+          <button
+            type='button'
+            className='text-foreground hover:bg-muted inline-flex max-w-[180px] items-center gap-1.5 rounded-md px-1.5 py-1 font-mono text-xs'
+            title={t('JSON data')}
+            onClick={() => onOpenTask(log)}
+          >
+            <FileJson className='size-3.5 shrink-0' />
+            <span className='truncate'>{log.task_id}</span>
+          </button>
         )
       },
     },

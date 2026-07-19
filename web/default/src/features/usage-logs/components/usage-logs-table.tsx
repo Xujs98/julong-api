@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { useQuery } from '@tanstack/react-query'
 import { getRouteApi } from '@tanstack/react-router'
 import type { ColumnDef } from '@tanstack/react-table'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
@@ -40,8 +41,9 @@ import {
 import { useColumnsByCategory } from '../lib/columns'
 import { parseLogOther } from '../lib/format'
 import { fetchLogsByCategory } from '../lib/utils'
-import type { LogCategory } from '../types'
+import type { ImageGenerationLog, LogCategory } from '../types'
 import { CommonLogsFilterBar } from './common-logs-filter-bar'
+import { ImageGenerationTaskDialog } from './dialogs/image-generation-task-dialog'
 import { TaskLogsFilterBar } from './task-logs-filter-bar'
 import { UsageLogsMobileList } from './usage-logs-mobile-card'
 
@@ -82,6 +84,8 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
   const isAdmin = useIsAdmin()
   const isMobile = useMediaQuery('(max-width: 640px)')
   const searchParams = route.useSearch()
+  const [selectedImageTask, setSelectedImageTask] =
+    useState<ImageGenerationLog | null>(null)
 
   const {
     columnFilters,
@@ -169,7 +173,11 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
   })
 
   const logs = data?.items || []
-  const columns = useColumnsByCategory(logCategory, isAdmin)
+  const columns = useColumnsByCategory(
+    logCategory,
+    isAdmin,
+    setSelectedImageTask
+  )
   const isLoadingData = isLoading || (isFetching && !data)
 
   const { table } = useDataTable({
@@ -193,58 +201,69 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
   const isCommon = logCategory === 'common'
 
   return (
-    <DataTablePage
-      table={table}
-      columns={columns as ColumnDef<Record<string, unknown>>[]}
-      isLoading={isLoadingData}
-      isFetching={isFetching}
-      emptyTitle={t('No Logs Found')}
-      emptyDescription={t(
-        'No usage logs available. Logs will appear here once API calls are made.'
-      )}
-      skeletonKeyPrefix='usage-log-skeleton'
-      applyHeaderSize
-      tableClassName={cn(
-        '[&_[data-slot=table]]:text-[13px] [&_[data-slot=table]_td]:text-[13px] [&_[data-slot=table]_td_*]:text-[13px] [&_[data-slot=table]_th]:text-[13px] [&_[data-slot=table]_th_*]:text-[13px]'
-      )}
-      mobile={
-        <UsageLogsMobileList
-          table={table}
-          isLoading={isLoadingData}
-          logCategory={logCategory}
-        />
-      }
-      toolbar={
-        isCommon ? (
-          <CommonLogsFilterBar table={table} />
-        ) : (
-          <TaskLogsFilterBar table={table} logCategory={logCategory} />
-        )
-      }
-      renderRow={(row) => {
-        const logType = (row.original as Record<string, unknown>).type as
-          | number
-          | undefined
-        let tintClass =
-          isCommon && logType != null ? (logTypeRowTint[logType] ?? '') : ''
-        if (isCommon && isAdmin) {
-          const other = parseLogOther(
-            ((row.original as Record<string, unknown>).other as string) ?? ''
-          )
-          if (other?.admin_info?.quota_saturation) {
-            tintClass = quotaSaturationRowTint
-          }
-        }
-
-        return (
-          <DataTableRow
-            key={row.id}
-            row={row}
-            className={cn('transition-colors', tintClass)}
-            getColumnClassName={() => (isCommon ? 'py-2' : 'py-3.5')}
+    <>
+      <DataTablePage
+        table={table}
+        columns={columns as ColumnDef<Record<string, unknown>>[]}
+        isLoading={isLoadingData}
+        isFetching={isFetching}
+        emptyTitle={t('No Logs Found')}
+        emptyDescription={t(
+          'No usage logs available. Logs will appear here once API calls are made.'
+        )}
+        skeletonKeyPrefix='usage-log-skeleton'
+        applyHeaderSize
+        tableClassName={cn(
+          '[&_[data-slot=table]]:text-[13px] [&_[data-slot=table]_td]:text-[13px] [&_[data-slot=table]_td_*]:text-[13px] [&_[data-slot=table]_th]:text-[13px] [&_[data-slot=table]_th_*]:text-[13px]'
+        )}
+        mobile={
+          <UsageLogsMobileList
+            table={table}
+            isLoading={isLoadingData}
+            logCategory={logCategory}
           />
-        )
-      }}
-    />
+        }
+        toolbar={
+          isCommon ? (
+            <CommonLogsFilterBar table={table} />
+          ) : (
+            <TaskLogsFilterBar table={table} logCategory={logCategory} />
+          )
+        }
+        renderRow={(row) => {
+          const logType = (row.original as Record<string, unknown>).type as
+            | number
+            | undefined
+          let tintClass =
+            isCommon && logType != null ? (logTypeRowTint[logType] ?? '') : ''
+          if (isCommon && isAdmin) {
+            const other = parseLogOther(
+              ((row.original as Record<string, unknown>).other as string) ?? ''
+            )
+            if (other?.admin_info?.quota_saturation) {
+              tintClass = quotaSaturationRowTint
+            }
+          }
+
+          return (
+            <DataTableRow
+              key={row.id}
+              row={row}
+              className={cn('transition-colors', tintClass)}
+              getColumnClassName={() => (isCommon ? 'py-2' : 'py-3.5')}
+            />
+          )
+        }}
+      />
+      {selectedImageTask ? (
+        <ImageGenerationTaskDialog
+          log={selectedImageTask}
+          open
+          onOpenChange={(open) => {
+            if (!open) setSelectedImageTask(null)
+          }}
+        />
+      ) : null}
+    </>
   )
 }
