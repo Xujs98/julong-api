@@ -108,6 +108,32 @@ type ServerLogInfo = {
   newest_time?: string
 }
 
+type ImageStorageConfig = {
+  enabled: boolean
+  endpoint: string
+  bucket: string
+  region: string
+  access_key: string
+  secret_key: string
+  has_secret_key: boolean
+  use_ssl: boolean
+  use_path_style: boolean
+  object_prefix: string
+}
+
+const defaultImageStorageConfig: ImageStorageConfig = {
+  enabled: false,
+  endpoint: '',
+  bucket: 'julong-media',
+  region: 'us-east-1',
+  access_key: '',
+  secret_key: '',
+  has_secret_key: false,
+  use_ssl: true,
+  use_path_style: true,
+  object_prefix: 'generated/images',
+}
+
 const HOURS_IN_DAY = 24
 
 function formatBytes(bytes: number, decimals = 2): string {
@@ -145,6 +171,208 @@ const quickSelectOptions = [
     getValue: () => getDateDaysAgo(30),
   },
 ]
+
+function ImageStorageSettings() {
+  const { t } = useTranslation()
+  const [config, setConfig] = useState<ImageStorageConfig>(
+    defaultImageStorageConfig
+  )
+  const [loading, setLoading] = useState(true)
+  const [testing, setTesting] = useState(false)
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    async function fetchImageStorageConfig() {
+      try {
+        const response = await api.get('/api/performance/image-storage')
+        if (!cancelled && response.data.success && response.data.data) {
+          setConfig({ ...defaultImageStorageConfig, ...response.data.data })
+        }
+      } catch {
+        // Keep defaults when the current administrator cannot load this config.
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+    void fetchImageStorageConfig()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const update = <K extends keyof ImageStorageConfig>(
+    key: K,
+    value: ImageStorageConfig[K]
+  ) => setConfig((current) => ({ ...current, [key]: value }))
+
+  const testConnection = async () => {
+    setTesting(true)
+    try {
+      const response = await api.post(
+        '/api/performance/image-storage/test',
+        config
+      )
+      if (!response.data.success) {
+        throw new Error(response.data.message || t('MinIO connection failed'))
+      }
+      toast.success(t('MinIO connection successful'))
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : t('MinIO connection failed')
+      )
+    } finally {
+      setTesting(false)
+    }
+  }
+
+  const save = async () => {
+    setSaving(true)
+    try {
+      const response = await api.put('/api/performance/image-storage', config)
+      if (!response.data.success) {
+        throw new Error(
+          response.data.message || t('Failed to save MinIO settings')
+        )
+      }
+      setConfig({
+        ...defaultImageStorageConfig,
+        ...response.data.data,
+        secret_key: '',
+      })
+      toast.success(t('MinIO settings saved'))
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : t('Failed to save MinIO settings')
+      )
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className='text-muted-foreground text-sm'>{t('Loading...')}</div>
+    )
+  }
+
+  return (
+    <div className='space-y-4 border-t pt-5'>
+      <div>
+        <h4 className='text-sm font-medium'>{t('MinIO image storage')}</h4>
+        <p className='text-muted-foreground mt-1 text-sm'>
+          {t(
+            'Store completed async image results in the shared private media bucket.'
+          )}
+        </p>
+      </div>
+      <SettingsSwitchItem>
+        <SettingsSwitchContent>
+          <FormLabel>{t('Enable MinIO storage')}</FormLabel>
+          <FormDescription>
+            {t(
+              'When upload fails, the image log falls back to the existing local or upstream result so completed tasks remain available.'
+            )}
+          </FormDescription>
+        </SettingsSwitchContent>
+        <Switch
+          checked={config.enabled}
+          onCheckedChange={(value) => update('enabled', value)}
+        />
+      </SettingsSwitchItem>
+      <div className='grid gap-4 md:grid-cols-2'>
+        <div className='space-y-2 md:col-span-2'>
+          <Label>{t('MinIO endpoint')}</Label>
+          <Input
+            value={config.endpoint}
+            onChange={(event) => update('endpoint', event.target.value)}
+            placeholder='https://media.julongkj.top'
+          />
+        </div>
+        <div className='space-y-2'>
+          <Label>{t('Bucket')}</Label>
+          <Input
+            value={config.bucket}
+            onChange={(event) => update('bucket', event.target.value)}
+          />
+        </div>
+        <div className='space-y-2'>
+          <Label>{t('Region')}</Label>
+          <Input
+            value={config.region}
+            onChange={(event) => update('region', event.target.value)}
+          />
+        </div>
+        <div className='space-y-2'>
+          <Label>{t('Access Key')}</Label>
+          <Input
+            value={config.access_key}
+            onChange={(event) => update('access_key', event.target.value)}
+            autoComplete='off'
+          />
+        </div>
+        <div className='space-y-2'>
+          <Label>{t('Secret Key')}</Label>
+          <Input
+            type='password'
+            value={config.secret_key}
+            onChange={(event) => update('secret_key', event.target.value)}
+            placeholder={
+              config.has_secret_key
+                ? t('Configured; leave blank to keep unchanged')
+                : ''
+            }
+            autoComplete='new-password'
+          />
+        </div>
+        <div className='space-y-2 md:col-span-2'>
+          <Label>{t('Generated image object prefix')}</Label>
+          <Input
+            value={config.object_prefix}
+            onChange={(event) => update('object_prefix', event.target.value)}
+            placeholder='generated/images'
+          />
+          <p className='text-muted-foreground text-xs'>
+            {t(
+              'Objects use generated/images/YYYY/MM/DD/{sha256}.{ext}; the same SHA-256 result is stored only once.'
+            )}
+          </p>
+        </div>
+      </div>
+      <div className='flex flex-wrap gap-6'>
+        <label className='flex items-center gap-2 text-sm'>
+          <Switch
+            checked={config.use_ssl}
+            onCheckedChange={(value) => update('use_ssl', value)}
+          />
+          {t('Use HTTPS')}
+        </label>
+        <label className='flex items-center gap-2 text-sm'>
+          <Switch
+            checked={config.use_path_style}
+            onCheckedChange={(value) => update('use_path_style', value)}
+          />
+          {t('Use S3 path style')}
+        </label>
+      </div>
+      <div className='flex flex-wrap gap-3'>
+        <Button
+          type='button'
+          variant='outline'
+          disabled={testing || saving}
+          onClick={testConnection}
+        >
+          {testing ? t('Testing...') : t('Test connection')}
+        </Button>
+        <Button type='button' disabled={saving || testing} onClick={save}>
+          {saving ? t('Saving...') : t('Save MinIO settings')}
+        </Button>
+      </div>
+    </div>
+  )
+}
 
 function isActiveLogCleanupTask(task: LogCleanupTask | null) {
   return task?.status === 'pending' || task?.status === 'running'
@@ -582,6 +810,7 @@ export function LogSettingsSection({
                 )}
               />
             )}
+            <ImageStorageSettings />
           </SettingsControlGroup>
 
           <SettingsControlGroup className='space-y-3'>

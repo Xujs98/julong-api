@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
@@ -173,6 +174,54 @@ func GetImageGenerationTaskImage(c *gin.Context) {
 	}
 	c.Header("Cache-Control", "private, max-age=3600")
 	c.Data(http.StatusOK, mimeType, data)
+}
+
+func GetImageGenerationTaskImagePresign(c *gin.Context) {
+	index, err := parseImageGenerationIndex(c.Param("index"))
+	if err != nil {
+		imageGenerationOpenAIError(c, http.StatusBadRequest, "invalid image index")
+		return
+	}
+	taskId := strings.TrimSpace(c.Param("task_id"))
+	log, err := model.GetUserImageGenerationLogByTaskId(c.GetInt("id"), taskId)
+	if err != nil {
+		imageGenerationOpenAIError(c, http.StatusNotFound, "image generation task not found")
+		return
+	}
+	refs, err := log.ImageRefs()
+	if err != nil || index >= len(refs) {
+		imageGenerationOpenAIError(c, http.StatusNotFound, "image not found")
+		return
+	}
+	ref := refs[index]
+	if ref.Type != "minio" {
+		imageGenerationOpenAIError(c, http.StatusConflict, "image is not stored in MinIO")
+		return
+	}
+	expiresIn := 3600
+	if raw := strings.TrimSpace(c.Query("expires_in")); raw != "" {
+		value, parseErr := strconv.Atoi(raw)
+		if parseErr != nil || value < 60 || value > 86400 {
+			imageGenerationOpenAIError(c, http.StatusBadRequest, "expires_in must be between 60 and 86400 seconds")
+			return
+		}
+		expiresIn = value
+	}
+	url, expiresAt, err := service.PresignGeneratedImageObject(
+		c.Request.Context(),
+		ref.Bucket,
+		ref.Value,
+		time.Duration(expiresIn)*time.Second,
+	)
+	if err != nil {
+		imageGenerationOpenAIError(c, http.StatusInternalServerError, "failed to create temporary image URL")
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"url":        url,
+		"expires_in": expiresIn,
+		"expires_at": expiresAt.UTC().Format(time.RFC3339),
+	})
 }
 
 func parseImageGenerationIndex(value string) (int, error) {

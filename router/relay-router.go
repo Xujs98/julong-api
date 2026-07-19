@@ -64,6 +64,7 @@ func SetRelayRouter(router *gin.Engine) {
 	imageGenerationTaskRouter.Use(middleware.SystemPerformanceCheck())
 	{
 		imageGenerationTaskRouter.GET("/:task_id", middleware.TokenAuthReadOnly(), controller.GetImageGenerationTask)
+		imageGenerationTaskRouter.GET("/:task_id/images/:index/presign", middleware.TokenAuthReadOnly(), controller.GetImageGenerationTaskImagePresign)
 		imageGenerationTaskRouter.GET("/:task_id/images/:index", middleware.ImageGenerationTaskImageAuth(), controller.GetImageGenerationTaskImage)
 	}
 

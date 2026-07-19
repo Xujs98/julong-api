@@ -167,6 +167,7 @@ docker compose up -d
 | `ImageGenerationLogImageAuthWhitelistEnabled` | `common/constants.go`、`model/option.go`、`middleware/image_generation_image_auth.go`、`log-settings-section.tsx` | 是否允许图片读取白名单免 API Key | 默认 `false`；只作用于 `GET /v1/images/generations/:task_id/images/:index`，不放开任务 JSON 查询和生图提交。 |
 | `ImageGenerationLogImageAuthWhitelist` | 同上、`common/image_generation_image_auth_whitelist.go` | 图片读取免鉴权来源列表 | 换行/逗号分隔精确 IP 或域名；IP 匹配 `ClientIP`，域名匹配浏览器 `Origin/Referer`；URL 会归一化为主机名；不支持通配符/CIDR；`0.0.0.0` 表示全部放行。 |
 | `IMAGE_LOG_STORAGE_DIR` | `service/image_generation_log.go` | 覆盖生图图片文件目录 | 默认 `image-generation-logs`；Docker `WORKDIR /data` 下位于持久化卷 `/data/image-generation-logs`。 |
+| `ImageGenerationStorage*` | `service/image_object_storage.go`、`controller/image_object_storage.go`、`log-settings-section.tsx` | 异步生图 MinIO/S3 私有对象存储 | 在“系统设置 → 运维 → 日志维护 → 记录生图日志”中配置；包含启用、Endpoint、Bucket、Region、Access/Secret Key、HTTPS、Path Style 和对象前缀。Secret Key 不回传前端，留空保存/测试沿用已存密钥。默认 Bucket `julong-media`、前缀 `generated/images`。 |
 | `async` 生图请求参数 | `dto/openai_image.go`、`controller/image_generation_task.go` | 将同步 `/v1/images/generations` 包装为本地异步任务 | 默认 `false`；仅在 `ImageGenerationLogEnabled=true` 时生效；转发上游前删除；有效异步模式与 `stream: true` 互斥。 |
 | `SupportContacts` | `common/constants.go`、`model/option.go` | 客服联系方式 JSON 数组 | 每项包含 `type`（qq/wechat/phone）、`label`、`value`；最多 30 条。 |
 
@@ -470,6 +471,22 @@ curl 'http://localhost:3000/api/image-generation-logs?p=1&page_size=20&model=gpt
 
 ### OpenAI 生图与异步轮询 API
 
+MinIO 管理接口均需要 `AdminAuth()` 和 `operations.logs` 系统设置权限，已完成：
+
+| 方法 | 路径 | Handler | 用途 | 请求/响应与错误处理 |
+| --- | --- | --- | --- | --- |
+| GET | `/api/performance/image-storage` | `controller.GetImageObjectStorageConfig` | 读取异步生图 MinIO 配置 | 无参数；返回 `{success,data: ImageObjectStorageConfig}` 及 `has_secret_key`，永不返回 Secret Key 原文；无权限返回 403。 |
+| PUT | `/api/performance/image-storage` | `controller.SaveImageObjectStorageConfig` | 保存 MinIO 配置 | JSON 字段为 `enabled/endpoint/bucket/region/access_key/secret_key/use_ssl/use_path_style/object_prefix`；Secret Key 留空沿用现有值；启用时校验凭据、Endpoint 和前缀；非法配置返回 400。 |
+| POST | `/api/performance/image-storage/test` | `controller.TestImageObjectStorageConfig` | 使用当前表单测试 Bucket | 请求结构同 PUT；只执行连接及 `BucketExists`，不会创建 Bucket 或修改权限；连接失败/Bucket 不存在返回 400。 |
+
+```bash
+curl -X PUT http://localhost:3000/api/performance/image-storage \
+  -H 'Content-Type: application/json' \
+  -H 'Cookie: <session-cookie>' \
+  -H 'New-Api-User: 1' \
+  -d '{"enabled":true,"endpoint":"https://media.example.com","bucket":"julong-media","region":"us-east-1","access_key":"ACCESS","secret_key":"SECRET","use_ssl":true,"use_path_style":true,"object_prefix":"generated/images"}'
+```
+
 #### `POST /v1/images/generations`
 
 - Handler：`controller.RelayImageGeneration`；同步执行继续进入 `controller.Relay`，异步执行由 `runImageGenerationTask` 在本进程后台复用同一 Relay 链路。
@@ -506,6 +523,8 @@ JSON 请求参数：
 未声明字段会被 `ImageRequest.Extra` 接收；全局/渠道透传模式保留原请求字段，标准转换模式只保证声明字段和适配器明确支持的扩展字段。`async` 在所有模式下都不会发送给上游。
 
 异步任务依赖“系统设置 → 运维 → 日志维护 → 记录生图日志”。该开关关闭时，带 `async: true` 的请求返回普通同步图片响应，不返回任务 ID，且不创建生图日志或落盘图片。
+
+MinIO 启用后，异步任务会将 Base64 结果或可下载的上游 URL 写入共享私有 Bucket。对象键固定为 `<object_prefix>/YYYY/MM/DD/{sha256}.{ext}`；默认是 `generated/images/YYYY/MM/DD/{sha256}.{ext}`。任务成功响应的 `data[]` 除鉴权图片读取 `url` 外，还包含 `bucket`、`object_key`、`sha256`、`mime_type`、`size`，供 `canvas.julongkj.top` 登记同一对象。MinIO 上传失败时回退到原本的本地文件或上游 URL，避免已成功的生成任务因存储故障被改成失败。
 
 同步请求示例（省略 `async`）：
 
@@ -582,6 +601,20 @@ curl -L https://api.julongkj.top/v1/images/generations/img_xxx/images/0 \
   -o generated-image.png
 ```
 
+#### `GET /v1/images/generations/:task_id/images/:index/presign`
+
+- Handler：`controller.GetImageGenerationTaskImagePresign`，状态为完成。
+- 用途：为 MinIO 类型的异步生图结果生成临时直链，客户端无需接触 MinIO 凭据。
+- 权限：`TokenAuthReadOnly`，并通过 `user_id + task_id` 强制校验任务属于当前 API Key 用户；不受图片读取白名单影响。
+- 参数：path `task_id/index`；可选 query `expires_in`，默认 `3600` 秒，范围 `60-86400`。
+- 响应：`{"url":"https://...","expires_in":3600,"expires_at":"RFC3339"}`。
+- 错误处理：索引非法 400；任务/图片不存在或越权 404；图片不是 MinIO 引用 409；配置/签名失败 500；缺少或无效 API Key 401。
+
+```bash
+curl 'https://api.julongkj.top/v1/images/generations/img_xxx/images/0/presign?expires_in=900' \
+  -H 'Authorization: Bearer sk-xxx'
+```
+
 错误处理：请求 JSON/参数非法、`async + stream` 返回 400；API Key 无效返回 401；用户/IP/Token 被禁用返回 403；模型无可用渠道通常返回 503；任务不存在或越权返回 404；异步执行中的上游/计费错误写入任务 `error.message` 并将状态更新为 `failed`。
 
 ### 客服联系方式 API
@@ -616,7 +649,7 @@ curl -L https://api.julongkj.top/v1/images/generations/img_xxx/images/0 \
 | --- | --- | --- | --- |
 | `/api/authz` | `GET /catalog` | 管理员/root | 权限目录 |
 | `/api/custom-oauth-provider` | `POST /discovery`、`GET/POST/PUT/DELETE` | Root | 自定义 OAuth Provider |
-| `/api/performance` | `GET /stats`、`DELETE /disk_cache`、`POST /reset_stats`、`POST /gc`、`GET/DELETE /logs` | Root | 运行时性能维护 |
+| `/api/performance` | `GET /stats`、`DELETE /disk_cache`、`POST /reset_stats`、`POST /gc`、`GET/DELETE /logs`、`GET/PUT /image-storage`、`POST /image-storage/test` | Root 或对应系统设置权限 | 运行时性能、日志及生图对象存储维护 |
 | `/api/ratio_sync` | `GET /channels`、`POST /fetch` | Root | 上游倍率同步 |
 | `/api/group` | `GET /` | 管理员/root | 分组列表 |
 | `/api/prefill_group` | `GET/POST/PUT/DELETE` | 管理员/root | 预填模型分组 |
@@ -691,7 +724,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 | `Channel` | `model/channel.go` | 上游 provider 渠道 | `id`、`type`、`key`、`base_url`、`models`、`group`、状态、priority/weight、计费/override 字段 | 由 distributor middleware 选择。敏感 key 需要脱敏。 | 活跃 |
 | `Ability` | `model/ability.go` | 渠道/模型能力映射 | channel/model/group enabled 字段 | 用于模型可用性和路由。 | 活跃 |
 | `Log` | `model/log.go` | 使用日志和审计日志 | `id`、`user_id`、`created_at`、`type`、`content`、`username`、`token_name`、`model_name`、`quota`、`prompt_tokens`、`completion_tokens`、`channel_id`、`ip`、`request_id`、`upstream_request_id`、`other` | 可位于独立日志库/ClickHouse。`GetUserLoginIPStats` 聚合登录 IP、次数和最后时间；`SumUserUsedToken` 提供总 token 消耗。 | 活跃 |
-| `ImageGenerationLog` | `model/image_generation_log.go` | 同步生图日志与本地异步任务 | `id`；索引 `task_id/status/user_id/username/token_id/channel_id/model_name/request_id/created_at/updated_at`；`prompt/size/quality/image_count/quota/use_time`；内部 `images/response` JSON；`error_message` | 同步日志默认 `success` 且 `task_id` 为空；异步任务状态为 `pending/processing/success/failed`。任务属于一个 User/Token；base64 解码文件默认存 `image-generation-logs/`，数据库响应删除 base64。AutoMigrate 只增列，旧记录保留。 | 活跃 |
+| `ImageGenerationLog` / `ImageGenerationImage` | `model/image_generation_log.go` | 同步生图日志与本地异步任务 | 日志含 `id`；索引 `task_id/status/user_id/username/token_id/channel_id/model_name/request_id/created_at/updated_at`；`prompt/size/quality/image_count/quota/use_time`；内部 `images/response` JSON。`ImageGenerationImage` JSON 字段为 `type/value/bucket/mime_type/sha256/size/revised_prompt`，`type` 支持 `local/remote/minio`。 | 任务属于一个 User/Token；MinIO 元数据写入现有 `images` 文本 JSON，不新增数据库列或表。旧 local/remote JSON 继续兼容；AutoMigrate 无额外迁移。 | 活跃 |
 | `Redemption` | `model/redemption.go` | 兑换码 | 唯一 `key`、`user_id` 生成者、`status`、`name`、`quota`、`created_time`、`redeemed_time`、`used_user_id`、`expired_time`、`agent_charge`、软删除 | 生成者显示字段是 transient。搜索支持 code、生成者、ID、名称。代理退款使用 `agent_charge`。 | 活跃 |
 | `TopUp` | `model/topup.go` | 在线支付/充值订单 | trade no、user、amount/money、provider、status | 支付回调结算。 | 活跃 |
 | `Checkin` / `CheckinRecord` | `model/checkin.go` | 每日签到奖励记录 | user/date/quota/time 字段 | 设置位于 `checkin_setting.*`。 | 活跃 |
@@ -902,7 +935,8 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 - 成功的 `/v1/images/generations` 请求，以及聊天/Responses 中成功返回 `image_generation_call.result` 的生图调用会写入记录；`/v1/images/edits` 暂不写入生图日志。
 - 记录用户、Token、渠道、模型、提示词、尺寸、品质、图片数、费用、请求 ID 和耗时。
 - base64 结果先解码为原始图片文件，单张上限 25MB；数据库只保存图片引用，避免 base64 约 33% 的编码膨胀。
-- 上游 URL 结果保存 URL 引用并由浏览器直接展示，避免后端日志预览产生 SSRF 风险；base64 本地文件通过鉴权接口读取。
+- MinIO 关闭时，上游 URL 结果仍保存 URL 引用，Base64 结果保存在本地目录；MinIO 开启时，服务端受限下载上游图片或解码 Base64 后按 SHA-256 写入共享私有 Bucket，任务/日志图片接口再从对象存储读取，客户端不接触 MinIO 凭据。
+- MinIO 对象不会随聚合平台生图日志过期清理直接删除，因为同一个 `object_key` 可能已被画布媒体资产引用；后续统一由画布资产引用计数和 Bucket 生命周期策略处理。
 - 本地异步任务图片读取可配置免鉴权白名单：IP 精确匹配客户端 IP，域名精确匹配浏览器 `Origin/Referer` 主机名，`0.0.0.0` 放行所有图片读取；任务查询和图片生成始终保留 API Key 鉴权。域名请求头可由非浏览器客户端伪造，因此敏感部署优先使用 IP 白名单，并确保反向代理正确覆盖真实客户端 IP 头。
 - 普通用户必须拥有启用生图日志权限的有效订阅，且只能查看自己的图片；管理员/root 可查看全部。
 - 套餐可设置允许查看的最近日志条数，`0` 为全部；多个有效订阅任一为 `0` 时无限制，否则取最大值。列表查询和图片读取接口都会校验该范围，不能通过旧图片 URL 绕过。
@@ -976,6 +1010,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 
 | 日期 | 变更 | 更新文件/API/模型 | 验证 |
 | --- | --- | --- | --- |
+| 2026-07-19 | 日志维护的“记录生图日志”增加可保存、测试连接的 MinIO 配置；异步生图完成后将 Base64 或可下载 URL 按 SHA-256 写入共享私有 Bucket，任务响应返回统一对象元数据，读取接口兼容本地/远程/MinIO 三种历史引用，并提供所有者专用预签名接口。Secret Key 不回显，留空沿用；存储失败保留原结果回退；远程图片下载使用 SSRF 防护客户端。 | `service/image_object_storage.go`、`controller/image_object_storage.go`、`GET/PUT /api/performance/image-storage`、`POST /api/performance/image-storage/test`、`GET /v1/images/generations/:task_id/images/:index/presign`、`ImageGenerationImage`、`service/image_generation_log.go`、`LogSettingsSection`、locale files、MinIO Go SDK | `go test ./...`、`bun run typecheck`、目标 `oxfmt/oxlint`、`bun run build`、`bun run i18n:sync`、`git diff --check` |
 | 2026-07-19 | 日志维护新增生图图片读取免鉴权白名单开关和多域名/IP 配置；精确匹配客户端 IP 或浏览器 Origin/Referer，`0.0.0.0` 全放行。仅图片二进制接口可绕过鉴权，任务 JSON 查询和生图提交保持 API Key/计费保护。 | `ImageGenerationLogImageAuthWhitelistEnabled`、`ImageGenerationLogImageAuthWhitelist`、`common/image_generation_image_auth_whitelist.go`、`middleware.ImageGenerationTaskImageAuth`、`GET /v1/images/generations/:task_id/images/:index`、`LogSettingsSection`、locale files、`生图轮询接口说明.md` | `go test ./...`、`bun run typecheck`、目标 `oxlint`/`oxfmt`、`bun run build`、`bun run i18n:sync`、`git diff --check` |
 | 2026-07-19 | 新增独立的生图轮询接口交付文档，覆盖启用条件、完整请求参数、任务提交/查询响应、自动轮询、图片下载、错误处理、存储与进程限制。 | `生图轮询接口说明.md` | 文档内容与当前 API、配置和 `DEVELOPMENT.md` 逐项核对，`git diff --check` |
 | 2026-07-19 | 将未完成生图任务轮询从固定 2 秒改为默认 15 秒，并允许在日志维护中配置 5-3600 秒；任务响应公开建议频率。记录生图日志关闭时忽略 `async: true`、退回同步响应，不创建任务或存储图片。 | `ImageGenerationLogPollingIntervalSeconds`、`controller.GetStatus`、`RelayImageGeneration`、任务 payload、日志设置表单、usage logs 轮询、locale files | `go test ./...`、`bun run typecheck`、目标 `oxlint`/`oxfmt`、`bun run build`、`bun run i18n:sync`、`git diff --check` |

@@ -17,7 +17,10 @@ const (
 type ImageGenerationImage struct {
 	Type          string `json:"type"`
 	Value         string `json:"value"`
+	Bucket        string `json:"bucket,omitempty"`
 	MimeType      string `json:"mime_type,omitempty"`
+	SHA256        string `json:"sha256,omitempty"`
+	Size          int64  `json:"size,omitempty"`
 	RevisedPrompt string `json:"revised_prompt,omitempty"`
 }
 

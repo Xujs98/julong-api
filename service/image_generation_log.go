@@ -1,11 +1,13 @@
 package service
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -259,10 +261,17 @@ func BuildImageGenerationTaskPayload(log *model.ImageGenerationLog, buildURL Ima
 	data := make([]map[string]any, 0, len(refs))
 	for index, ref := range refs {
 		url := ref.Value
-		if ref.Type == "local" && buildURL != nil {
+		if (ref.Type == "local" || ref.Type == "minio") && buildURL != nil {
 			url = buildURL(index)
 		}
 		item := map[string]any{"url": url}
+		if ref.Type == "minio" {
+			item["bucket"] = ref.Bucket
+			item["object_key"] = ref.Value
+			item["sha256"] = ref.SHA256
+			item["mime_type"] = ref.MimeType
+			item["size"] = ref.Size
+		}
 		if ref.RevisedPrompt != "" {
 			item["revised_prompt"] = ref.RevisedPrompt
 		}
@@ -309,6 +318,19 @@ func ReadImageGenerationLogImage(log *model.ImageGenerationLog, index int) ([]by
 		return nil, "", fmt.Errorf("image not found")
 	}
 	ref := refs[index]
+	if ref.Type == "minio" {
+		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+		defer cancel()
+		data, err := ReadGeneratedImageObject(ctx, ref.Bucket, ref.Value, maxLoggedImageBytes)
+		if err != nil {
+			return nil, "", err
+		}
+		mimeType := ref.MimeType
+		if mimeType == "" {
+			mimeType = http.DetectContentType(data)
+		}
+		return data, mimeType, nil
+	}
 	if ref.Type != "local" || filepath.Base(ref.Value) != ref.Value {
 		return nil, "", fmt.Errorf("local image not found")
 	}
@@ -424,11 +446,25 @@ func persistImageGenerationResult(image dto.ImageData) (model.ImageGenerationIma
 		if !strings.HasPrefix(url, "https://") && !strings.HasPrefix(url, "http://") {
 			return model.ImageGenerationImage{}, fmt.Errorf("unsupported image URL")
 		}
-		return model.ImageGenerationImage{
+		remoteRef := model.ImageGenerationImage{
 			Type:          "remote",
 			Value:         url,
 			RevisedPrompt: image.RevisedPrompt,
-		}, nil
+		}
+		if !GetImageObjectStorageConfig().Enabled {
+			return remoteRef, nil
+		}
+		data, mimeType, err := downloadGeneratedImage(url)
+		if err != nil {
+			common.SysError("failed to download generated image for MinIO: " + err.Error())
+			return remoteRef, nil
+		}
+		stored, err := StoreGeneratedImageObject(context.Background(), data, mimeType, extensionForImageMime(mimeType))
+		if err != nil {
+			common.SysError("failed to store generated image in MinIO: " + err.Error())
+			return remoteRef, nil
+		}
+		return minioImageRef(stored, image.RevisedPrompt), nil
 	}
 
 	encoded := image.B64Json
@@ -448,6 +484,13 @@ func persistImageGenerationResult(image dto.ImageData) (model.ImageGenerationIma
 	mimeType := http.DetectContentType(data)
 	if !strings.HasPrefix(mimeType, "image/") {
 		return model.ImageGenerationImage{}, fmt.Errorf("generated content is not an image")
+	}
+	if GetImageObjectStorageConfig().Enabled {
+		stored, storeErr := StoreGeneratedImageObject(context.Background(), data, mimeType, extensionForImageMime(mimeType))
+		if storeErr == nil {
+			return minioImageRef(stored, image.RevisedPrompt), nil
+		}
+		common.SysError("failed to store generated image in MinIO, falling back to local disk: " + storeErr.Error())
 	}
 	dir := ImageGenerationLogStorageDir()
 	if err := os.MkdirAll(dir, 0o750); err != nil {
@@ -469,6 +512,57 @@ func persistImageGenerationResult(image dto.ImageData) (model.ImageGenerationIma
 		MimeType:      mimeType,
 		RevisedPrompt: image.RevisedPrompt,
 	}, nil
+}
+
+func minioImageRef(stored StoredImageObject, revisedPrompt string) model.ImageGenerationImage {
+	return model.ImageGenerationImage{
+		Type:          "minio",
+		Value:         stored.ObjectKey,
+		Bucket:        stored.Bucket,
+		MimeType:      stored.MimeType,
+		SHA256:        stored.SHA256,
+		Size:          stored.Size,
+		RevisedPrompt: revisedPrompt,
+	}
+}
+
+func downloadGeneratedImage(rawURL string) ([]byte, string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
+	if err != nil {
+		return nil, "", err
+	}
+	if err := ValidateSSRFProtectedFetchURL(rawURL); err != nil {
+		return nil, "", fmt.Errorf("image URL rejected: %w", err)
+	}
+	client := GetSSRFProtectedHTTPClient()
+	if client == nil {
+		return nil, "", fmt.Errorf("protected image download client is not initialized")
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return nil, "", fmt.Errorf("下载图片返回 HTTP %d", resp.StatusCode)
+	}
+	data, err := io.ReadAll(io.LimitReader(resp.Body, maxLoggedImageBytes+1))
+	if err != nil {
+		return nil, "", err
+	}
+	if len(data) == 0 || len(data) > maxLoggedImageBytes {
+		return nil, "", fmt.Errorf("image size is outside the allowed range")
+	}
+	mimeType := strings.TrimSpace(strings.Split(resp.Header.Get("Content-Type"), ";")[0])
+	if !strings.HasPrefix(mimeType, "image/") {
+		mimeType = http.DetectContentType(data)
+	}
+	if !strings.HasPrefix(mimeType, "image/") {
+		return nil, "", fmt.Errorf("generated content is not an image")
+	}
+	return data, mimeType, nil
 }
 
 func extensionForImageMime(mimeType string) string {
