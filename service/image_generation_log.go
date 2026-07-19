@@ -276,16 +276,17 @@ func BuildImageGenerationTaskPayload(log *model.ImageGenerationLog, buildURL Ima
 		progress = 100
 	}
 	payload := map[string]any{
-		"task_id":     log.TaskId,
-		"object":      "image.generation.task",
-		"status":      log.Status,
-		"progress":    progress,
-		"created_at":  log.CreatedAt,
-		"updated_at":  log.UpdatedAt,
-		"request_id":  log.RequestId,
-		"model":       log.ModelName,
-		"image_count": log.ImageCount,
-		"data":        data,
+		"task_id":                  log.TaskId,
+		"object":                   "image.generation.task",
+		"status":                   log.Status,
+		"progress":                 progress,
+		"created_at":               log.CreatedAt,
+		"updated_at":               log.UpdatedAt,
+		"request_id":               log.RequestId,
+		"model":                    log.ModelName,
+		"image_count":              log.ImageCount,
+		"data":                     data,
+		"polling_interval_seconds": common.ImageGenerationLogPollingIntervalSeconds,
 	}
 	if log.ErrorMessage != "" {
 		payload["error"] = map[string]any{"message": log.ErrorMessage}

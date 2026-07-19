@@ -10,6 +10,7 @@ func TestOptionAllowedForSystemSettingsAction(t *testing.T) {
 		{"SystemName", "site.system-info", true},
 		{"SystemName", "operations.logs", false},
 		{"ImageGenerationLogEnabled", "operations.logs", true},
+		{"ImageGenerationLogPollingIntervalSeconds", "operations.logs", true},
 		{"ModelPrice", "billing.model-pricing", true},
 		{"GroupRatio", "billing.group-pricing", true},
 		{"WaffoPrivateKey", "billing.payment", true},

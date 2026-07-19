@@ -117,6 +117,7 @@ var MemoryCacheEnabled bool
 var LogConsumeEnabled = true
 var ImageGenerationLogEnabled = false
 var ImageGenerationLogRetentionDays = 30
+var ImageGenerationLogPollingIntervalSeconds = 15
 var SupportContacts = "[]"
 
 var TLSInsecureSkipVerify bool

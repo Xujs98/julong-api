@@ -310,6 +310,15 @@ func UpdateOption(c *gin.Context) {
 			})
 			return
 		}
+	case "ImageGenerationLogPollingIntervalSeconds":
+		interval, parseErr := strconv.Atoi(option.Value.(string))
+		if parseErr != nil || interval < 5 || interval > 3600 {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": "生图任务刷新频率必须为 5 到 3600 秒之间的整数",
+			})
+			return
+		}
 	case "console_setting.api_info":
 		err = console_setting.ValidateConsoleSettings(option.Value.(string), "ApiInfo")
 		if err != nil {

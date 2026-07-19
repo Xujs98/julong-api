@@ -37,8 +37,8 @@ func RelayImageGeneration(c *gin.Context) {
 		imageGenerationOpenAIError(c, http.StatusBadRequest, "prompt is required")
 		return
 	}
-	if !request.IsAsync() {
-		Relay(c, types.RelayFormatOpenAIImage)
+	if !request.IsAsync() || !common.ImageGenerationLogEnabled {
+		imageGenerationRelayRunner(c)
 		return
 	}
 	if request.Stream != nil && *request.Stream {
@@ -59,11 +59,12 @@ func RelayImageGeneration(c *gin.Context) {
 
 	backgroundContext, recorder := newImageGenerationBackgroundContext(c, requestBody, task.TaskId)
 	c.JSON(http.StatusAccepted, gin.H{
-		"task_id":    task.TaskId,
-		"object":     "image.generation.task",
-		"status":     model.ImageGenerationStatusPending,
-		"created_at": task.CreatedAt,
-		"poll_url":   "/v1/images/generations/" + task.TaskId,
+		"task_id":                  task.TaskId,
+		"object":                   "image.generation.task",
+		"status":                   model.ImageGenerationStatusPending,
+		"created_at":               task.CreatedAt,
+		"poll_url":                 "/v1/images/generations/" + task.TaskId,
+		"polling_interval_seconds": common.ImageGenerationLogPollingIntervalSeconds,
 	})
 
 	go runImageGenerationTask(backgroundContext, recorder, task)

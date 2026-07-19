@@ -33,6 +33,7 @@ const STATUS_RELATED_KEYS = new Set([
   'console_setting.announcements_enabled',
   'console_setting.custom_endpoints',
   'LogConsumeEnabled',
+  'ImageGenerationLogPollingIntervalSeconds',
   'QuotaPerUnit',
   'USDExchangeRate',
   'DisplayInCurrencyEnabled',

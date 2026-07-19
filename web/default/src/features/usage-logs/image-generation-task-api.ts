@@ -20,6 +20,22 @@ import { api } from '@/lib/api'
 
 import type { ImageGenerationTaskPayload } from './types'
 
+const DEFAULT_IMAGE_GENERATION_POLLING_INTERVAL_SECONDS = 15
+const MIN_IMAGE_GENERATION_POLLING_INTERVAL_SECONDS = 5
+const MAX_IMAGE_GENERATION_POLLING_INTERVAL_SECONDS = 3600
+
+export function getImageGenerationPollingIntervalMs(value: unknown): number {
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed)) {
+    return DEFAULT_IMAGE_GENERATION_POLLING_INTERVAL_SECONDS * 1000
+  }
+  const seconds = Math.min(
+    MAX_IMAGE_GENERATION_POLLING_INTERVAL_SECONDS,
+    Math.max(MIN_IMAGE_GENERATION_POLLING_INTERVAL_SECONDS, Math.round(parsed))
+  )
+  return seconds * 1000
+}
+
 export const getImageGenerationTask = (logId: number) =>
   api.get(`/api/image-generation-logs/${logId}/task`).then((res) => {
     const result = res.data as {

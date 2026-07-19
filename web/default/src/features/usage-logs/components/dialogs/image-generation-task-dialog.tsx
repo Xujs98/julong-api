@@ -34,6 +34,7 @@ interface Props {
   log: ImageGenerationLog
   open: boolean
   onOpenChange: (open: boolean) => void
+  pollingIntervalMs: number
 }
 
 const statusVariants: Record<ImageGenerationLog['status'], StatusVariant> = {
@@ -53,7 +54,12 @@ function statusLabel(
   return t('Failed')
 }
 
-export function ImageGenerationTaskDialog({ log, open, onOpenChange }: Props) {
+export function ImageGenerationTaskDialog({
+  log,
+  open,
+  onOpenChange,
+  pollingIntervalMs,
+}: Props) {
   const { t } = useTranslation()
   const taskQuery = useQuery({
     queryKey: ['image-generation-task', log.id],
@@ -61,7 +67,9 @@ export function ImageGenerationTaskDialog({ log, open, onOpenChange }: Props) {
     enabled: open && Boolean(log.task_id),
     refetchInterval: (query) => {
       const status = query.state.data?.status
-      return status === 'pending' || status === 'processing' ? 2000 : false
+      return status === 'pending' || status === 'processing'
+        ? pollingIntervalMs
+        : false
     },
   })
   const formattedJson = useMemo(

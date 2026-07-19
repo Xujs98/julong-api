@@ -42,6 +42,21 @@ func TestPersistImageGenerationResultStoresDecodedFile(t *testing.T) {
 	}
 }
 
+func TestCaptureImageGenerationResultDisabled(t *testing.T) {
+	previousEnabled := common.ImageGenerationLogEnabled
+	common.ImageGenerationLogEnabled = false
+	t.Cleanup(func() { common.ImageGenerationLogEnabled = previousEnabled })
+
+	c, _ := gin.CreateTestContext(nil)
+	CaptureImageGenerationResult(c, []dto.ImageData{{
+		B64Json: base64.StdEncoding.EncodeToString([]byte("image")),
+	}})
+
+	if _, exists := c.Get(imageGenerationResultKey); exists {
+		t.Fatal("image result was captured while image generation logging was disabled")
+	}
+}
+
 func TestRecordImageGenerationLogStoresMetadataAndFileReference(t *testing.T) {
 	truncate(t)
 	seedUser(t, 701, 100000)

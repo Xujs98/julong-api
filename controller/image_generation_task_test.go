@@ -21,6 +21,9 @@ func TestRelayImageGenerationAsyncLifecycle(t *testing.T) {
 	db := setupModelListControllerTestDB(t)
 	require.NoError(t, db.AutoMigrate(&model.Token{}, &model.ImageGenerationLog{}))
 	require.NoError(t, db.Create(&model.User{Id: 801, Username: "image_task_user", Status: common.UserStatusEnabled}).Error)
+	previousEnabled := common.ImageGenerationLogEnabled
+	common.ImageGenerationLogEnabled = true
+	t.Cleanup(func() { common.ImageGenerationLogEnabled = previousEnabled })
 
 	originalRunner := imageGenerationRelayRunner
 	requestBodies := make(chan string, 1)
@@ -52,12 +55,14 @@ func TestRelayImageGenerationAsyncLifecycle(t *testing.T) {
 	RelayImageGeneration(c)
 	require.Equal(t, http.StatusAccepted, recorder.Code)
 	var submitted struct {
-		TaskID string `json:"task_id"`
-		Status string `json:"status"`
+		TaskID                string `json:"task_id"`
+		Status                string `json:"status"`
+		PollingIntervalSeconds int    `json:"polling_interval_seconds"`
 	}
 	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &submitted))
 	require.NotEmpty(t, submitted.TaskID)
 	require.Equal(t, model.ImageGenerationStatusPending, submitted.Status)
+	require.Equal(t, common.ImageGenerationLogPollingIntervalSeconds, submitted.PollingIntervalSeconds)
 
 	select {
 	case body := <-requestBodies:
@@ -122,4 +127,43 @@ func TestRelayImageGenerationRejectsEmptyPrompt(t *testing.T) {
 
 	require.Equal(t, http.StatusBadRequest, recorder.Code)
 	require.Contains(t, recorder.Body.String(), "prompt is required")
+}
+
+func TestRelayImageGenerationIgnoresAsyncWhenLoggingDisabled(t *testing.T) {
+	db := setupModelListControllerTestDB(t)
+	require.NoError(t, db.AutoMigrate(&model.ImageGenerationLog{}))
+
+	previousEnabled := common.ImageGenerationLogEnabled
+	common.ImageGenerationLogEnabled = false
+	t.Cleanup(func() { common.ImageGenerationLogEnabled = previousEnabled })
+
+	originalRunner := imageGenerationRelayRunner
+	called := false
+	imageGenerationRelayRunner = func(c *gin.Context) {
+		called = true
+		c.JSON(http.StatusOK, dto.ImageResponse{
+			Created: time.Now().Unix(),
+			Data:    []dto.ImageData{{Url: "https://example.com/synchronous.png"}},
+		})
+	}
+	t.Cleanup(func() { imageGenerationRelayRunner = originalRunner })
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(
+		http.MethodPost,
+		"/v1/images/generations",
+		strings.NewReader(`{"model":"gpt-image-2","prompt":"minimal poster","async":true}`),
+	)
+	c.Request.Header.Set("Content-Type", "application/json")
+	t.Cleanup(func() { common.CleanupBodyStorage(c) })
+
+	RelayImageGeneration(c)
+
+	require.True(t, called)
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.NotContains(t, recorder.Body.String(), `"task_id"`)
+	var taskCount int64
+	require.NoError(t, db.Model(&model.ImageGenerationLog{}).Count(&taskCount).Error)
+	require.Zero(t, taskCount)
 }

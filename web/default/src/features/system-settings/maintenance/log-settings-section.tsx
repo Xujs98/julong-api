@@ -82,6 +82,7 @@ const logSettingsSchema = z.object({
   LogConsumeEnabled: z.boolean(),
   ImageGenerationLogEnabled: z.boolean(),
   ImageGenerationLogRetentionDays: z.number().int().min(0).max(3650),
+  ImageGenerationLogPollingIntervalSeconds: z.number().int().min(5).max(3600),
 })
 
 type LogSettingsFormValues = z.infer<typeof logSettingsSchema>
@@ -90,6 +91,7 @@ type LogSettingsSectionProps = {
   defaultEnabled: boolean
   defaultImageLogEnabled: boolean
   defaultImageLogRetentionDays: number
+  defaultImageLogPollingIntervalSeconds: number
 }
 
 type ServerLogInfo = {
@@ -147,6 +149,7 @@ export function LogSettingsSection({
   defaultEnabled,
   defaultImageLogEnabled,
   defaultImageLogRetentionDays,
+  defaultImageLogPollingIntervalSeconds,
 }: LogSettingsSectionProps) {
   const { t } = useTranslation()
   const updateOption = useUpdateOption()
@@ -156,6 +159,8 @@ export function LogSettingsSection({
       LogConsumeEnabled: defaultEnabled,
       ImageGenerationLogEnabled: defaultImageLogEnabled,
       ImageGenerationLogRetentionDays: defaultImageLogRetentionDays,
+      ImageGenerationLogPollingIntervalSeconds:
+        defaultImageLogPollingIntervalSeconds,
     },
   })
 
@@ -186,10 +191,13 @@ export function LogSettingsSection({
       LogConsumeEnabled: defaultEnabled,
       ImageGenerationLogEnabled: defaultImageLogEnabled,
       ImageGenerationLogRetentionDays: defaultImageLogRetentionDays,
+      ImageGenerationLogPollingIntervalSeconds:
+        defaultImageLogPollingIntervalSeconds,
     })
   }, [
     defaultEnabled,
     defaultImageLogEnabled,
+    defaultImageLogPollingIntervalSeconds,
     defaultImageLogRetentionDays,
     form,
   ])
@@ -286,6 +294,10 @@ export function LogSettingsSection({
       {
         key: 'ImageGenerationLogRetentionDays',
         value: values.ImageGenerationLogRetentionDays,
+      },
+      {
+        key: 'ImageGenerationLogPollingIntervalSeconds',
+        value: values.ImageGenerationLogPollingIntervalSeconds,
       },
     ] as Array<{ key: string; value: boolean | number }>
 
@@ -410,6 +422,11 @@ export function LogSettingsSection({
                         'Store prompts and generated images for successful image generation requests. Images use local disk space.'
                       )}
                     </FormDescription>
+                    <FormDescription>
+                      {t(
+                        'When disabled, async image generation falls back to synchronous responses and generated images are not stored.'
+                      )}
+                    </FormDescription>
                   </SettingsSwitchContent>
                   <FormControl>
                     <Switch
@@ -444,6 +461,38 @@ export function LogSettingsSection({
                   </FormControl>
                   <FormDescription>
                     {t('Set to 0 to keep image generation logs indefinitely.')}
+                  </FormDescription>
+                  <FormMessage />
+                </div>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name='ImageGenerationLogPollingIntervalSeconds'
+              render={({ field }) => (
+                <div className='flex flex-col gap-2'>
+                  <FormLabel>
+                    {t('Image task polling interval (seconds)')}
+                  </FormLabel>
+                  <FormControl>
+                    <Input
+                      type='number'
+                      min={5}
+                      max={3600}
+                      className='max-w-40'
+                      value={field.value}
+                      onBlur={field.onBlur}
+                      name={field.name}
+                      ref={field.ref}
+                      onChange={(event) =>
+                        field.onChange(Number(event.target.value))
+                      }
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    {t(
+                      'Refresh unfinished image tasks at this interval. Allowed range: 5-3600 seconds.'
+                    )}
                   </FormDescription>
                   <FormMessage />
                 </div>

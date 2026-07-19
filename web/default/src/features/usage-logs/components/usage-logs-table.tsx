@@ -30,6 +30,7 @@ import {
 } from '@/components/data-table'
 import { useMediaQuery } from '@/hooks'
 import { useIsAdmin } from '@/hooks/use-admin'
+import { useStatus } from '@/hooks/use-status'
 import { useTableUrlState } from '@/hooks/use-table-url-state'
 import { cn } from '@/lib/utils'
 
@@ -38,6 +39,7 @@ import {
   LOG_TYPE_ALL_VALUE,
   LOG_TYPE_ENUM,
 } from '../constants'
+import { getImageGenerationPollingIntervalMs } from '../image-generation-task-api'
 import { useColumnsByCategory } from '../lib/columns'
 import { parseLogOther } from '../lib/format'
 import { fetchLogsByCategory } from '../lib/utils'
@@ -83,9 +85,13 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
   const { t } = useTranslation()
   const isAdmin = useIsAdmin()
   const isMobile = useMediaQuery('(max-width: 640px)')
+  const { status } = useStatus()
   const searchParams = route.useSearch()
   const [selectedImageTask, setSelectedImageTask] =
     useState<ImageGenerationLog | null>(null)
+  const imageGenerationPollingIntervalMs = getImageGenerationPollingIntervalMs(
+    status?.image_generation_log_polling_interval_seconds
+  )
 
   const {
     columnFilters,
@@ -167,7 +173,7 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
       return items?.some(
         (item) => item.status === 'pending' || item.status === 'processing'
       )
-        ? 2000
+        ? imageGenerationPollingIntervalMs
         : false
     },
   })
@@ -259,6 +265,7 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
         <ImageGenerationTaskDialog
           log={selectedImageTask}
           open
+          pollingIntervalMs={imageGenerationPollingIntervalMs}
           onOpenChange={(open) => {
             if (!open) setSelectedImageTask(null)
           }}

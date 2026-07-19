@@ -333,6 +333,7 @@ export interface ImageGenerationTaskPayload {
   }>
   error: { message: string } | null
   response?: Record<string, unknown>
+  polling_interval_seconds: number
 }
 
 // ============================================================================

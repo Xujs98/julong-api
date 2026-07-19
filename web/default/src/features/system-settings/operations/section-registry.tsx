@@ -102,6 +102,9 @@ const OPERATIONS_SECTIONS = [
         defaultImageLogRetentionDays={Number(
           settings.ImageGenerationLogRetentionDays ?? 30
         )}
+        defaultImageLogPollingIntervalSeconds={Number(
+          settings.ImageGenerationLogPollingIntervalSeconds ?? 15
+        )}
       />
     ),
   },

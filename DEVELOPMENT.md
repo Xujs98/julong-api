@@ -27,7 +27,7 @@
 | 用户详情与 IP 管理 | 已实现 | 后台用户详情显示登录 IP 历史并支持多选封禁/解封；用户列表标记共享 IP 和已封 IP。 |
 | 兑换码搜索 | 已实现 | 后台兑换码支持按兑换码 key、生成者用户名/显示名、名称、ID、状态搜索。 |
 | 签到额度预览 | 已实现 | 计费与支付中的签到奖励输入框显示格式化额度预览。 |
-| 生图日志与异步生图 | 已实现 | 同步请求可按 root 开关记录；`async: true` 立即创建 `pending` 日志并返回任务 ID，支持 API Key 轮询、状态更新、图片读取和后台 JSON 详情。 |
+| 生图日志与异步生图 | 已实现 | 开启生图日志后，`async: true` 立即创建 `pending` 日志并返回任务 ID，支持 API Key 轮询、状态更新、图片读取和后台 JSON 详情；关闭日志时退回同步且不存图。 |
 | 系统设置权限 | 已实现 | root 可按 7 个一级菜单下的 41 个二级设置页面逐项授权管理员；菜单、路由、通用配置键和专用 API 均执行权限校验。 |
 | 客服联系 | 已实现 | 概览页展示联系客服弹窗；root 可授权指定管理员维护多条 QQ、微信和手机联系方式。 |
 | 文档纪律 | 新增 | 以后每次代码改动都必须同步维护本文档。 |
@@ -161,10 +161,11 @@ docker compose up -d
 | `QuotaForInviter` / `QuotaForInvitee` | 同上 | 邀请奖励 | 受支付合规确认约束。 |
 | `SidebarModulesAdmin` | `web/default/src/features/system-settings/maintenance/config.ts` | 控制侧边栏模块显示 | 自定义模块包含 `errorReports`。 |
 | 模型定价订阅抵扣 | `web/default/src/features/system-settings/models/model-pricing-sheet.tsx` 及后端计费设置 | 按次模型是否允许订阅额度抵扣 | 适用于所有模型，不局限于 `gpt-image-2`。 |
-| `ImageGenerationLogEnabled` | `common/constants.go`、`model/option.go`、`log-settings-section.tsx` | 是否记录成功同步生图请求的提示词和图片 | Root 配置，默认 `false`；关闭时不捕获或保存图片。 |
+| `ImageGenerationLogEnabled` | `common/constants.go`、`model/option.go`、`log-settings-section.tsx` | 是否记录生图请求并启用本地异步生图 | Root 或获授权管理员配置，默认 `false`；关闭时 `async: true` 退回同步，不创建任务、不捕获或保存图片。 |
 | `ImageGenerationLogRetentionDays` | 同上、`service/image_generation_log.go` | 生图日志及本地图片自动保留天数 | 默认 `30`，范围 `0-3650`；`0` 表示永久保留，每小时至多触发一次过期清理。 |
+| `ImageGenerationLogPollingIntervalSeconds` | `common/constants.go`、`model/option.go`、`log-settings-section.tsx` | 未完成生图任务的前端轮询频率 | 默认 `15` 秒，允许 `5-3600` 秒；同时通过 `/api/status` 和任务响应公开。 |
 | `IMAGE_LOG_STORAGE_DIR` | `service/image_generation_log.go` | 覆盖生图图片文件目录 | 默认 `image-generation-logs`；Docker `WORKDIR /data` 下位于持久化卷 `/data/image-generation-logs`。 |
-| `async` 生图请求参数 | `dto/openai_image.go`、`controller/image_generation_task.go` | 将同步 `/v1/images/generations` 包装为本地异步任务 | 默认 `false`；只由 Julong-API 消费，转发上游前删除；`async: true` 与 `stream: true` 互斥。 |
+| `async` 生图请求参数 | `dto/openai_image.go`、`controller/image_generation_task.go` | 将同步 `/v1/images/generations` 包装为本地异步任务 | 默认 `false`；仅在 `ImageGenerationLogEnabled=true` 时生效；转发上游前删除；有效异步模式与 `stream: true` 互斥。 |
 | `SupportContacts` | `common/constants.go`、`model/option.go` | 客服联系方式 JSON 数组 | 每项包含 `type`（qq/wechat/phone）、`label`、`value`；最多 30 条。 |
 
 ## 架构
@@ -224,7 +225,7 @@ type ApiResponse<T> = {
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | GET | `/api/setup` | `controller.GetSetup` | 读取安装/初始化状态 | 无 | setup 元数据 | 公开 | 完成 |
 | POST | `/api/setup` | `controller.PostSetup` | 初始化安装 | setup payload | success | 公开 + body limit | 完成 |
-| GET | `/api/status` | `controller.GetStatus` | 系统状态/健康检查 | 无 | status 对象；包含 `custom_endpoints`；公告启用时仅含当前有效且面向所有用户的 `announcements`，并返回 `announcements_enabled` | 公开 | 完成 |
+| GET | `/api/status` | `controller.GetStatus` | 系统状态/健康检查 | 无 | status 对象；包含 `custom_endpoints`、`image_generation_log_polling_interval_seconds`；公告启用时仅含当前有效且面向所有用户的 `announcements`，并返回 `announcements_enabled` | 公开 | 完成 |
 | GET | `/api/announcements` | `controller.GetUserAnnouncements` | 获取当前用户可见公告 | 无 | 已展示、时间有效且命中套餐/余额 OR-AND 条件的 `Announcement[]` | 登录用户 | 完成 |
 | GET | `/api/uptime/status` | `controller.GetUptimeKumaStatus` | Uptime Kuma 集成 | 无 | uptime 状态 | 公开 | 完成 |
 | GET | `/api/notice` | `controller.GetNotice` | 站点公告 | 无 | 内容 | 公开 | 完成 |
@@ -480,7 +481,7 @@ JSON 请求参数：
 | --- | --- | --- | --- | --- |
 | `model` | string | 必填 | 图片模型名称，如 `gpt-image-2` | 参与渠道选择并按适配器映射 |
 | `prompt` | string | 必填 | 生图提示词 | 转发 |
-| `async` | boolean | 默认 `false` | `true` 时立即返回任务 ID 并在后台生成；`false`/省略时保持同步响应 | Julong 控制字段，转发前删除 |
+| `async` | boolean | 默认 `false` | 生图日志开启时，`true` 立即返回任务 ID 并在后台生成；关闭日志时该字段被忽略并保持同步响应 | Julong 控制字段，转发前删除 |
 | `n` | integer | 默认 `1` | 图片数量；省略或 `0` 归一化为 `1`，最大 `128`；部分上游可能限制更小 | 转发并参与计费 |
 | `size` | string | 模型默认 | 图片尺寸，如 `1024x1024`；DALL-E 尺寸受专用校验 | 转发 |
 | `quality` | string | 模型默认 | 如 `standard`、`high`、`hd` | 转发 |
@@ -501,6 +502,8 @@ JSON 请求参数：
 | `extra_fields` | JSON | 可选 | 已声明的 provider 扩展容器 | 按适配器实现处理 |
 
 未声明字段会被 `ImageRequest.Extra` 接收；全局/渠道透传模式保留原请求字段，标准转换模式只保证声明字段和适配器明确支持的扩展字段。`async` 在所有模式下都不会发送给上游。
+
+异步任务依赖“系统设置 → 运维 → 日志维护 → 记录生图日志”。该开关关闭时，带 `async: true` 的请求返回普通同步图片响应，不返回任务 ID，且不创建生图日志或落盘图片。
 
 同步请求示例（省略 `async`）：
 
@@ -528,7 +531,8 @@ curl https://api.julongkj.top/v1/images/generations \
   "object": "image.generation.task",
   "status": "pending",
   "created_at": 1784422800,
-  "poll_url": "/v1/images/generations/img_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  "poll_url": "/v1/images/generations/img_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+  "polling_interval_seconds": 15
 }
 ```
 
@@ -537,8 +541,8 @@ curl https://api.julongkj.top/v1/images/generations \
 - Handler：`controller.GetImageGenerationTask`。
 - 权限：`TokenAuthReadOnly`；只能查询当前 API Key 所属用户的任务，越权任务统一返回 404。
 - 请求参数：path `task_id`，无请求体。
-- 响应：HTTP 200，包含 `task_id/object/status/progress/created_at/updated_at/request_id/model/image_count/data/error/response`。`response` 保留上游 JSON 元数据，但移除 `b64_json` 并动态改写图片 URL。
-- 轮询建议：`pending`/`processing` 每 2 秒查询一次；`success`/`failed` 后停止。
+- 响应：HTTP 200，包含 `task_id/object/status/progress/created_at/updated_at/request_id/model/image_count/data/error/response/polling_interval_seconds`。`response` 保留上游 JSON 元数据，但移除 `b64_json` 并动态改写图片 URL。
+- 轮询建议：`pending`/`processing` 按响应中的 `polling_interval_seconds` 查询，默认 15 秒；`success`/`failed` 后停止。
 
 ```bash
 curl https://api.julongkj.top/v1/images/generations/img_xxx \
@@ -555,6 +559,7 @@ curl https://api.julongkj.top/v1/images/generations/img_xxx \
   "progress": 100,
   "model": "gpt-image-2",
   "image_count": 1,
+  "polling_interval_seconds": 15,
   "data": [{"url":"/v1/images/generations/img_xxx/images/0"}],
   "error": null,
   "response": {"created":1784422800,"data":[{"url":"/v1/images/generations/img_xxx/images/0"}]}
@@ -773,7 +778,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 | `custom-endpoints` | `types.ts`、`system-settings/content/custom-endpoints-section.tsx`、`keys/components/custom-endpoints.tsx` | 自定义端点共享类型、后台编辑器、API 密钥页复制条和悬停介绍 | `/api/option`、`/api/status` | 完成 |
 | `channels` | `channels-table.tsx`、`channels-columns.tsx`、dialogs/drawers、`api.ts` | 上游渠道 CRUD/测试/配置 | `/api/channel*` | 完成 |
 | `keys` | `api-keys-table.tsx`、`api-keys-columns.tsx`、mutate/delete dialogs | 用户 API key 管理 | `/api/token*` | 完成 |
-| `usage-logs` | `usage-logs-table.tsx`、普通/绘图/生图/任务 columns、`image-generation-task-dialog.tsx`、图片预览和筛选组件 | 普通消费日志、Midjourney 绘图日志、同步/异步生图日志、媒体任务日志；未完成生图每 2 秒刷新，任务 ID 弹窗由页面级状态持有并按需请求 JSON，不受表格轮询重建影响 | `/api/log*`、`/api/mj`、`/api/image-generation-logs*`、`/api/task` | 完成 |
+| `usage-logs` | `usage-logs-table.tsx`、普通/绘图/生图/任务 columns、`image-generation-task-dialog.tsx`、图片预览和筛选组件 | 普通消费日志、Midjourney 绘图日志、同步/异步生图日志、媒体任务日志；未完成生图按 root 配置频率刷新（默认 15 秒），任务 ID 弹窗由页面级状态持有并按需请求 JSON，不受表格轮询重建影响 | `/api/log*`、`/api/mj`、`/api/image-generation-logs*`、`/api/task` | 完成 |
 | `wallet` | recharge cards、subscription cards、affiliate rewards、redemption hook | 钱包充值、兑换码、订阅 | `/api/user/topup*`、`/api/subscription*`、支付 API | 完成 |
 | `redemption-codes` | `redemptions-table.tsx`、`redemptions-columns.tsx`、mutate/delete dialogs | 管理员/代理兑换码管理 | `/api/redemption*`、`/api/user/agent/topup-link` | 完成 |
 | `users` | `users-table.tsx`、`users-columns.tsx`、`users-mutate-drawer.tsx`、`agent-detail-dialog.tsx`、`user-detail-dialog.tsx` | 后台用户管理、代理详情、用户详情；详情弹窗包含头像身份摘要、关键指标带、订阅摘要、紧凑信息网格、响应式数据表和加载骨架 | `/api/user*`、`/api/log`、`/api/subscription/admin/*` | 完成 |
@@ -892,8 +897,8 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 - 套餐可设置允许查看的最近日志条数，`0` 为全部；多个有效订阅任一为 `0` 时无限制，否则取最大值。列表查询和图片读取接口都会校验该范围，不能通过旧图片 URL 绕过。
 - 生图日志预览弹窗支持逐张下载图片，并以 JSON 页签展示/下载脱敏后的日志元数据；本地文件路径和数据库内部图片引用不暴露给前端。
 - 默认保留 30 天；写入新记录时每小时至多触发一次过期日志和本地图片清理。
-- `/v1/images/generations` 支持可选 `async: true`。提交时无论日志开关是否开启都会创建任务记录；API Key 可轮询自己的任务，后台日志可点击任务 ID 查看实时状态和脱敏 JSON。
-- 异步执行最多同时运行 16 个本地任务；任务复用同步 Relay，因此计费和退款行为一致。列表只在存在未完成任务时每 2 秒自动刷新。
+- `/v1/images/generations` 支持可选 `async: true`。仅在记录生图日志开启时创建任务记录；关闭时退回同步且不存图。API Key 可轮询自己的任务，后台日志可点击任务 ID 查看实时状态和脱敏 JSON。
+- 异步执行最多同时运行 16 个本地任务；任务复用同步 Relay，因此计费和退款行为一致。列表只在存在未完成任务时按 `ImageGenerationLogPollingIntervalSeconds` 自动刷新，默认 15 秒。
 
 ## 已知问题
 
@@ -936,7 +941,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 - 兑换码支持按生成者、兑换码、名称、ID 搜索。
 - 签到奖励额度预览。
 - 可由 root 开关控制、支持图片预览和自动保留清理的生图日志。
-- 生图 `async: true` 提交、任务 ID 轮询、状态/错误记录、受保护图片读取和后台 JSON 详情。
+- 生图 `async: true` 提交、任务 ID 轮询、状态/错误记录、受保护图片读取和后台 JSON 详情；轮询频率可配置，日志关闭时异步和图片存储同步关闭。
 - 订阅套餐可授予普通用户生图日志查看权限，并限制可见的最近记录数量。
 - 钱包页优化统计区移动端布局、宽屏双栏比例和套餐卡片信息层级；单个套餐不再保留空白列，并在可购套餐和当前订阅中展示生图日志权益。
 - 新增 UI 文案的多语言同步。
@@ -960,6 +965,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 
 | 日期 | 变更 | 更新文件/API/模型 | 验证 |
 | --- | --- | --- | --- |
+| 2026-07-19 | 将未完成生图任务轮询从固定 2 秒改为默认 15 秒，并允许在日志维护中配置 5-3600 秒；任务响应公开建议频率。记录生图日志关闭时忽略 `async: true`、退回同步响应，不创建任务或存储图片。 | `ImageGenerationLogPollingIntervalSeconds`、`controller.GetStatus`、`RelayImageGeneration`、任务 payload、日志设置表单、usage logs 轮询、locale files | `go test ./...`、`bun run typecheck`、目标 `oxlint`/`oxfmt`、`bun run build`、`bun run i18n:sync`、`git diff --check` |
 | 2026-07-19 | 修复异步生图任务 ID 弹窗在列表自动轮询后自行关闭：将选中任务和弹窗生命周期从表格单元格提升到日志页面，桌面和移动端共用稳定弹窗。 | `usage-logs-table.tsx`、`image-generation-logs-columns.tsx`、`lib/columns.ts` | `bun run typecheck`、目标 `oxlint`/`oxfmt`、`git diff --check` |
 | 2026-07-19 | 为 `/v1/images/generations` 增加 `async: true` 本地异步任务模式：提交即写生图日志并返回任务 ID，复用同步 Relay 后台执行，支持用户隔离轮询、受保护图片读取、`pending/processing/success/failed` 状态、脱敏响应 JSON；后台生图日志增加可点击任务 ID、状态弹窗和未完成任务自动刷新。 | `ImageRequest.async`、`ImageGenerationLog` 任务字段、`controller/image_generation_task.go`、`GET /v1/images/generations/:task_id*`、`GET /api/image-generation-logs/:id/task`、`image-generation-task-dialog.tsx`、locale files | `go test ./...`、`bun run typecheck`、目标 `oxlint`/`oxfmt`、`bun run build`、`bun run i18n:sync`、`git diff --check` |
 | 2026-07-16 | 新增管理员/root 用户 IP 管理：历史登录 IP 多选封禁/解封、禁用用户事务联动封禁、普通用户登录/注册/会话/API Token 拦截，以及用户列表共享 IP/已封 IP 标记。 | `BlockedIP`、`GetUserLoginIPStats`、`ManageUser`、`AdminGetUserLoginIPs`、`AdminUpdateUserLoginIPs`、`middleware/auth.go`、用户详情/列表、locale files | `go test ./...`、`bun run typecheck`、`bun run build`、`oxfmt --check`、`bun run i18n:sync`、`git diff --check`；目标组件 lint 的 5 项既有问题单独记录 |

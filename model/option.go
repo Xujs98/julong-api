@@ -50,6 +50,7 @@ func InitOptionMap() {
 	common.OptionMap["LogConsumeEnabled"] = strconv.FormatBool(common.LogConsumeEnabled)
 	common.OptionMap["ImageGenerationLogEnabled"] = strconv.FormatBool(common.ImageGenerationLogEnabled)
 	common.OptionMap["ImageGenerationLogRetentionDays"] = strconv.Itoa(common.ImageGenerationLogRetentionDays)
+	common.OptionMap["ImageGenerationLogPollingIntervalSeconds"] = strconv.Itoa(common.ImageGenerationLogPollingIntervalSeconds)
 	common.OptionMap["SupportContacts"] = common.SupportContacts
 	common.OptionMap["DisplayInCurrencyEnabled"] = strconv.FormatBool(common.DisplayInCurrencyEnabled)
 	common.OptionMap["DisplayTokenStatEnabled"] = strconv.FormatBool(common.DisplayTokenStatEnabled)
@@ -383,6 +384,11 @@ func updateOptionMap(key string, value string) (err error) {
 		intValue, parseErr := strconv.Atoi(value)
 		if parseErr == nil && intValue >= 0 && intValue <= 3650 {
 			common.ImageGenerationLogRetentionDays = intValue
+		}
+	case "ImageGenerationLogPollingIntervalSeconds":
+		intValue, parseErr := strconv.Atoi(value)
+		if parseErr == nil && intValue >= 5 && intValue <= 3600 {
+			common.ImageGenerationLogPollingIntervalSeconds = intValue
 		}
 	case "SMTPAccount":
 		common.SMTPAccount = value
