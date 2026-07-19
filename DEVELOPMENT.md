@@ -965,6 +965,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 
 | 日期 | 变更 | 更新文件/API/模型 | 验证 |
 | --- | --- | --- | --- |
+| 2026-07-19 | 新增独立的生图轮询接口交付文档，覆盖启用条件、完整请求参数、任务提交/查询响应、自动轮询、图片下载、错误处理、存储与进程限制。 | `生图轮询接口说明.md` | 文档内容与当前 API、配置和 `DEVELOPMENT.md` 逐项核对，`git diff --check` |
 | 2026-07-19 | 将未完成生图任务轮询从固定 2 秒改为默认 15 秒，并允许在日志维护中配置 5-3600 秒；任务响应公开建议频率。记录生图日志关闭时忽略 `async: true`、退回同步响应，不创建任务或存储图片。 | `ImageGenerationLogPollingIntervalSeconds`、`controller.GetStatus`、`RelayImageGeneration`、任务 payload、日志设置表单、usage logs 轮询、locale files | `go test ./...`、`bun run typecheck`、目标 `oxlint`/`oxfmt`、`bun run build`、`bun run i18n:sync`、`git diff --check` |
 | 2026-07-19 | 修复异步生图任务 ID 弹窗在列表自动轮询后自行关闭：将选中任务和弹窗生命周期从表格单元格提升到日志页面，桌面和移动端共用稳定弹窗。 | `usage-logs-table.tsx`、`image-generation-logs-columns.tsx`、`lib/columns.ts` | `bun run typecheck`、目标 `oxlint`/`oxfmt`、`git diff --check` |
 | 2026-07-19 | 为 `/v1/images/generations` 增加 `async: true` 本地异步任务模式：提交即写生图日志并返回任务 ID，复用同步 Relay 后台执行，支持用户隔离轮询、受保护图片读取、`pending/processing/success/failed` 状态、脱敏响应 JSON；后台生图日志增加可点击任务 ID、状态弹窗和未完成任务自动刷新。 | `ImageRequest.async`、`ImageGenerationLog` 任务字段、`controller/image_generation_task.go`、`GET /v1/images/generations/:task_id*`、`GET /api/image-generation-logs/:id/task`、`image-generation-task-dialog.tsx`、locale files | `go test ./...`、`bun run typecheck`、目标 `oxlint`/`oxfmt`、`bun run build`、`bun run i18n:sync`、`git diff --check` |
