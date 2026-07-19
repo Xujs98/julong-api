@@ -11,12 +11,16 @@ import (
 )
 
 type fakeImageObjectStorageClient struct {
-	objects []minio.ObjectInfo
-	removed []string
-	err     error
+	objects    []minio.ObjectInfo
+	removed    []string
+	listBucket string
+	listOpts   minio.ListObjectsOptions
+	err        error
 }
 
-func (client *fakeImageObjectStorageClient) ListObjects(_ context.Context, _ string, _ minio.ListObjectsOptions) <-chan minio.ObjectInfo {
+func (client *fakeImageObjectStorageClient) ListObjects(_ context.Context, bucket string, opts minio.ListObjectsOptions) <-chan minio.ObjectInfo {
+	client.listBucket = bucket
+	client.listOpts = opts
 	objects := make(chan minio.ObjectInfo, len(client.objects)+1)
 	for _, object := range client.objects {
 		objects <- object
@@ -102,7 +106,7 @@ func TestScanGeneratedImageObjectsDeletesOnlyExpiredObjects(t *testing.T) {
 		RetentionDays: 30,
 	}
 
-	result, err := scanGeneratedImageObjects(context.Background(), client, config, now, true)
+	result, err := scanGeneratedImageObjects(context.Background(), client, config, now, imageObjectStorageDeleteExpired)
 
 	require.NoError(t, err)
 	require.Equal(t, int64(3), result.FileCount)
@@ -114,6 +118,38 @@ func TestScanGeneratedImageObjectsDeletesOnlyExpiredObjects(t *testing.T) {
 	require.Equal(t, []string{"generated/images/expired.png"}, client.removed)
 }
 
+func TestScanGeneratedImageObjectsDeletesAllObjectsUnderPrefix(t *testing.T) {
+	now := time.Date(2026, 7, 20, 12, 0, 0, 0, time.UTC)
+	client := &fakeImageObjectStorageClient{objects: []minio.ObjectInfo{
+		{Key: "generated/images/", LastModified: now.Add(-90 * 24 * time.Hour)},
+		{Key: "generated/images/expired.png", Size: 100, LastModified: now.Add(-31 * 24 * time.Hour)},
+		{Key: "generated/images/current.png", Size: 200, LastModified: now},
+		{Key: "generated/images/unknown.png", Size: 300},
+	}}
+	config := ImageObjectStorageConfig{
+		Bucket:        "julong-media",
+		ObjectPrefix:  "generated/images",
+		RetentionDays: 0,
+	}
+
+	result, err := scanGeneratedImageObjects(context.Background(), client, config, now, imageObjectStorageDeleteAll)
+
+	require.NoError(t, err)
+	require.Equal(t, int64(3), result.FileCount)
+	require.Equal(t, int64(600), result.TotalSize)
+	require.Zero(t, result.ExpiredCount)
+	require.Equal(t, int64(3), result.DeletedCount)
+	require.Equal(t, int64(600), result.DeletedBytes)
+	require.Equal(t, "julong-media", client.listBucket)
+	require.Equal(t, "generated/images/", client.listOpts.Prefix)
+	require.True(t, client.listOpts.Recursive)
+	require.Equal(t, []string{
+		"generated/images/expired.png",
+		"generated/images/current.png",
+		"generated/images/unknown.png",
+	}, client.removed)
+}
+
 func TestScanGeneratedImageObjectsReturnsListingError(t *testing.T) {
 	client := &fakeImageObjectStorageClient{err: errors.New("list failed")}
 	config := ImageObjectStorageConfig{
@@ -122,7 +158,7 @@ func TestScanGeneratedImageObjectsReturnsListingError(t *testing.T) {
 		RetentionDays: 30,
 	}
 
-	_, err := scanGeneratedImageObjects(context.Background(), client, config, time.Now(), false)
+	_, err := scanGeneratedImageObjects(context.Background(), client, config, time.Now(), imageObjectStorageScanOnly)
 
 	require.ErrorContains(t, err, "list failed")
 }

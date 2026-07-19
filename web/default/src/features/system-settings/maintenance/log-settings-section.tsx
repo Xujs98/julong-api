@@ -137,6 +137,10 @@ type ImageStorageStats = {
 type ImageStorageCleanupTask = {
   task_id: string
   status: 'pending' | 'running' | 'succeeded' | 'failed'
+  payload?: {
+    manual?: boolean
+    delete_all?: boolean
+  }
   result?: {
     scanned_count?: number
     deleted_count?: number
@@ -209,6 +213,9 @@ function ImageStorageSettings() {
   const [stats, setStats] = useState<ImageStorageStats | null>(null)
   const [statsLoading, setStatsLoading] = useState(true)
   const [startingCleanup, setStartingCleanup] = useState(false)
+  const [startingPurge, setStartingPurge] = useState(false)
+  const [purgeDialogOpen, setPurgeDialogOpen] = useState(false)
+  const [purgeCountdown, setPurgeCountdown] = useState(10)
   const [cleanupTask, setCleanupTask] =
     useState<ImageStorageCleanupTask | null>(null)
 
@@ -336,6 +343,8 @@ function ImageStorageSettings() {
 
   const cleanupActive =
     cleanupTask?.status === 'pending' || cleanupTask?.status === 'running'
+  const fullPurgeActive = cleanupActive && cleanupTask?.payload?.delete_all
+  const expiredCleanupActive = cleanupActive && !fullPurgeActive
   const cleanupTaskId = cleanupTask?.task_id
 
   const startCleanup = async () => {
@@ -360,6 +369,38 @@ function ImageStorageSettings() {
     }
   }
 
+  const startPurge = async () => {
+    setStartingPurge(true)
+    try {
+      const response = await api.post('/api/performance/image-storage/purge')
+      if (!response.data.success || !response.data.data) {
+        throw new Error(
+          response.data.message || t('Failed to start MinIO full purge')
+        )
+      }
+      setCleanupTask(response.data.data)
+      setPurgeDialogOpen(false)
+      toast.success(t('MinIO full purge task started.'))
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : t('Failed to start MinIO full purge')
+      )
+    } finally {
+      setStartingPurge(false)
+    }
+  }
+
+  useEffect(() => {
+    if (!purgeDialogOpen || purgeCountdown <= 0) return
+    const timeout = window.setTimeout(
+      () => setPurgeCountdown((seconds) => Math.max(0, seconds - 1)),
+      1000
+    )
+    return () => window.clearTimeout(timeout)
+  }, [purgeCountdown, purgeDialogOpen])
+
   useEffect(() => {
     if (!cleanupActive || !cleanupTaskId) return
     let cancelled = false
@@ -379,17 +420,33 @@ function ImageStorageSettings() {
         if (task.status === 'succeeded') {
           const deletedCount = task.result?.deleted_count ?? 0
           const deletedBytes = task.result?.deleted_bytes ?? 0
-          toast.success(
-            deletedCount > 0
-              ? t('Deleted {{count}} expired images and freed {{size}}.', {
-                  count: deletedCount,
-                  size: formatBytes(deletedBytes),
-                })
-              : t('No expired MinIO images found.')
-          )
+          if (task.payload?.delete_all) {
+            toast.success(
+              deletedCount > 0
+                ? t('Cleared {{count}} MinIO images and freed {{size}}.', {
+                    count: deletedCount,
+                    size: formatBytes(deletedBytes),
+                  })
+                : t('No MinIO images found under the configured prefix.')
+            )
+          } else {
+            toast.success(
+              deletedCount > 0
+                ? t('Deleted {{count}} expired images and freed {{size}}.', {
+                    count: deletedCount,
+                    size: formatBytes(deletedBytes),
+                  })
+                : t('No expired MinIO images found.')
+            )
+          }
           await fetchStats(false)
         } else {
-          toast.error(task.error || t('MinIO cleanup failed'))
+          toast.error(
+            task.error ||
+              (task.payload?.delete_all
+                ? t('MinIO full purge failed')
+                : t('MinIO cleanup failed'))
+          )
         }
       } catch {
         if (!cancelled) {
@@ -603,12 +660,12 @@ function ImageStorageSettings() {
               />
             }
           >
-            {startingCleanup || cleanupActive ? (
+            {startingCleanup || expiredCleanupActive ? (
               <Loader2 className='animate-spin' />
             ) : (
               <Trash2 />
             )}
-            {startingCleanup || cleanupActive
+            {startingCleanup || expiredCleanupActive
               ? t('Cleaning...')
               : t('Clean expired images now')}
           </AlertDialogTrigger>
@@ -626,6 +683,62 @@ function ImageStorageSettings() {
               <AlertDialogCancel>{t('Cancel')}</AlertDialogCancel>
               <AlertDialogAction variant='destructive' onClick={startCleanup}>
                 {t('Confirm Cleanup')}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+        <AlertDialog
+          open={purgeDialogOpen}
+          onOpenChange={(open) => {
+            setPurgeDialogOpen(open)
+            if (open) setPurgeCountdown(10)
+          }}
+        >
+          <AlertDialogTrigger
+            render={
+              <Button
+                type='button'
+                variant='destructive'
+                disabled={!config.enabled || startingPurge || cleanupActive}
+              />
+            }
+          >
+            {startingPurge || fullPurgeActive ? (
+              <Loader2 className='animate-spin' />
+            ) : (
+              <Trash2 />
+            )}
+            {startingPurge || fullPurgeActive
+              ? t('Cleaning...')
+              : t('Clear all MinIO images')}
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>
+                {t('Clear all MinIO images?')}
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                {t(
+                  'This permanently deletes every image under {{bucket}}/{{prefix}}. Other objects in the bucket are not affected.',
+                  {
+                    bucket: stats?.bucket || config.bucket,
+                    prefix: stats?.object_prefix || config.object_prefix,
+                  }
+                )}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>{t('Cancel')}</AlertDialogCancel>
+              <AlertDialogAction
+                variant='destructive'
+                disabled={purgeCountdown > 0 || startingPurge || cleanupActive}
+                onClick={() => void startPurge()}
+              >
+                {purgeCountdown > 0
+                  ? t('Confirm clear ({{seconds}}s)', {
+                      seconds: purgeCountdown,
+                    })
+                  : t('Confirm clear all')}
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>

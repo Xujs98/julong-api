@@ -91,6 +91,14 @@ type imageObjectStorageScan struct {
 	DeletedBytes int64
 }
 
+type imageObjectStorageScanMode int
+
+const (
+	imageObjectStorageScanOnly imageObjectStorageScanMode = iota
+	imageObjectStorageDeleteExpired
+	imageObjectStorageDeleteAll
+)
+
 func GetImageObjectStorageConfig() ImageObjectStorageConfig {
 	common.OptionMapRWMutex.RLock()
 	defer common.OptionMapRWMutex.RUnlock()
@@ -261,7 +269,7 @@ func GetImageObjectStorageStats(ctx context.Context) (ImageObjectStorageStats, e
 	if err != nil {
 		return stats, err
 	}
-	scan, err := scanGeneratedImageObjects(ctx, client, config, time.Now(), false)
+	scan, err := scanGeneratedImageObjects(ctx, client, config, time.Now(), imageObjectStorageScanOnly)
 	if err != nil {
 		return stats, err
 	}
@@ -288,20 +296,55 @@ func CleanupExpiredGeneratedImageObjects(ctx context.Context) (ImageObjectStorag
 		return ImageObjectStorageCleanupResult{}, err
 	}
 	now := time.Now()
-	scan, err := scanGeneratedImageObjects(ctx, client, config, now, true)
+	scan, err := scanGeneratedImageObjects(ctx, client, config, now, imageObjectStorageDeleteExpired)
+	result := imageObjectStorageCleanupResult(scan)
+	if err != nil {
+		return result, err
+	}
+	if err := saveImageObjectStorageLastCleanupAt(result.CompletedAt); err != nil {
+		return result, err
+	}
+	return result, nil
+}
+
+func DeleteAllGeneratedImageObjects(ctx context.Context) (ImageObjectStorageCleanupResult, error) {
+	config := GetImageObjectStorageConfig()
+	if !config.Enabled {
+		return ImageObjectStorageCleanupResult{}, fmt.Errorf("MinIO 未启用")
+	}
+	if err := validateImageStorageConfig(config, true); err != nil {
+		return ImageObjectStorageCleanupResult{}, err
+	}
+	client, err := imageStorageClient(config)
+	if err != nil {
+		return ImageObjectStorageCleanupResult{}, err
+	}
+	scan, err := scanGeneratedImageObjects(ctx, client, config, time.Now(), imageObjectStorageDeleteAll)
+	result := imageObjectStorageCleanupResult(scan)
+	if err != nil {
+		return result, err
+	}
+	if err := saveImageObjectStorageLastCleanupAt(result.CompletedAt); err != nil {
+		return result, err
+	}
+	return result, nil
+}
+
+func imageObjectStorageCleanupResult(scan imageObjectStorageScan) ImageObjectStorageCleanupResult {
 	result := ImageObjectStorageCleanupResult{
 		ScannedCount: scan.FileCount,
 		DeletedCount: scan.DeletedCount,
 		DeletedBytes: scan.DeletedBytes,
 		CompletedAt:  time.Now().Unix(),
 	}
-	if err != nil {
-		return result, err
+	return result
+}
+
+func saveImageObjectStorageLastCleanupAt(completedAt int64) error {
+	if err := model.UpdateOption(imageStorageLastCleanKey, strconv.FormatInt(completedAt, 10)); err != nil {
+		return fmt.Errorf("保存 MinIO 最近清理时间失败: %w", err)
 	}
-	if err := model.UpdateOption(imageStorageLastCleanKey, strconv.FormatInt(result.CompletedAt, 10)); err != nil {
-		return result, fmt.Errorf("保存 MinIO 最近清理时间失败: %w", err)
-	}
-	return result, nil
+	return nil
 }
 
 func scanGeneratedImageObjects(
@@ -309,7 +352,7 @@ func scanGeneratedImageObjects(
 	client imageObjectStorageClient,
 	config ImageObjectStorageConfig,
 	now time.Time,
-	deleteExpired bool,
+	mode imageObjectStorageScanMode,
 ) (imageObjectStorageScan, error) {
 	result := imageObjectStorageScan{}
 	prefix := strings.Trim(config.ObjectPrefix, "/") + "/"
@@ -326,12 +369,14 @@ func scanGeneratedImageObjects(
 		}
 		result.FileCount++
 		result.TotalSize += object.Size
-		if !imageObjectExpired(object.LastModified, cutoff, config.RetentionDays) {
-			continue
+		expired := imageObjectExpired(object.LastModified, cutoff, config.RetentionDays)
+		if expired {
+			result.ExpiredCount++
+			result.ExpiredSize += object.Size
 		}
-		result.ExpiredCount++
-		result.ExpiredSize += object.Size
-		if !deleteExpired {
+		shouldDelete := mode == imageObjectStorageDeleteAll ||
+			(mode == imageObjectStorageDeleteExpired && expired)
+		if !shouldDelete {
 			continue
 		}
 		if err := client.RemoveObject(ctx, config.Bucket, object.Key, minio.RemoveObjectOptions{}); err != nil {

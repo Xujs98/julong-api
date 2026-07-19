@@ -255,6 +255,7 @@ func SetApiRouter(router *gin.Engine) {
 			performanceRoute.POST("/image-storage/test", middleware.RequirePermission(authz.SystemSettingsPermission("operations.logs")), controller.TestImageObjectStorageConfig)
 			performanceRoute.GET("/image-storage/stats", middleware.RequirePermission(authz.SystemSettingsPermission("operations.logs")), controller.GetImageObjectStorageStats)
 			performanceRoute.POST("/image-storage/cleanup", middleware.RequirePermission(authz.SystemSettingsPermission("operations.logs")), controller.StartImageObjectStorageCleanup)
+			performanceRoute.POST("/image-storage/purge", middleware.RequirePermission(authz.SystemSettingsPermission("operations.logs")), controller.StartImageObjectStoragePurge)
 		}
 		ratioSyncRoute := apiRouter.Group("/ratio_sync")
 		ratioSyncRoute.Use(middleware.AdminAuth(), middleware.RequirePermission(authz.SystemSettingsPermission("billing.model-pricing")))

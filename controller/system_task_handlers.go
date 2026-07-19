@@ -169,7 +169,18 @@ func (imageStorageCleanupHandler) Interval() time.Duration { return 24 * time.Ho
 func (imageStorageCleanupHandler) NewPayload() any { return nil }
 
 func (imageStorageCleanupHandler) Run(ctx context.Context, task *model.SystemTask, runnerID string) {
-	result, err := service.CleanupExpiredGeneratedImageObjects(ctx)
+	payload := imageStorageCleanupTaskPayload{}
+	if err := task.DecodePayload(&payload); err != nil {
+		finishSystemTaskHandler(task, runnerID, model.SystemTaskStatusFailed, nil, err)
+		return
+	}
+	var result service.ImageObjectStorageCleanupResult
+	var err error
+	if payload.DeleteAll {
+		result, err = service.DeleteAllGeneratedImageObjects(ctx)
+	} else {
+		result, err = service.CleanupExpiredGeneratedImageObjects(ctx)
+	}
 	if err != nil {
 		finishSystemTaskHandler(task, runnerID, model.SystemTaskStatusFailed, result, err)
 		return
