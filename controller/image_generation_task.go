@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/relay/helper"
@@ -154,7 +155,13 @@ func GetImageGenerationTaskImage(c *gin.Context) {
 		c.Status(http.StatusBadRequest)
 		return
 	}
-	log, err := model.GetUserImageGenerationLogByTaskId(c.GetInt("id"), strings.TrimSpace(c.Param("task_id")))
+	taskId := strings.TrimSpace(c.Param("task_id"))
+	var log *model.ImageGenerationLog
+	if c.GetBool(string(constant.ContextKeyImageGenerationImageAuthBypassed)) {
+		log, err = model.GetImageGenerationLogByTaskId(taskId)
+	} else {
+		log, err = model.GetUserImageGenerationLogByTaskId(c.GetInt("id"), taskId)
+	}
 	if err != nil {
 		c.Status(http.StatusNotFound)
 		return

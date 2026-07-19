@@ -354,6 +354,8 @@ export type OperationsSettings = {
   ImageGenerationLogEnabled: boolean
   ImageGenerationLogRetentionDays: number
   ImageGenerationLogPollingIntervalSeconds: number
+  ImageGenerationLogImageAuthWhitelistEnabled: boolean
+  ImageGenerationLogImageAuthWhitelist: string
   'performance_setting.disk_cache_enabled': boolean
   'performance_setting.disk_cache_threshold_mb': number
   'performance_setting.disk_cache_max_size_mb': number

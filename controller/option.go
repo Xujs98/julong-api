@@ -319,6 +319,21 @@ func UpdateOption(c *gin.Context) {
 			})
 			return
 		}
+	case "ImageGenerationLogImageAuthWhitelist":
+		normalized, normalizeErr := common.NormalizeImageGenerationLogImageAuthWhitelist(option.Value.(string))
+		if normalizeErr != nil {
+			c.JSON(http.StatusOK, gin.H{"success": false, "message": normalizeErr.Error()})
+			return
+		}
+		option.Value = normalized
+	case "ImageGenerationLogImageAuthWhitelistEnabled":
+		if option.Value == "true" && strings.TrimSpace(common.ImageGenerationLogImageAuthWhitelist) == "" {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": "请先保存至少一个图片读取白名单域名或 IP",
+			})
+			return
+		}
 	case "console_setting.api_info":
 		err = console_setting.ValidateConsoleSettings(option.Value.(string), "ApiInfo")
 		if err != nil {

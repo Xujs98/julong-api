@@ -164,6 +164,8 @@ docker compose up -d
 | `ImageGenerationLogEnabled` | `common/constants.go`、`model/option.go`、`log-settings-section.tsx` | 是否记录生图请求并启用本地异步生图 | Root 或获授权管理员配置，默认 `false`；关闭时 `async: true` 退回同步，不创建任务、不捕获或保存图片。 |
 | `ImageGenerationLogRetentionDays` | 同上、`service/image_generation_log.go` | 生图日志及本地图片自动保留天数 | 默认 `30`，范围 `0-3650`；`0` 表示永久保留，每小时至多触发一次过期清理。 |
 | `ImageGenerationLogPollingIntervalSeconds` | `common/constants.go`、`model/option.go`、`log-settings-section.tsx` | 未完成生图任务的前端轮询频率 | 默认 `15` 秒，允许 `5-3600` 秒；同时通过 `/api/status` 和任务响应公开。 |
+| `ImageGenerationLogImageAuthWhitelistEnabled` | `common/constants.go`、`model/option.go`、`middleware/image_generation_image_auth.go`、`log-settings-section.tsx` | 是否允许图片读取白名单免 API Key | 默认 `false`；只作用于 `GET /v1/images/generations/:task_id/images/:index`，不放开任务 JSON 查询和生图提交。 |
+| `ImageGenerationLogImageAuthWhitelist` | 同上、`common/image_generation_image_auth_whitelist.go` | 图片读取免鉴权来源列表 | 换行/逗号分隔精确 IP 或域名；IP 匹配 `ClientIP`，域名匹配浏览器 `Origin/Referer`；URL 会归一化为主机名；不支持通配符/CIDR；`0.0.0.0` 表示全部放行。 |
 | `IMAGE_LOG_STORAGE_DIR` | `service/image_generation_log.go` | 覆盖生图图片文件目录 | 默认 `image-generation-logs`；Docker `WORKDIR /data` 下位于持久化卷 `/data/image-generation-logs`。 |
 | `async` 生图请求参数 | `dto/openai_image.go`、`controller/image_generation_task.go` | 将同步 `/v1/images/generations` 包装为本地异步任务 | 默认 `false`；仅在 `ImageGenerationLogEnabled=true` 时生效；转发上游前删除；有效异步模式与 `stream: true` 互斥。 |
 | `SupportContacts` | `common/constants.go`、`model/option.go` | 客服联系方式 JSON 数组 | 每项包含 `type`（qq/wechat/phone）、`label`、`value`；最多 30 条。 |
@@ -569,8 +571,16 @@ curl https://api.julongkj.top/v1/images/generations/img_xxx \
 #### `GET /v1/images/generations/:task_id/images/:index`
 
 - Handler：`controller.GetImageGenerationTaskImage`。
-- 权限：`TokenAuthReadOnly` 且任务必须属于当前用户。
+- 权限：默认通过 `middleware.ImageGenerationTaskImageAuth` 执行 `TokenAuthReadOnly`，且任务必须属于当前用户。Root/获授权管理员打开 `ImageGenerationLogImageAuthWhitelistEnabled` 后，精确匹配配置 IP 或浏览器 `Origin/Referer` 域名的请求可免 API Key；`0.0.0.0` 全部放行。免鉴权时任务 ID 作为不可猜测的读取凭证，不提供公开任务列表。
+- 请求参数：path `task_id`、`index`；鉴权模式需要 `Authorization: Bearer <API_KEY>`，白名单模式无请求体和鉴权头要求。
 - 响应：本地落盘图片二进制和实际 MIME；远程 URL 图片直接出现在任务 JSON 中，不经过该接口代理。
+- 错误处理：图片索引非法返回 400；任务、图片或文件不存在返回 404；非白名单且缺少/无效 API Key 返回 401；用户或 IP 被禁用返回 403。
+
+```bash
+curl -L https://api.julongkj.top/v1/images/generations/img_xxx/images/0 \
+  -H 'Authorization: Bearer sk-xxx' \
+  -o generated-image.png
+```
 
 错误处理：请求 JSON/参数非法、`async + stream` 返回 400；API Key 无效返回 401；用户/IP/Token 被禁用返回 403；模型无可用渠道通常返回 503；任务不存在或越权返回 404；异步执行中的上游/计费错误写入任务 `error.message` 并将状态更新为 `failed`。
 
@@ -784,7 +794,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 | `users` | `users-table.tsx`、`users-columns.tsx`、`users-mutate-drawer.tsx`、`agent-detail-dialog.tsx`、`user-detail-dialog.tsx` | 后台用户管理、代理详情、用户详情；详情弹窗包含头像身份摘要、关键指标带、订阅摘要、紧凑信息网格、响应式数据表和加载骨架 | `/api/user*`、`/api/log`、`/api/subscription/admin/*` | 完成 |
 | `models` | metadata/deployment tables and drawers | 模型元数据和部署管理 | `/api/models*`、`/api/vendors*`、`/api/deployments*` | 完成 |
 | `subscriptions` | subscription table/drawers | 后台订阅计划/用户绑定 | `/api/subscription/admin*` | 完成 |
-| `system-settings` | `auth`、`billing`、`content`、`models`、`request-limits`、`maintenance`、`integrations`、`general` 下的 section registries | 管理员/root 运行时设置 | `/api/option*` 及特定后台 API | 完成/进行中 |
+| `system-settings` | `auth`、`billing`、`content`、`models`、`request-limits`、`maintenance`、`integrations`、`general` 下的 section registries；`maintenance/log-settings-section.tsx:LogSettingsSection` | 管理员/root 运行时设置；`LogSettingsSection` 负责消费日志、生图日志、保留天数、轮询频率和图片读取白名单，关键 props 为对应 `default*` 配置，依赖 React Hook Form/Zod、`useUpdateOption`、Switch/Textarea/Alert | `/api/option*` 及特定后台 API | 完成/进行中；图片读取白名单已完成 |
 | `system-info` | system instances/tasks panels | Root 系统运维 | `/api/system-info*`、`/api/system-task*` | 完成 |
 | `error-reports` | `submit-error-report.tsx`、`index.tsx`、`api.ts` | 提交/查看 500 页面反馈 | `/api/error-reports*` | 完成 |
 | `errors` | `general-error.tsx`、forbidden/not-found/maintenance/unauthorized | 错误页 | `/error-report` 路由用于反馈 | 完成 |
@@ -893,6 +903,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 - 记录用户、Token、渠道、模型、提示词、尺寸、品质、图片数、费用、请求 ID 和耗时。
 - base64 结果先解码为原始图片文件，单张上限 25MB；数据库只保存图片引用，避免 base64 约 33% 的编码膨胀。
 - 上游 URL 结果保存 URL 引用并由浏览器直接展示，避免后端日志预览产生 SSRF 风险；base64 本地文件通过鉴权接口读取。
+- 本地异步任务图片读取可配置免鉴权白名单：IP 精确匹配客户端 IP，域名精确匹配浏览器 `Origin/Referer` 主机名，`0.0.0.0` 放行所有图片读取；任务查询和图片生成始终保留 API Key 鉴权。域名请求头可由非浏览器客户端伪造，因此敏感部署优先使用 IP 白名单，并确保反向代理正确覆盖真实客户端 IP 头。
 - 普通用户必须拥有启用生图日志权限的有效订阅，且只能查看自己的图片；管理员/root 可查看全部。
 - 套餐可设置允许查看的最近日志条数，`0` 为全部；多个有效订阅任一为 `0` 时无限制，否则取最大值。列表查询和图片读取接口都会校验该范围，不能通过旧图片 URL 绕过。
 - 生图日志预览弹窗支持逐张下载图片，并以 JSON 页签展示/下载脱敏后的日志元数据；本地文件路径和数据库内部图片引用不暴露给前端。
@@ -965,6 +976,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 
 | 日期 | 变更 | 更新文件/API/模型 | 验证 |
 | --- | --- | --- | --- |
+| 2026-07-19 | 日志维护新增生图图片读取免鉴权白名单开关和多域名/IP 配置；精确匹配客户端 IP 或浏览器 Origin/Referer，`0.0.0.0` 全放行。仅图片二进制接口可绕过鉴权，任务 JSON 查询和生图提交保持 API Key/计费保护。 | `ImageGenerationLogImageAuthWhitelistEnabled`、`ImageGenerationLogImageAuthWhitelist`、`common/image_generation_image_auth_whitelist.go`、`middleware.ImageGenerationTaskImageAuth`、`GET /v1/images/generations/:task_id/images/:index`、`LogSettingsSection`、locale files、`生图轮询接口说明.md` | `go test ./...`、`bun run typecheck`、目标 `oxlint`/`oxfmt`、`bun run build`、`bun run i18n:sync`、`git diff --check` |
 | 2026-07-19 | 新增独立的生图轮询接口交付文档，覆盖启用条件、完整请求参数、任务提交/查询响应、自动轮询、图片下载、错误处理、存储与进程限制。 | `生图轮询接口说明.md` | 文档内容与当前 API、配置和 `DEVELOPMENT.md` 逐项核对，`git diff --check` |
 | 2026-07-19 | 将未完成生图任务轮询从固定 2 秒改为默认 15 秒，并允许在日志维护中配置 5-3600 秒；任务响应公开建议频率。记录生图日志关闭时忽略 `async: true`、退回同步响应，不创建任务或存储图片。 | `ImageGenerationLogPollingIntervalSeconds`、`controller.GetStatus`、`RelayImageGeneration`、任务 payload、日志设置表单、usage logs 轮询、locale files | `go test ./...`、`bun run typecheck`、目标 `oxlint`/`oxfmt`、`bun run build`、`bun run i18n:sync`、`git diff --check` |
 | 2026-07-19 | 修复异步生图任务 ID 弹窗在列表自动轮询后自行关闭：将选中任务和弹窗生命周期从表格单元格提升到日志页面，桌面和移动端共用稳定弹窗。 | `usage-logs-table.tsx`、`image-generation-logs-columns.tsx`、`lib/columns.ts` | `bun run typecheck`、目标 `oxlint`/`oxfmt`、`git diff --check` |

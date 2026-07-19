@@ -58,6 +58,7 @@ import {
 } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
 import { Switch } from '@/components/ui/switch'
+import { Textarea } from '@/components/ui/textarea'
 import { api } from '@/lib/api'
 import dayjs from '@/lib/dayjs'
 import { formatTimestampToDate } from '@/lib/format'
@@ -83,6 +84,8 @@ const logSettingsSchema = z.object({
   ImageGenerationLogEnabled: z.boolean(),
   ImageGenerationLogRetentionDays: z.number().int().min(0).max(3650),
   ImageGenerationLogPollingIntervalSeconds: z.number().int().min(5).max(3600),
+  ImageGenerationLogImageAuthWhitelistEnabled: z.boolean(),
+  ImageGenerationLogImageAuthWhitelist: z.string(),
 })
 
 type LogSettingsFormValues = z.infer<typeof logSettingsSchema>
@@ -92,6 +95,8 @@ type LogSettingsSectionProps = {
   defaultImageLogEnabled: boolean
   defaultImageLogRetentionDays: number
   defaultImageLogPollingIntervalSeconds: number
+  defaultImageLogImageAuthWhitelistEnabled: boolean
+  defaultImageLogImageAuthWhitelist: string
 }
 
 type ServerLogInfo = {
@@ -150,6 +155,8 @@ export function LogSettingsSection({
   defaultImageLogEnabled,
   defaultImageLogRetentionDays,
   defaultImageLogPollingIntervalSeconds,
+  defaultImageLogImageAuthWhitelistEnabled,
+  defaultImageLogImageAuthWhitelist,
 }: LogSettingsSectionProps) {
   const { t } = useTranslation()
   const updateOption = useUpdateOption()
@@ -161,6 +168,9 @@ export function LogSettingsSection({
       ImageGenerationLogRetentionDays: defaultImageLogRetentionDays,
       ImageGenerationLogPollingIntervalSeconds:
         defaultImageLogPollingIntervalSeconds,
+      ImageGenerationLogImageAuthWhitelistEnabled:
+        defaultImageLogImageAuthWhitelistEnabled,
+      ImageGenerationLogImageAuthWhitelist: defaultImageLogImageAuthWhitelist,
     },
   })
 
@@ -176,6 +186,9 @@ export function LogSettingsSection({
   const [serverLogCleanupMode, setServerLogCleanupMode] = useState('by_count')
   const [serverLogCleanupValue, setServerLogCleanupValue] = useState(10)
   const [serverLogCleanupLoading, setServerLogCleanupLoading] = useState(false)
+  const imageAuthWhitelistEnabled = form.watch(
+    'ImageGenerationLogImageAuthWhitelistEnabled'
+  )
 
   const fetchServerLogInfo = useCallback(async () => {
     try {
@@ -193,10 +206,15 @@ export function LogSettingsSection({
       ImageGenerationLogRetentionDays: defaultImageLogRetentionDays,
       ImageGenerationLogPollingIntervalSeconds:
         defaultImageLogPollingIntervalSeconds,
+      ImageGenerationLogImageAuthWhitelistEnabled:
+        defaultImageLogImageAuthWhitelistEnabled,
+      ImageGenerationLogImageAuthWhitelist: defaultImageLogImageAuthWhitelist,
     })
   }, [
     defaultEnabled,
     defaultImageLogEnabled,
+    defaultImageLogImageAuthWhitelist,
+    defaultImageLogImageAuthWhitelistEnabled,
     defaultImageLogPollingIntervalSeconds,
     defaultImageLogRetentionDays,
     form,
@@ -299,10 +317,19 @@ export function LogSettingsSection({
         key: 'ImageGenerationLogPollingIntervalSeconds',
         value: values.ImageGenerationLogPollingIntervalSeconds,
       },
-    ] as Array<{ key: string; value: boolean | number }>
+      {
+        key: 'ImageGenerationLogImageAuthWhitelist',
+        value: values.ImageGenerationLogImageAuthWhitelist,
+      },
+      {
+        key: 'ImageGenerationLogImageAuthWhitelistEnabled',
+        value: values.ImageGenerationLogImageAuthWhitelistEnabled,
+      },
+    ] as Array<{ key: string; value: boolean | number | string }>
 
     for (const update of updates) {
-      await updateOption.mutateAsync(update)
+      const result = await updateOption.mutateAsync(update)
+      if (!result.success) return
     }
   }
 
@@ -498,6 +525,63 @@ export function LogSettingsSection({
                 </div>
               )}
             />
+            <FormField
+              control={form.control}
+              name='ImageGenerationLogImageAuthWhitelistEnabled'
+              render={({ field }) => (
+                <SettingsSwitchItem>
+                  <SettingsSwitchContent>
+                    <FormLabel>
+                      {t('Allow unauthenticated image reads from whitelist')}
+                    </FormLabel>
+                    <FormDescription>
+                      {t(
+                        'When enabled, only matching IP addresses or browser Origin/Referer domains can read generated image files without an API Key.'
+                      )}
+                    </FormDescription>
+                  </SettingsSwitchContent>
+                  <FormControl>
+                    <Switch
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </SettingsSwitchItem>
+              )}
+            />
+            {imageAuthWhitelistEnabled && (
+              <FormField
+                control={form.control}
+                name='ImageGenerationLogImageAuthWhitelist'
+                render={({ field }) => (
+                  <div className='flex flex-col gap-2'>
+                    <FormLabel>{t('Image read whitelist')}</FormLabel>
+                    <FormControl>
+                      <Textarea
+                        rows={5}
+                        className='max-w-2xl font-mono text-sm'
+                        placeholder={'example.com\n203.0.113.10'}
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      {t(
+                        'Enter one exact domain or IP address per line. Full HTTP/HTTPS URLs are accepted; wildcards and CIDR ranges are not supported.'
+                      )}
+                    </FormDescription>
+                    <Alert variant='destructive'>
+                      <AlertDescription>
+                        {t(
+                          '0.0.0.0 allows everyone to read generated image files without authentication. Task status queries and image generation still require an API Key.'
+                        )}
+                      </AlertDescription>
+                    </Alert>
+                    <FormMessage />
+                  </div>
+                )}
+              />
+            )}
           </SettingsControlGroup>
 
           <SettingsControlGroup className='space-y-3'>

@@ -51,6 +51,8 @@ func InitOptionMap() {
 	common.OptionMap["ImageGenerationLogEnabled"] = strconv.FormatBool(common.ImageGenerationLogEnabled)
 	common.OptionMap["ImageGenerationLogRetentionDays"] = strconv.Itoa(common.ImageGenerationLogRetentionDays)
 	common.OptionMap["ImageGenerationLogPollingIntervalSeconds"] = strconv.Itoa(common.ImageGenerationLogPollingIntervalSeconds)
+	common.OptionMap["ImageGenerationLogImageAuthWhitelistEnabled"] = strconv.FormatBool(common.ImageGenerationLogImageAuthWhitelistEnabled)
+	common.OptionMap["ImageGenerationLogImageAuthWhitelist"] = common.ImageGenerationLogImageAuthWhitelist
 	common.OptionMap["SupportContacts"] = common.SupportContacts
 	common.OptionMap["DisplayInCurrencyEnabled"] = strconv.FormatBool(common.DisplayInCurrencyEnabled)
 	common.OptionMap["DisplayTokenStatEnabled"] = strconv.FormatBool(common.DisplayTokenStatEnabled)
@@ -314,6 +316,8 @@ func updateOptionMap(key string, value string) (err error) {
 			common.LogConsumeEnabled = boolValue
 		case "ImageGenerationLogEnabled":
 			common.ImageGenerationLogEnabled = boolValue
+		case "ImageGenerationLogImageAuthWhitelistEnabled":
+			common.ImageGenerationLogImageAuthWhitelistEnabled = boolValue
 		case "DisplayInCurrencyEnabled":
 			// 兼容旧字段：同步到新配置 general_setting.quota_display_type（运行时生效）
 			// true -> USD, false -> TOKENS
@@ -390,6 +394,8 @@ func updateOptionMap(key string, value string) (err error) {
 		if parseErr == nil && intValue >= 5 && intValue <= 3600 {
 			common.ImageGenerationLogPollingIntervalSeconds = intValue
 		}
+	case "ImageGenerationLogImageAuthWhitelist":
+		common.ImageGenerationLogImageAuthWhitelist = value
 	case "SMTPAccount":
 		common.SMTPAccount = value
 	case "SMTPFrom":

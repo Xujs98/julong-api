@@ -47,6 +47,8 @@ const defaultOperationsSettings: OperationsSettings = {
   ImageGenerationLogEnabled: false,
   ImageGenerationLogRetentionDays: 30,
   ImageGenerationLogPollingIntervalSeconds: 15,
+  ImageGenerationLogImageAuthWhitelistEnabled: false,
+  ImageGenerationLogImageAuthWhitelist: '',
   'performance_setting.disk_cache_enabled': false,
   'performance_setting.disk_cache_threshold_mb': 10,
   'performance_setting.disk_cache_max_size_mb': 1024,

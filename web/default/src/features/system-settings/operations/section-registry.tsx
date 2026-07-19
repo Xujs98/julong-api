@@ -105,6 +105,12 @@ const OPERATIONS_SECTIONS = [
         defaultImageLogPollingIntervalSeconds={Number(
           settings.ImageGenerationLogPollingIntervalSeconds ?? 15
         )}
+        defaultImageLogImageAuthWhitelistEnabled={Boolean(
+          settings.ImageGenerationLogImageAuthWhitelistEnabled
+        )}
+        defaultImageLogImageAuthWhitelist={
+          settings.ImageGenerationLogImageAuthWhitelist ?? ''
+        }
       />
     ),
   },

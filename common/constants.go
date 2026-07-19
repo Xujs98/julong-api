@@ -118,6 +118,8 @@ var LogConsumeEnabled = true
 var ImageGenerationLogEnabled = false
 var ImageGenerationLogRetentionDays = 30
 var ImageGenerationLogPollingIntervalSeconds = 15
+var ImageGenerationLogImageAuthWhitelistEnabled = false
+var ImageGenerationLogImageAuthWhitelist = ""
 var SupportContacts = "[]"
 
 var TLSInsecureSkipVerify bool
