@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/gin-gonic/gin"
 )
@@ -36,4 +37,39 @@ func TestImageObjectStorageConfig(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": "MinIO 连接成功"})
+}
+
+func GetImageObjectStorageStats(c *gin.Context) {
+	stats, err := service.GetImageObjectStorageStats(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": stats})
+}
+
+func StartImageObjectStorageCleanup(c *gin.Context) {
+	config := service.GetImageObjectStorageConfig()
+	if !config.Enabled {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "请先启用 MinIO 生图存储"})
+		return
+	}
+	if config.RetentionDays <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "MinIO 图片当前配置为永久保留"})
+		return
+	}
+	task, created, err := service.EnqueueSystemTask(model.SystemTaskTypeImageStorageCleanup, map[string]bool{"manual": true})
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	message := "MinIO 图片清理任务已创建"
+	if !created {
+		message = "MinIO 图片清理任务正在运行"
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": message,
+		"data":    task.ToResponse(),
+	})
 }

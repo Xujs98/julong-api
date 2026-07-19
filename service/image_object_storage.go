@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/url"
 	"path"
+	"strconv"
 	"strings"
 	"time"
 
@@ -29,19 +30,25 @@ const (
 	imageStorageUseSSLKey    = "ImageGenerationStorageUseSSL"
 	imageStoragePathStyleKey = "ImageGenerationStoragePathStyle"
 	imageStoragePrefixKey    = "ImageGenerationStoragePrefix"
+	imageStorageRetentionKey = "ImageGenerationStorageRetentionDays"
+	imageStorageLastCleanKey = "ImageGenerationStorageLastCleanupAt"
+
+	defaultImageStorageRetentionDays = 30
+	maxImageStorageRetentionDays     = 3650
 )
 
 type ImageObjectStorageConfig struct {
-	Enabled      bool   `json:"enabled"`
-	Endpoint     string `json:"endpoint"`
-	Bucket       string `json:"bucket"`
-	Region       string `json:"region"`
-	AccessKey    string `json:"access_key"`
-	SecretKey    string `json:"secret_key,omitempty"`
-	HasSecretKey bool   `json:"has_secret_key"`
-	UseSSL       bool   `json:"use_ssl"`
-	UsePathStyle bool   `json:"use_path_style"`
-	ObjectPrefix string `json:"object_prefix"`
+	Enabled       bool   `json:"enabled"`
+	Endpoint      string `json:"endpoint"`
+	Bucket        string `json:"bucket"`
+	Region        string `json:"region"`
+	AccessKey     string `json:"access_key"`
+	SecretKey     string `json:"secret_key,omitempty"`
+	HasSecretKey  bool   `json:"has_secret_key"`
+	UseSSL        bool   `json:"use_ssl"`
+	UsePathStyle  bool   `json:"use_path_style"`
+	ObjectPrefix  string `json:"object_prefix"`
+	RetentionDays int    `json:"retention_days"`
 }
 
 type StoredImageObject struct {
@@ -52,19 +59,53 @@ type StoredImageObject struct {
 	Size      int64  `json:"size"`
 }
 
+type ImageObjectStorageStats struct {
+	Bucket        string `json:"bucket"`
+	ObjectPrefix  string `json:"object_prefix"`
+	RetentionDays int    `json:"retention_days"`
+	FileCount     int64  `json:"file_count"`
+	TotalSize     int64  `json:"total_size"`
+	ExpiredCount  int64  `json:"expired_count"`
+	ExpiredSize   int64  `json:"expired_size"`
+	LastCleanupAt int64  `json:"last_cleanup_at"`
+}
+
+type ImageObjectStorageCleanupResult struct {
+	ScannedCount int64 `json:"scanned_count"`
+	DeletedCount int64 `json:"deleted_count"`
+	DeletedBytes int64 `json:"deleted_bytes"`
+	CompletedAt  int64 `json:"completed_at"`
+}
+
+type imageObjectStorageClient interface {
+	ListObjects(ctx context.Context, bucketName string, opts minio.ListObjectsOptions) <-chan minio.ObjectInfo
+	RemoveObject(ctx context.Context, bucketName, objectName string, opts minio.RemoveObjectOptions) error
+}
+
+type imageObjectStorageScan struct {
+	FileCount    int64
+	TotalSize    int64
+	ExpiredCount int64
+	ExpiredSize  int64
+	DeletedCount int64
+	DeletedBytes int64
+}
+
 func GetImageObjectStorageConfig() ImageObjectStorageConfig {
 	common.OptionMapRWMutex.RLock()
 	defer common.OptionMapRWMutex.RUnlock()
+	retentionDays := parseImageStorageRetentionDays(common.OptionMap[imageStorageRetentionKey])
 	config := ImageObjectStorageConfig{
-		Enabled:      common.OptionMap[imageStorageEnabledKey] == "true",
-		Endpoint:     common.OptionMap[imageStorageEndpointKey],
-		Bucket:       common.OptionMap[imageStorageBucketKey],
-		Region:       common.OptionMap[imageStorageRegionKey],
-		AccessKey:    common.OptionMap[imageStorageAccessKey],
-		SecretKey:    common.OptionMap[imageStorageSecretKey],
-		UseSSL:       common.OptionMap[imageStorageUseSSLKey] != "false",
-		UsePathStyle: common.OptionMap[imageStoragePathStyleKey] != "false",
-		ObjectPrefix: common.OptionMap[imageStoragePrefixKey],
+		Enabled:       common.OptionMap[imageStorageEnabledKey] == "true",
+		Endpoint:      common.OptionMap[imageStorageEndpointKey],
+		Bucket:        common.OptionMap[imageStorageBucketKey],
+		Region:        common.OptionMap[imageStorageRegionKey],
+		AccessKey:     common.OptionMap[imageStorageAccessKey],
+		SecretKey:     common.OptionMap[imageStorageSecretKey],
+		UseSSL:        common.OptionMap[imageStorageUseSSLKey] != "false",
+		UsePathStyle:  common.OptionMap[imageStoragePathStyleKey] != "false",
+		ObjectPrefix:  common.OptionMap[imageStoragePrefixKey],
+		RetentionDays: retentionDays,
 	}
 	applyImageStorageDefaults(&config)
 	config.HasSecretKey = strings.TrimSpace(config.SecretKey) != ""
@@ -96,6 +137,7 @@ func SaveImageObjectStorageConfig(config ImageObjectStorageConfig) error {
 		imageStorageUseSSLKey:    fmt.Sprintf("%t", config.UseSSL),
 		imageStoragePathStyleKey: fmt.Sprintf("%t", config.UsePathStyle),
 		imageStoragePrefixKey:    config.ObjectPrefix,
+		imageStorageRetentionKey: strconv.Itoa(config.RetentionDays),
 	})
 }
 
@@ -201,6 +243,133 @@ func PresignGeneratedImageObject(ctx context.Context, bucket, objectKey string, 
 	return presigned.String(), expiresAt, nil
 }
 
+func GetImageObjectStorageStats(ctx context.Context) (ImageObjectStorageStats, error) {
+	config := GetImageObjectStorageConfig()
+	stats := ImageObjectStorageStats{
+		Bucket:        config.Bucket,
+		ObjectPrefix:  config.ObjectPrefix,
+		RetentionDays: config.RetentionDays,
+		LastCleanupAt: imageObjectStorageLastCleanupAt(),
+	}
+	if !config.Enabled {
+		return stats, nil
+	}
+	if err := validateImageStorageConfig(config, true); err != nil {
+		return stats, err
+	}
+	client, err := imageStorageClient(config)
+	if err != nil {
+		return stats, err
+	}
+	scan, err := scanGeneratedImageObjects(ctx, client, config, time.Now(), false)
+	if err != nil {
+		return stats, err
+	}
+	stats.FileCount = scan.FileCount
+	stats.TotalSize = scan.TotalSize
+	stats.ExpiredCount = scan.ExpiredCount
+	stats.ExpiredSize = scan.ExpiredSize
+	return stats, nil
+}
+
+func CleanupExpiredGeneratedImageObjects(ctx context.Context) (ImageObjectStorageCleanupResult, error) {
+	config := GetImageObjectStorageConfig()
+	if !config.Enabled {
+		return ImageObjectStorageCleanupResult{}, fmt.Errorf("MinIO 未启用")
+	}
+	if config.RetentionDays <= 0 {
+		return ImageObjectStorageCleanupResult{}, fmt.Errorf("MinIO 图片保留天数为 0，当前配置为永久保留")
+	}
+	if err := validateImageStorageConfig(config, true); err != nil {
+		return ImageObjectStorageCleanupResult{}, err
+	}
+	client, err := imageStorageClient(config)
+	if err != nil {
+		return ImageObjectStorageCleanupResult{}, err
+	}
+	now := time.Now()
+	scan, err := scanGeneratedImageObjects(ctx, client, config, now, true)
+	result := ImageObjectStorageCleanupResult{
+		ScannedCount: scan.FileCount,
+		DeletedCount: scan.DeletedCount,
+		DeletedBytes: scan.DeletedBytes,
+		CompletedAt:  time.Now().Unix(),
+	}
+	if err != nil {
+		return result, err
+	}
+	if err := model.UpdateOption(imageStorageLastCleanKey, strconv.FormatInt(result.CompletedAt, 10)); err != nil {
+		return result, fmt.Errorf("保存 MinIO 最近清理时间失败: %w", err)
+	}
+	return result, nil
+}
+
+func scanGeneratedImageObjects(
+	ctx context.Context,
+	client imageObjectStorageClient,
+	config ImageObjectStorageConfig,
+	now time.Time,
+	deleteExpired bool,
+) (imageObjectStorageScan, error) {
+	result := imageObjectStorageScan{}
+	prefix := strings.Trim(config.ObjectPrefix, "/") + "/"
+	cutoff := now.Add(-time.Duration(config.RetentionDays) * 24 * time.Hour)
+	for object := range client.ListObjects(ctx, config.Bucket, minio.ListObjectsOptions{
+		Prefix:    prefix,
+		Recursive: true,
+	}) {
+		if object.Err != nil {
+			return result, fmt.Errorf("扫描 MinIO 图片失败: %w", object.Err)
+		}
+		if strings.TrimSpace(object.Key) == "" || strings.HasSuffix(object.Key, "/") {
+			continue
+		}
+		result.FileCount++
+		result.TotalSize += object.Size
+		if !imageObjectExpired(object.LastModified, cutoff, config.RetentionDays) {
+			continue
+		}
+		result.ExpiredCount++
+		result.ExpiredSize += object.Size
+		if !deleteExpired {
+			continue
+		}
+		if err := client.RemoveObject(ctx, config.Bucket, object.Key, minio.RemoveObjectOptions{}); err != nil {
+			return result, fmt.Errorf("删除 MinIO 图片 %q 失败: %w", object.Key, err)
+		}
+		result.DeletedCount++
+		result.DeletedBytes += object.Size
+	}
+	if err := ctx.Err(); err != nil {
+		return result, err
+	}
+	return result, nil
+}
+
+func imageObjectExpired(lastModified, cutoff time.Time, retentionDays int) bool {
+	return retentionDays > 0 && !lastModified.IsZero() && lastModified.Before(cutoff)
+}
+
+func parseImageStorageRetentionDays(raw string) int {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return defaultImageStorageRetentionDays
+	}
+	parsed, err := strconv.Atoi(value)
+	if err != nil {
+		return defaultImageStorageRetentionDays
+	}
+	return parsed
+}
+
+func imageObjectStorageLastCleanupAt() int64 {
+	common.OptionMapRWMutex.RLock()
+	raw := common.OptionMap[imageStorageLastCleanKey]
+	common.OptionMapRWMutex.RUnlock()
+	value, _ := strconv.ParseInt(strings.TrimSpace(raw), 10, 64)
+	return value
+}
+
 func applyImageStorageDefaults(config *ImageObjectStorageConfig) {
 	config.Endpoint = strings.TrimSpace(config.Endpoint)
 	config.Bucket = strings.TrimSpace(config.Bucket)
@@ -220,6 +389,9 @@ func applyImageStorageDefaults(config *ImageObjectStorageConfig) {
 }
 
 func validateImageStorageConfig(config ImageObjectStorageConfig, requireCredentials bool) error {
+	if config.RetentionDays < 0 || config.RetentionDays > maxImageStorageRetentionDays {
+		return fmt.Errorf("MinIO 图片保留天数必须在 0 到 %d 之间", maxImageStorageRetentionDays)
+	}
 	if strings.TrimSpace(config.Endpoint) == "" {
 		if !requireCredentials {
 			return nil

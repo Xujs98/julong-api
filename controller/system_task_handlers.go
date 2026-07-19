@@ -22,6 +22,7 @@ func RegisterScheduledSystemTasks() {
 	service.RegisterSystemTaskHandler(modelUpdateHandler{})
 	service.RegisterSystemTaskHandler(midjourneyPollHandler{})
 	service.RegisterSystemTaskHandler(asyncTaskPollHandler{})
+	service.RegisterSystemTaskHandler(imageStorageCleanupHandler{})
 }
 
 // channelTestHandler runs the scheduled "test all channels" job. Enablement and
@@ -150,6 +151,30 @@ func (asyncTaskPollHandler) NewPayload() any { return nil }
 func (asyncTaskPollHandler) Run(ctx context.Context, task *model.SystemTask, runnerID string) {
 	summary := service.RunTaskPollingOnce(ctx, service.NewSystemTaskProgressReporter(task, runnerID))
 	finishSystemTaskHandler(task, runnerID, model.SystemTaskStatusSucceeded, summary, nil)
+}
+
+type imageStorageCleanupHandler struct{}
+
+func (imageStorageCleanupHandler) Type() string {
+	return model.SystemTaskTypeImageStorageCleanup
+}
+
+func (imageStorageCleanupHandler) Enabled() bool {
+	config := service.GetImageObjectStorageConfig()
+	return config.Enabled && config.RetentionDays > 0
+}
+
+func (imageStorageCleanupHandler) Interval() time.Duration { return 24 * time.Hour }
+
+func (imageStorageCleanupHandler) NewPayload() any { return nil }
+
+func (imageStorageCleanupHandler) Run(ctx context.Context, task *model.SystemTask, runnerID string) {
+	result, err := service.CleanupExpiredGeneratedImageObjects(ctx)
+	if err != nil {
+		finishSystemTaskHandler(task, runnerID, model.SystemTaskStatusFailed, result, err)
+		return
+	}
+	finishSystemTaskHandler(task, runnerID, model.SystemTaskStatusSucceeded, result, nil)
 }
 
 func finishSystemTaskHandler(task *model.SystemTask, runnerID string, status model.SystemTaskStatus, result any, runErr error) {

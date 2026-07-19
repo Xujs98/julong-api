@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { zodResolver } from '@hookform/resolvers/zod'
+import { Loader2, RefreshCw, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
@@ -119,6 +120,30 @@ type ImageStorageConfig = {
   use_ssl: boolean
   use_path_style: boolean
   object_prefix: string
+  retention_days: number
+}
+
+type ImageStorageStats = {
+  bucket: string
+  object_prefix: string
+  retention_days: number
+  file_count: number
+  total_size: number
+  expired_count: number
+  expired_size: number
+  last_cleanup_at: number
+}
+
+type ImageStorageCleanupTask = {
+  task_id: string
+  status: 'pending' | 'running' | 'succeeded' | 'failed'
+  result?: {
+    scanned_count?: number
+    deleted_count?: number
+    deleted_bytes?: number
+    completed_at?: number
+  }
+  error?: string
 }
 
 const defaultImageStorageConfig: ImageStorageConfig = {
@@ -132,6 +157,7 @@ const defaultImageStorageConfig: ImageStorageConfig = {
   use_ssl: true,
   use_path_style: true,
   object_prefix: 'generated/images',
+  retention_days: 30,
 }
 
 const HOURS_IN_DAY = 24
@@ -180,26 +206,81 @@ function ImageStorageSettings() {
   const [loading, setLoading] = useState(true)
   const [testing, setTesting] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [stats, setStats] = useState<ImageStorageStats | null>(null)
+  const [statsLoading, setStatsLoading] = useState(true)
+  const [startingCleanup, setStartingCleanup] = useState(false)
+  const [cleanupTask, setCleanupTask] =
+    useState<ImageStorageCleanupTask | null>(null)
 
   useEffect(() => {
     let cancelled = false
-    async function fetchImageStorageConfig() {
-      try {
-        const response = await api.get('/api/performance/image-storage')
-        if (!cancelled && response.data.success && response.data.data) {
-          setConfig({ ...defaultImageStorageConfig, ...response.data.data })
-        }
-      } catch {
-        // Keep defaults when the current administrator cannot load this config.
-      } finally {
-        if (!cancelled) setLoading(false)
+    async function loadImageStorage() {
+      const [configResult, statsResult, taskResult] = await Promise.allSettled([
+        api.get('/api/performance/image-storage'),
+        api.get('/api/performance/image-storage/stats'),
+        api.get('/api/system-task/current', {
+          params: { type: 'image_storage_cleanup' },
+        }),
+      ])
+      if (cancelled) return
+      if (
+        configResult.status === 'fulfilled' &&
+        configResult.value.data.success &&
+        configResult.value.data.data
+      ) {
+        setConfig({
+          ...defaultImageStorageConfig,
+          ...configResult.value.data.data,
+        })
       }
+      if (
+        statsResult.status === 'fulfilled' &&
+        statsResult.value.data.success &&
+        statsResult.value.data.data
+      ) {
+        setStats(statsResult.value.data.data)
+      }
+      if (
+        taskResult.status === 'fulfilled' &&
+        taskResult.value.data.success &&
+        taskResult.value.data.data
+      ) {
+        setCleanupTask(taskResult.value.data.data)
+      }
+      setLoading(false)
+      setStatsLoading(false)
     }
-    void fetchImageStorageConfig()
+    void loadImageStorage()
     return () => {
       cancelled = true
     }
   }, [])
+
+  const fetchStats = useCallback(
+    async (notifyError = true) => {
+      setStatsLoading(true)
+      try {
+        const response = await api.get('/api/performance/image-storage/stats')
+        if (!response.data.success || !response.data.data) {
+          throw new Error(
+            response.data.message || t('Failed to load MinIO statistics')
+          )
+        }
+        setStats(response.data.data)
+      } catch (error) {
+        if (notifyError) {
+          toast.error(
+            error instanceof Error
+              ? error.message
+              : t('Failed to load MinIO statistics')
+          )
+        }
+      } finally {
+        setStatsLoading(false)
+      }
+    },
+    [t]
+  )
 
   const update = <K extends keyof ImageStorageConfig>(
     key: K,
@@ -241,6 +322,7 @@ function ImageStorageSettings() {
         secret_key: '',
       })
       toast.success(t('MinIO settings saved'))
+      await fetchStats(false)
     } catch (error) {
       toast.error(
         error instanceof Error
@@ -251,6 +333,77 @@ function ImageStorageSettings() {
       setSaving(false)
     }
   }
+
+  const cleanupActive =
+    cleanupTask?.status === 'pending' || cleanupTask?.status === 'running'
+  const cleanupTaskId = cleanupTask?.task_id
+
+  const startCleanup = async () => {
+    setStartingCleanup(true)
+    try {
+      const response = await api.post('/api/performance/image-storage/cleanup')
+      if (!response.data.success || !response.data.data) {
+        throw new Error(
+          response.data.message || t('Failed to start MinIO cleanup')
+        )
+      }
+      setCleanupTask(response.data.data)
+      toast.success(t('MinIO cleanup task started.'))
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : t('Failed to start MinIO cleanup')
+      )
+    } finally {
+      setStartingCleanup(false)
+    }
+  }
+
+  useEffect(() => {
+    if (!cleanupActive || !cleanupTaskId) return
+    let cancelled = false
+    let timeout: number | undefined
+
+    const pollCleanupTask = async () => {
+      try {
+        const response = await api.get(`/api/system-task/${cleanupTaskId}`)
+        if (cancelled || !response.data.success || !response.data.data) return
+        const task = response.data.data as ImageStorageCleanupTask
+        if (task.status === 'pending' || task.status === 'running') {
+          setCleanupTask(task)
+          timeout = window.setTimeout(pollCleanupTask, 5000)
+          return
+        }
+        setCleanupTask(null)
+        if (task.status === 'succeeded') {
+          const deletedCount = task.result?.deleted_count ?? 0
+          const deletedBytes = task.result?.deleted_bytes ?? 0
+          toast.success(
+            deletedCount > 0
+              ? t('Deleted {{count}} expired images and freed {{size}}.', {
+                  count: deletedCount,
+                  size: formatBytes(deletedBytes),
+                })
+              : t('No expired MinIO images found.')
+          )
+          await fetchStats(false)
+        } else {
+          toast.error(task.error || t('MinIO cleanup failed'))
+        }
+      } catch {
+        if (!cancelled) {
+          timeout = window.setTimeout(pollCleanupTask, 5000)
+        }
+      }
+    }
+
+    timeout = window.setTimeout(pollCleanupTask, 5000)
+    return () => {
+      cancelled = true
+      if (timeout !== undefined) window.clearTimeout(timeout)
+    }
+  }, [cleanupActive, cleanupTaskId, fetchStats, t])
 
   if (loading) {
     return (
@@ -340,6 +493,23 @@ function ImageStorageSettings() {
             )}
           </p>
         </div>
+        <div className='space-y-2'>
+          <Label>{t('MinIO image retention days')}</Label>
+          <Input
+            type='number'
+            min={0}
+            max={3650}
+            value={config.retention_days}
+            onChange={(event) =>
+              update('retention_days', Number(event.target.value))
+            }
+          />
+          <p className='text-muted-foreground text-xs'>
+            {t(
+              'Set to 0 to keep MinIO images indefinitely. Otherwise, expired images are cleaned once per day.'
+            )}
+          </p>
+        </div>
       </div>
       <div className='flex flex-wrap gap-6'>
         <label className='flex items-center gap-2 text-sm'>
@@ -357,6 +527,46 @@ function ImageStorageSettings() {
           {t('Use S3 path style')}
         </label>
       </div>
+      <div className='grid gap-x-6 gap-y-3 border-y py-4 sm:grid-cols-2 lg:grid-cols-4'>
+        <div>
+          <div className='text-muted-foreground text-xs'>
+            {t('MinIO object count')}
+          </div>
+          <div className='mt-1 text-sm font-medium tabular-nums'>
+            {statsLoading ? '-' : (stats?.file_count ?? 0)}
+          </div>
+        </div>
+        <div>
+          <div className='text-muted-foreground text-xs'>
+            {t('MinIO storage usage')}
+          </div>
+          <div className='mt-1 text-sm font-medium tabular-nums'>
+            {statsLoading ? '-' : formatBytes(stats?.total_size ?? 0)}
+          </div>
+        </div>
+        <div>
+          <div className='text-muted-foreground text-xs'>
+            {t('Expired images')}
+          </div>
+          <div className='mt-1 text-sm font-medium tabular-nums'>
+            {statsLoading
+              ? '-'
+              : `${stats?.expired_count ?? 0} / ${formatBytes(
+                  stats?.expired_size ?? 0
+                )}`}
+          </div>
+        </div>
+        <div>
+          <div className='text-muted-foreground text-xs'>
+            {t('Last MinIO cleanup')}
+          </div>
+          <div className='mt-1 text-sm font-medium'>
+            {stats?.last_cleanup_at
+              ? dayjs.unix(stats.last_cleanup_at).format('YYYY-MM-DD HH:mm:ss')
+              : t('Never')}
+          </div>
+        </div>
+      </div>
       <div className='flex flex-wrap gap-3'>
         <Button
           type='button'
@@ -369,6 +579,57 @@ function ImageStorageSettings() {
         <Button type='button' disabled={saving || testing} onClick={save}>
           {saving ? t('Saving...') : t('Save MinIO settings')}
         </Button>
+        <Button
+          type='button'
+          variant='outline'
+          disabled={statsLoading}
+          onClick={() => void fetchStats()}
+        >
+          <RefreshCw className={statsLoading ? 'animate-spin' : ''} />
+          {t('Refresh MinIO statistics')}
+        </Button>
+        <AlertDialog>
+          <AlertDialogTrigger
+            render={
+              <Button
+                type='button'
+                variant='destructive'
+                disabled={
+                  !config.enabled ||
+                  config.retention_days <= 0 ||
+                  startingCleanup ||
+                  cleanupActive
+                }
+              />
+            }
+          >
+            {startingCleanup || cleanupActive ? (
+              <Loader2 className='animate-spin' />
+            ) : (
+              <Trash2 />
+            )}
+            {startingCleanup || cleanupActive
+              ? t('Cleaning...')
+              : t('Clean expired images now')}
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>{t('MinIO image cleanup')}</AlertDialogTitle>
+              <AlertDialogDescription>
+                {t(
+                  'Delete MinIO images older than {{days}} days now? This cannot be undone.',
+                  { days: config.retention_days }
+                )}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>{t('Cancel')}</AlertDialogCancel>
+              <AlertDialogAction variant='destructive' onClick={startCleanup}>
+                {t('Confirm Cleanup')}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </div>
   )
