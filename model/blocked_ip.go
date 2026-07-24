@@ -143,6 +143,10 @@ func DisableUserAndBlockIPs(user *User, ips []string, operatorId int) error {
 	if err != nil {
 		return err
 	}
+	var previousAuthVersion int64
+	if err := DB.Model(&User{}).Where("id = ?", user.Id).Select("auth_version").Find(&previousAuthVersion).Error; err != nil {
+		return err
+	}
 	if err := DB.Transaction(func(tx *gorm.DB) error {
 		if err := user.UpdateWithTx(tx, false); err != nil {
 			return err
@@ -152,7 +156,14 @@ func DisableUserAndBlockIPs(user *User, ips []string, operatorId int) error {
 		return err
 	}
 	invalidateBlockedIPCache(normalized)
-	return updateUserCache(*user)
+	if err := updateUserCache(*user); err != nil {
+		return err
+	}
+	if user.AuthVersion > previousAuthVersion {
+		_, err := RevokeAllUserSessions(user.Id, "admin_disable")
+		return err
+	}
+	return nil
 }
 
 func UnblockIPAddresses(ips []string) error {

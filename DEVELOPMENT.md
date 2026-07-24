@@ -1,6 +1,6 @@
 # Julong-API 开发文档
 
-最后更新：2026-07-19
+最后更新：2026-07-25
 
 本文档是本二开项目的强制开发记录。以后新增、修改或删除任何 API、组件、数据模型、配置项、路由、数据库行为或部署行为时，必须在同一次改动中同步更新本文档，并在“变更日志”中新增记录。
 
@@ -10,8 +10,8 @@
 - 每次 API 变更必须同步更新 API 清单、请求/响应说明、权限说明和变更日志。
 - 每次前端组件、页面、交互变更必须同步更新组件清单或对应功能模块说明。
 - 每次数据库模型、字段或迁移行为变更必须同步更新数据模型和迁移注意事项。
-- 前端 i18n 语言包禁止手动直接编辑。新增或修改翻译必须通过临时脚本 `web/default/scripts/add-missing-keys.mjs` 写入，然后运行 `bun run i18n:sync`，最后删除临时脚本。
-- `web/default/src/routeTree.gen.ts` 是 TanStack Router 工具链/typecheck 生成文件。除非生成不可用且改动完全机械明确，否则不要手动编辑。
+- 前端 i18n 语言包禁止手动直接编辑。新增或修改翻译必须通过临时脚本 `web/scripts/add-missing-keys.mjs` 写入，然后运行 `bun run i18n:sync`，最后删除临时脚本。
+- `web/src/routeTree.gen.ts` 是 TanStack Router 工具链/typecheck 生成文件。除非生成不可用且改动完全机械明确，否则不要手动编辑。
 - 当前项目名为 Julong-API / 矩龙-API。除非保留上游 import path、包名或兼容代码确有必要，不要新增面向用户的 `new-api` 文案。
 
 ## 项目状态
@@ -19,8 +19,9 @@
 | 模块 | 状态 | 说明 |
 | --- | --- | --- |
 | 后端 Gin API | 进行中 | 保留上游核心功能，并叠加 Julong 二开功能。本地后端通常监听 `:3000`。 |
-| 默认前端 UI | 进行中 | React 19 + Rsbuild + TanStack Router，代码在 `web/default`。本地开发服务通常是 `:5173`。 |
-| Classic 前端 | 上游已有 | Dockerfile 仍会构建，但不是当前主要二开目标。 |
+| 默认前端 UI | 进行中 | React 19 + Rsbuild + TanStack Router，代码在 `web`。本地开发服务通常是 `:5173`。 |
+| Classic 前端 | 已移除 | 跟随上游架构调整，只保留 `web/` 单一前端。 |
+| 上游同步 | 已完成 | 2026-07-25 合并 `QuantumNous/new-api@84a79b68`，保留 Julong 定制功能。 |
 | Docker 部署 | 进行中 | `docker-compose.yml` 使用 `qq1371446705/julong-api:latest`，包含 Postgres、Redis，宿主端口 `3388`。 |
 | 代理功能 | 已实现，仍需持续 QA | 代理折扣、代理生成兑换码、代理所属用户、代理充值链接、退款日志等。 |
 | 错误反馈工单 | 已实现 | 500 页面跳转 `/error-report`，管理员/root 在 `/error-reports` 查看。 |
@@ -45,11 +46,10 @@
 | `relay/` | OpenAI/Anthropic/Gemini/MJ/task 兼容网关逻辑 | channel adapters、billing helpers | 活跃 |
 | `setting/` | 运行时配置分组和默认设置 | `model.Option`、环境变量 | 活跃 |
 | `common/` | 公共工具、数据库初始化、额度计算、分页、API 响应工具 | stdlib、Redis、GORM | 活跃 |
-| `web/default/` | 主 React 前端 | React、Rsbuild、TanStack Router/Query/Table、Tailwind、shadcn 风格组件 | 活跃 |
-| `web/classic/` | Classic 主题前端 | Vite/React 旧栈 | 上游已有 |
+| `web/` | 主 React 前端 | React、Rsbuild、TanStack Router/Query/Table、Tailwind、shadcn 风格组件 | 活跃 |
 | `docker-compose.yml` | 生产风格 Compose 部署 | Postgres、Redis、镜像 `qq1371446705/julong-api:latest` | 活跃 |
 | `docker-compose.dev.yml` | 本地后端构建的开发 Compose | Postgres、Redis、Dockerfile.dev | 需要品牌名清理 |
-| `Dockerfile` | 多阶段构建 default/classic 前端和 Go 二进制 | Bun、Go、Debian runtime | 活跃 |
+| `Dockerfile` | 多阶段构建单一前端和 Go 二进制 | Bun、Go、Debian runtime | 活跃 |
 
 ## 技术栈
 
@@ -63,33 +63,34 @@
   - 日志库：默认跟随主库；可通过 `LOG_SQL_DSN` 使用独立数据库或 ClickHouse。
   - Redis：可选，通过 `REDIS_CONN_STRING` 启用。
 - 鉴权：
-  - Dashboard 使用 session 鉴权。
-  - 管理 API 和部分接口支持 access token 鉴权。
+  - Dashboard 登录成功后返回短期 Bearer access token；刷新令牌保存在 HttpOnly Cookie，服务端会话持久化在 `UserSession`。
+  - `POST /api/user/auth/refresh` 轮换 access/refresh token；登出、密码/角色/状态变更会撤销相关会话。
+  - 管理 API 同时支持 Dashboard access token 和用户生成的管理 PAT。
   - `/v1`、`/mj`、task/video relay 路由使用 API key token 鉴权。
   - 角色常量来自 `common`：普通用户、管理员、root。
 - 计费：
   - 额度以整数 quota 单位存储。
-  - 前端显示通过 `web/default/src/lib/format.ts` 和货币显示设置格式化。
+  - 前端显示通过 `web/src/lib/format.ts` 和货币显示设置格式化。
   - 余额和订阅额度并存；按次计费模型可以配置是否允许订阅额度抵扣。
 
 ### 前端
 
 - 工作区：`web/`。
-- 主应用：`web/default`。
+- 主应用：`web/`，上游已移除 `web/default` 与 `web/classic` 双前端结构。
 - 包管理/运行时：Bun。本机已知 Bun 路径：`/Users/xujs/.nvm/versions/node/v24.13.0/bin/bun`。
 - 框架：React 19。
-- 路由：TanStack Router，文件路由位于 `web/default/src/routes`。
-- 数据请求：TanStack Query + Axios 封装 `web/default/src/lib/api.ts`。
-- 表格：TanStack Table + 共享表格系统 `web/default/src/components/data-table`。
+- 路由：TanStack Router，文件路由位于 `web/src/routes`。
+- 数据请求：TanStack Query + Axios 封装 `web/src/lib/api.ts`。
+- 表格：TanStack Table + 共享表格系统 `web/src/components/data-table`。
 - 样式：Tailwind CSS 4、Base UI、本地 shadcn 风格 primitives。
-- i18n：`react-i18next`，语言文件位于 `web/default/src/i18n/locales`。
+- i18n：`react-i18next`，语言文件位于 `web/src/i18n/locales`。
 
 ## 本地开发
 
 ### 后端
 
 ```bash
-go run main.go
+go run .
 ```
 
 默认本地行为：
@@ -102,7 +103,7 @@ go run main.go
 ### 前端
 
 ```bash
-cd web/default
+cd web
 PATH="/Users/xujs/.nvm/versions/node/v24.13.0/bin:$PATH" \
   /Users/xujs/.nvm/versions/node/v24.13.0/bin/bun run dev
 ```
@@ -113,7 +114,7 @@ PATH="/Users/xujs/.nvm/versions/node/v24.13.0/bin:$PATH" \
 
 ```bash
 go test ./...
-cd web/default
+cd web
 PATH="/Users/xujs/.nvm/versions/node/v24.13.0/bin:$PATH" bun run typecheck
 PATH="/Users/xujs/.nvm/versions/node/v24.13.0/bin:$PATH" bun run i18n:sync
 git diff --check
@@ -154,13 +155,13 @@ docker compose up -d
 
 | Key 或分组 | 文件 | 用途 | 备注 |
 | --- | --- | --- | --- |
-| `checkin_setting.enabled` | `setting/operation_setting/checkin_setting.go`、`web/default/src/features/system-settings/general/checkin-settings-section.tsx` | 启用每日签到奖励 | 前端已显示格式化额度预览。 |
+| `checkin_setting.enabled` | `setting/operation_setting/checkin_setting.go`、`web/src/features/system-settings/general/checkin-settings-section.tsx` | 启用每日签到奖励 | 前端已显示格式化额度预览。 |
 | `checkin_setting.min_quota` | 同上 | 随机签到奖励最小额度 | 存储原始 quota 整数。 |
 | `checkin_setting.max_quota` | 同上 | 随机签到奖励最大额度 | 存储原始 quota 整数。 |
 | `QuotaForNewUser` | `quota-settings-section.tsx` | 新用户初始额度 | 使用 `formatQuota` 显示预览。 |
 | `QuotaForInviter` / `QuotaForInvitee` | 同上 | 邀请奖励 | 受支付合规确认约束。 |
-| `SidebarModulesAdmin` | `web/default/src/features/system-settings/maintenance/config.ts` | 控制侧边栏模块显示 | 自定义模块包含 `errorReports`。 |
-| 模型定价订阅抵扣 | `web/default/src/features/system-settings/models/model-pricing-sheet.tsx` 及后端计费设置 | 按次模型是否允许订阅额度抵扣 | 适用于所有模型，不局限于 `gpt-image-2`。 |
+| `SidebarModulesAdmin` | `web/src/features/system-settings/maintenance/config.ts` | 控制侧边栏模块显示 | 自定义模块包含 `errorReports`。 |
+| 模型定价订阅抵扣 | `web/src/features/system-settings/models/model-pricing-sheet.tsx` 及后端计费设置 | 按次模型是否允许订阅额度抵扣 | 适用于所有模型，不局限于 `gpt-image-2`。 |
 | `ImageGenerationLogEnabled` | `common/constants.go`、`model/option.go`、`log-settings-section.tsx` | 是否记录生图请求并启用本地异步生图 | Root 或获授权管理员配置，默认 `false`；关闭时 `async: true` 退回同步，不创建任务、不捕获或保存图片。 |
 | `ImageGenerationLogRetentionDays` | 同上、`service/image_generation_log.go` | 生图日志及本地图片自动保留天数 | 默认 `30`，范围 `0-3650`；`0` 表示永久保留，每小时至多触发一次过期清理。 |
 | `ImageGenerationLogPollingIntervalSeconds` | `common/constants.go`、`model/option.go`、`log-settings-section.tsx` | 未完成生图任务的前端轮询频率 | 默认 `15` 秒，允许 `5-3600` 秒；同时通过 `/api/status` 和任务响应公开。 |
@@ -176,7 +177,7 @@ docker compose up -d
 ### 请求流程
 
 1. 客户端访问前端路由或 API。
-2. 前端 Axios 实例 `web/default/src/lib/api.ts` 在可用时从 localStorage 附加 `New-Api-User` 请求头。
+2. 前端请求层从 Zustand 内存状态附加短期 Bearer access token；access token 过期时调用 `/api/user/auth/refresh`，刷新 Cookie 由浏览器自动携带。
 3. Gin 路由组应用中间件：
    - `middleware.UserAuth()`：登录用户。
    - `middleware.AdminAuth()`：管理员/root。
@@ -197,8 +198,8 @@ Relay API 使用 OpenAI/Anthropic/Gemini 兼容响应和错误结构。
 
 ### 前端流程
 
-1. `web/default/src/routes` 下的文件路由渲染 feature 组件。
-2. Feature 的 `api.ts` 调用 `web/default/src/lib/api.ts`。
+1. `web/src/routes` 下的文件路由渲染 feature 组件。
+2. Feature 的 `api.ts` 调用 `web/src/lib/api.ts`。
 3. Feature 表格使用 `DataTablePage` 和 `useTableUrlState` 管理分页、过滤、URL 状态、移动端/桌面端布局。
 4. Mutation 通常使用 `sonner` toast，并触发 provider 中的 refresh 状态。
 5. 管理页面通过 route `beforeLoad` 读取 `useAuthStore` 和 `ROLE` 常量做权限守卫。
@@ -217,7 +218,7 @@ type ApiResponse<T> = {
 
 通用错误处理：
 
-- 鉴权中间件可能因 session/access token 缺失或无效返回 HTTP `401`。
+- 鉴权中间件可能因 access token 缺失、过期、会话撤销或用户 `auth_version` 变化返回 HTTP `401`；权限不足返回 `403`。
 - 业务校验错误通常返回 HTTP `200` 且 `success:false`。
 - Relay 未找到或不支持的路由返回 OpenAI 兼容错误 JSON。
 - 前端 Axios 默认对 `success:false` 和 HTTP 错误弹 toast，除非请求配置关闭错误处理。
@@ -242,12 +243,11 @@ type ApiResponse<T> = {
 | GET | `/api/perf-metrics/summary` | `controller.GetPerfMetricsSummary` | 性能指标摘要 | query | summary | pricing 导航 public/user auth | 完成 |
 | GET | `/api/perf-metrics` | `controller.GetPerfMetrics` | 性能指标列表 | query | list | pricing 导航 public/user auth | 完成 |
 
-`GET /api/announcements` 无请求体，要求登录 Session 或用户 access token，并携带现有鉴权中间件要求的 `New-Api-User`。成功响应为 `{success:true,data:Announcement[]}`；后端只返回 `status=active`、处于起止时间内且命中当前用户套餐/余额条件的公告。未登录返回 HTTP 401，用户或订阅查询失败返回标准 API 错误。调用示例：
+`GET /api/announcements` 无请求体，要求 Dashboard Bearer access token 或用户管理 PAT。成功响应为 `{success:true,data:Announcement[]}`；后端只返回 `status=active`、处于起止时间内且命中当前用户套餐/余额条件的公告。未登录返回 HTTP 401，用户或订阅查询失败返回标准 API 错误。调用示例：
 
 ```bash
 curl 'http://localhost:3000/api/announcements' \
-  -H 'New-Api-User: 1' \
-  -H 'Authorization: Bearer <user-access-token>'
+  -H 'Authorization: Bearer <dashboard-access-token>'
 ```
 
 ### 错误反馈 API
@@ -272,10 +272,14 @@ curl http://localhost:3000/api/error-reports \
 | 方法 | 路径 | Handler | 用途 | 参数/请求体 | 权限 | 状态 |
 | --- | --- | --- | --- | --- | --- | --- |
 | POST | `/api/user/register` | `controller.Register` | 注册用户 | username/password/email 等 | 公开 + Turnstile/rate limit | 完成 |
-| POST | `/api/user/login` | `controller.Login` | 登录 | credentials | 公开 + Turnstile/rate limit | 完成 |
-| POST | `/api/user/login/2fa` | `controller.Verify2FALogin` | 完成 2FA 登录 | 2FA code | 公开 + rate limit | 完成 |
-| GET | `/api/user/logout` | `controller.Logout` | 登出当前 session | 无 | 公开 | 完成 |
+| POST | `/api/user/login` | `controller.Login` | 登录并创建服务端会话 | `{username,password}` | 公开 + Turnstile/rate limit；返回 `AuthBundle` 或 2FA flow | 完成 |
+| POST | `/api/user/login/2fa` | `controller.Verify2FALogin` | 完成 2FA 登录 | `{flow_token,code}` | 公开 + rate limit；返回 `AuthBundle` | 完成 |
+| POST | `/api/user/auth/refresh` | `controller.RefreshAuth` | 使用 HttpOnly refresh Cookie 轮换登录令牌 | Cookie + 可选 `X-Auth-Session` | Origin guard + rate limit；返回 `AuthBundle` | 完成 |
+| POST | `/api/user/auth/logout` | `controller.AuthLogout` | 撤销当前服务端会话并清理 refresh Cookie | Bearer token、Cookie、可选 `X-Auth-Session` | Origin guard + rate limit | 完成 |
 | GET | `/api/user/groups` | `controller.GetUserGroups` | 用户分组元数据 | 无 | 公开 | 完成 |
+| GET | `/api/user/sessions` | `controller.GetLoginSessions` | 当前用户登录设备/会话列表 | 无 | Dashboard 登录会话 | 完成 |
+| DELETE | `/api/user/sessions/:sid` | `controller.DeleteLoginSession` | 撤销指定登录会话 | path `sid` | Dashboard 登录会话 | 完成 |
+| POST | `/api/user/sessions/revoke-others` | `controller.RevokeOtherLoginSessions` | 撤销当前会话外的全部会话 | 无 | Dashboard 登录会话 | 完成 |
 | GET | `/api/user/self` | `controller.GetSelf` | 当前用户信息 | 无 | 用户 | 完成 |
 | PUT | `/api/user/self` | `controller.UpdateSelf` | 更新当前用户资料 | user fields | 用户 + critical rate limit | 完成 |
 | DELETE | `/api/user/self` | `controller.DeleteSelf` | 删除当前用户 | 无 | 用户 | 完成 |
@@ -319,13 +323,11 @@ IP 管理调用示例：
 
 ```bash
 curl 'http://localhost:3000/api/user/12/login-ips' \
-  -H 'Cookie: <admin-session-cookie>' \
-  -H 'New-Api-User: <admin-user-id>'
+  -H 'Authorization: Bearer <dashboard-access-token>'
 
 curl -X PUT 'http://localhost:3000/api/user/12/login-ips' \
   -H 'Content-Type: application/json' \
-  -H 'Cookie: <admin-session-cookie>' \
-  -H 'New-Api-User: <admin-user-id>' \
+  -H 'Authorization: Bearer <dashboard-access-token>' \
   -d '{"ips":["203.0.113.8","2001:db8::8"],"blocked":true}'
 ```
 
@@ -335,8 +337,7 @@ curl -X PUT 'http://localhost:3000/api/user/12/login-ips' \
 
 ```bash
 curl 'http://localhost:3000/api/user/1/usage-summary' \
-  -H 'Cookie: <admin-session-cookie>' \
-  -H 'New-Api-User: 1'
+  -H 'Authorization: Bearer <dashboard-access-token>'
 ```
 
 ### 支付、钱包、订阅 API
@@ -427,8 +428,7 @@ curl 'http://localhost:3000/api/user/1/usage-summary' \
 
 ```bash
 curl 'http://localhost:3000/api/redemption/search?keyword=agent001&p=1&page_size=20' \
-  -H 'Cookie: <admin-session-cookie>' \
-  -H 'New-Api-User: 1'
+  -H 'Authorization: Bearer <dashboard-access-token>'
 ```
 
 ### 日志、使用量、数据 API
@@ -465,8 +465,7 @@ curl 'http://localhost:3000/api/redemption/search?keyword=agent001&p=1&page_size
 
 ```bash
 curl 'http://localhost:3000/api/image-generation-logs?p=1&page_size=20&model=gpt-image-2' \
-  -H 'Cookie: <session-cookie>' \
-  -H 'New-Api-User: 1'
+  -H 'Authorization: Bearer <dashboard-access-token>'
 ```
 
 ### OpenAI 生图与异步轮询 API
@@ -485,25 +484,20 @@ MinIO 管理接口均需要 `AdminAuth()` 和 `operations.logs` 系统设置权�
 ```bash
 curl -X PUT http://localhost:3000/api/performance/image-storage \
   -H 'Content-Type: application/json' \
-  -H 'Cookie: <session-cookie>' \
-  -H 'New-Api-User: 1' \
+  -H 'Authorization: Bearer <dashboard-access-token>' \
   -d '{"enabled":true,"endpoint":"https://media.example.com","bucket":"julong-media","region":"us-east-1","access_key":"ACCESS","secret_key":"SECRET","use_ssl":true,"use_path_style":true,"object_prefix":"generated/images","retention_days":30}'
 
 curl http://localhost:3000/api/performance/image-storage/stats \
-  -H 'Cookie: <session-cookie>' \
-  -H 'New-Api-User: 1'
+  -H 'Authorization: Bearer <dashboard-access-token>'
 
 curl -X POST http://localhost:3000/api/performance/image-storage/cleanup \
-  -H 'Cookie: <session-cookie>' \
-  -H 'New-Api-User: 1'
+  -H 'Authorization: Bearer <dashboard-access-token>'
 
 curl -X POST http://localhost:3000/api/performance/image-storage/purge \
-  -H 'Cookie: <session-cookie>' \
-  -H 'New-Api-User: 1'
+  -H 'Authorization: Bearer <dashboard-access-token>'
 
 curl http://localhost:3000/api/system-task/<task_id> \
-  -H 'Cookie: <session-cookie>' \
-  -H 'New-Api-User: 1'
+  -H 'Authorization: Bearer <dashboard-access-token>'
 ```
 
 #### `POST /v1/images/generations`
@@ -737,7 +731,10 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 
 | 模型 | 文件 | 表用途 | 关键字段和约束 | 关系/说明 | 状态 |
 | --- | --- | --- | --- | --- | --- |
-| `User` | `model/user.go` | Dashboard 用户 | `id`、唯一索引 `username`、`password`、`display_name`、`role`、`status`、`email`、`quota`、`used_quota`、`request_count`、`group`、唯一 `aff_code`、`inviter_id`、`is_agent`、`agent_discount`、`agent_topup_link`、`stripe_customer`、`last_login_at`、IPv4/IPv6 `last_login_ip`、时间戳 | 列表/详情必须隐藏 password/access token。登录成功统一在 `setupLogin` 更新时间/IP；`shared_ip_user_count`、`last_login_ip_blocked`、`AdminPermissions` 均为 transient 字段。 | 活跃 |
+| `User` | `model/user.go` | Dashboard 用户 | `id`、唯一索引 `username`、`password`、`display_name`、`role`、`status`、`email`、`quota`、`used_quota`、`request_count`、`group`、唯一 `aff_code`、`inviter_id`、`is_agent`、`agent_discount`、`agent_topup_link`、`stripe_customer`、`last_login_at`、IPv4/IPv6 `last_login_ip`、`auth_version bigint default 1`、时间戳 | 列表/详情必须隐藏 password/access token。登录成功统一在 `setupLogin` 更新时间/IP；密码、角色和状态等敏感变更提升 `auth_version` 并撤销旧会话；`shared_ip_user_count`、`last_login_ip_blocked`、`AdminPermissions` 均为 transient 字段。 | 活跃 |
+| `UserSession` | `model/user_session.go` | Dashboard 服务端登录会话 | 主键 `sid varchar(64)`；索引 `user_id/status/expires_at`；`version`、`user_auth_version`、状态、refresh HMAC、登录方式、IP、User-Agent、创建/活跃/过期/撤销时间 | 不保存 refresh 明文；短期 access token 必须同时通过会话版本和用户认证版本校验。支持 Redis 缓存、令牌轮换重用检测和批量撤销。 | 上游同步，活跃 |
+| `AuthFlow` | `model/auth_flow.go` | OAuth、2FA、Passkey、Telegram 等一次性认证流程 | `id`；唯一 `token_hash`；索引 `purpose/expires_at`；`provider`、`intent`、`user_id`、`session_id`、内部 payload、`consumed_at` | 只保存不透明 flow token 的 HMAC；消费操作防重放并带过期校验。 | 上游同步，活跃 |
+| `ExternalIdentityClaim` | `model/external_identity_claim.go` | 外部身份唯一归属 | `provider+subject` 和 `provider+user_id` 两组唯一索引；`created_at` | 当前用于 Telegram 等外部身份原子占用，避免同一身份绑定多个用户；迁移时回填已有 Telegram 绑定。 | 上游同步，活跃 |
 | `BlockedIP` | `model/blocked_ip.go` | 全局 IP 黑名单 | 唯一 `ip varchar(45)`、索引 `user_id` 来源用户、索引 `operator_id` 操作者、`reason varchar(255)`、创建/更新时间 | IP 经 `net.ParseIP` 标准化；封禁状态使用 Redis 或 60 秒本地缓存。普通用户登录、注册、Dashboard 会话和 API Token 鉴权均拦截；管理员/root Dashboard 登录豁免。 | 活跃 |
 | `Token` | `model/token.go` | API keys | `id`、`user_id`、`key`、`name`、额度字段、模型限制、group、allow IPs | Relay 鉴权和计费使用。 | 活跃 |
 | `Channel` | `model/channel.go` | 上游 provider 渠道 | `id`、`type`、`key`、`base_url`、`models`、`group`、状态、priority/weight、计费/override 字段 | 由 distributor middleware 选择。敏感 key 需要脱敏。 | 活跃 |
@@ -783,10 +780,11 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 - 仅用于 JSON 响应、不入库的字段要加 `gorm:"-:all"`。
 - `User.last_login_ip` 由现有 `User` AutoMigrate 在服务启动时自动补列，无需注册新的迁移模型；长度 45，可保存 IPv4 和 IPv6。
 - `BlockedIP` 已加入 `migrateDB()` 和 `migrateDBFast()`；部署新版本启动后自动创建 `blocked_ips` 表，不改动现有用户和日志数据。
+- 本次上游同步新增 `users.auth_version`，并自动创建 `user_sessions`、`auth_flows`、`external_identity_claims`；`InitializeUserAuthVersions` 和 `InitializeExternalIdentityClaims` 会初始化认证版本及回填外部身份。升级前必须备份主库，升级后旧 Dashboard 登录态会失效，用户需重新登录，但余额、订阅、代理和日志数据不受影响。
 
 ## 前端路由
 
-路由位于 `web/default/src/routes`。
+路由位于 `web/src/routes`。
 
 | 路由 | 文件 | 组件/功能 | 权限 | 状态 |
 | --- | --- | --- | --- | --- |
@@ -817,7 +815,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 
 ### 共享组件分组
 
-以下路径均位于 `web/default/src/components`。
+以下路径均位于 `web/src/components`。
 
 | 分组 | 文件 | 用途 | 依赖 | 状态 |
 | --- | --- | --- | --- | --- |
@@ -829,7 +827,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 
 ### Feature 模块
 
-以下路径均位于 `web/default/src/features`。
+以下路径均位于 `web/src/features`。
 
 | Feature | 关键文件/组件 | 用途 | API 依赖 | 状态 |
 | --- | --- | --- | --- | --- |
@@ -871,7 +869,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 相关文件：
 
 - 后端：`model/user.go`、`controller/user.go`、`controller/redemption.go`、`model/redemption.go`。
-- 前端：`web/default/src/features/users/*`、`web/default/src/features/redemption-codes/*`、`web/default/src/features/wallet/*`。
+- 前端：`web/src/features/users/*`、`web/src/features/redemption-codes/*`、`web/src/features/wallet/*`。
 
 行为：
 
@@ -889,7 +887,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 相关文件：
 
 - 后端：`model/error_report.go`、`controller/error_report.go`、`router/api-router.go`、`model/main.go` 中的迁移。
-- 前端：`web/default/src/features/errors/general-error.tsx`、`web/default/src/features/error-reports/*`、`web/default/src/routes/error-report.tsx`、`web/default/src/routes/_authenticated/error-reports/index.tsx`。
+- 前端：`web/src/features/errors/general-error.tsx`、`web/src/features/error-reports/*`、`web/src/routes/error-report.tsx`、`web/src/routes/_authenticated/error-reports/index.tsx`。
 
 行为：
 
@@ -901,7 +899,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 
 相关文件：
 
-- 前端：`web/default/src/features/users/components/user-detail-dialog.tsx`、`users-columns.tsx`、`users/index.tsx`。
+- 前端：`web/src/features/users/components/user-detail-dialog.tsx`、`users-columns.tsx`、`users/index.tsx`。
 - 后端：`controller/user.go:AdminGetUserUsageSummary/AdminGetUserLoginIPs/AdminUpdateUserLoginIPs`、`model/log.go:GetUserLoginIPStats/SumUserUsedToken`、`model/blocked_ip.go`。
 
 行为：
@@ -923,7 +921,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 相关文件：
 
 - 后端：`model/redemption.go:SearchRedemptionsByUser`。
-- 前端：`web/default/src/features/redemption-codes/components/redemptions-table.tsx`。
+- 前端：`web/src/features/redemption-codes/components/redemptions-table.tsx`。
 
 行为：
 
@@ -935,7 +933,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 
 相关文件：
 
-- `web/default/src/features/system-settings/general/checkin-settings-section.tsx`。
+- `web/src/features/system-settings/general/checkin-settings-section.tsx`。
 
 行为：
 
@@ -946,7 +944,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 相关文件：
 
 - 后端：`model/image_generation_log.go`、`service/image_generation_log.go`、`controller/image_generation_log.go`、`controller/image_generation_task.go`、`relay/image_handler.go` 及各图片渠道响应适配器。
-- 前端：`web/default/src/features/usage-logs/components/columns/image-generation-logs-columns.tsx`、`image-generation-task-dialog.tsx`、`image-generation-preview-dialog.tsx`、日志 section/filter/API/types；root 日志维护设置。
+- 前端：`web/src/features/usage-logs/components/columns/image-generation-logs-columns.tsx`、`image-generation-task-dialog.tsx`、`image-generation-preview-dialog.tsx`、日志 section/filter/API/types；root 日志维护设置。
 
 行为：
 
@@ -977,6 +975,8 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 | 代理规则需要更多回归测试 | 计费/退款 bug 风险高 | 当前依赖手动 QA 和已有测试 | 增加 agent 创建/删除/退款/兑换限制的 model/controller 测试。 |
 | 异步生图执行器是进程内任务 | 容器在上游请求执行期间重启时，该请求无法自动恢复，日志可能停留在 `pending/processing` | 正常完成/失败会更新状态；图片和任务记录已持久化 | 后续改为 Redis/数据库持久化队列，增加租约、超时失败回收和多节点 worker。 |
 | 未启用 Redis 的多实例部署中，IP 黑名单负缓存最多延迟 60 秒同步 | 另一实例可能短暂继续放行刚封禁的 IP | 单实例立即失效；Redis 部署使用共享缓存并立即失效 | 生产多实例必须启用 Redis，或增加数据库通知机制。 |
+| 上游 `web/` 当前全量 lint 基线为 364 个错误、73 个警告 | `bun run lint` 不能作为本仓库合并后的全量绿色门禁 | 本次与上游差异的 Julong 文件单独执行 oxlint，结果为 0 错误、1 个已知警告；typecheck、format 和 build 仍作为硬性检查 | 分批修复上游存量 lint，或在 CI 中先按变更文件执行并逐步扩大覆盖范围。 |
+| 自定义 Footer HTML 使用 `dangerouslySetInnerHTML` | root 配置恶意 HTML 时可能形成持久型 XSS | 仅允许可信 root 配置，并在 Julong 差异 lint 中保留 `react/no-danger` 警告 | 引入可靠 HTML sanitizer 和允许标签/属性白名单后再渲染。 |
 
 ## 技术债
 
@@ -993,6 +993,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 
 ### 已完成
 
+- 合并上游 `QuantumNous/new-api@84a79b68`：采用单一 `web/` 前端、服务端登录会话、用户认证版本、模型未定价视图及上游计费/任务/渠道修复，同时保留全部 Julong 定制功能。
 - Julong 生产 Compose Docker 命名和镜像配置。
 - README 中记录本地 Docker 镜像维护流程。
 - 代理折扣、代理生成兑换码、代理用户、代理充值链接流程。
@@ -1002,6 +1003,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 - 从 500 页面提交/后台查看错误反馈。
 - 后台用户列表点击用户名查看用户详情。
 - 管理员/root 可查看、批量封禁/解封用户历史登录 IP；禁用用户自动封禁其已有 IP，用户列表标记共享和已封 IP。
+- 禁用用户提升认证版本并撤销全部活跃 Dashboard 会话，避免旧 access/refresh token 继续使用。
 - 兑换码支持按生成者、兑换码、名称、ID 搜索。
 - 签到奖励额度预览。
 - 可由 root 开关控制、支持图片预览和自动保留清理的生图日志。
@@ -1029,6 +1031,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 
 | 日期 | 变更 | 更新文件/API/模型 | 验证 |
 | --- | --- | --- | --- |
+| 2026-07-25 | 合并上游 `QuantumNous/new-api@84a79b68`。默认前端从 `web/default` 迁移为单一 `web/`，删除 Classic；接入新的 Dashboard access/refresh token 与 `UserSession`/`AuthFlow`/`ExternalIdentityClaim` 架构、模型未定价视图、用户排序/额度溢出保护、渠道模型发现以及计费、缓存写入、图片流和任务退款修复。Julong 的代理、兑换码退款、订阅抵扣、IP 管理、错误工单、客服/公告/自定义端点、系统设置权限、生图日志/轮询/白名单/MinIO 和品牌资源全部迁移保留；修复禁用用户未撤销活跃会话、新认证测试未迁移 `BlockedIP` 的合并回归，并将后端开发命令更新为可包含全部主包文件的 `go run .`。 | `upstream/main@84a79b68`、`controller/{user,model_list_test,auth_session_test,theme_compat_test}.go`、`middleware/{auth,auth_test}.go`、`model/{user,user_session,auth_flow,external_identity_claim,blocked_ip}.go`、`relay/channel/openai/relay_image.go`、`router/api-router.go`、`web/`、`README.md`、`electron/README.md`、`DEVELOPMENT.md` | `go test ./...`、`bun run typecheck`、`bun run i18n:sync`、`bun run format:check`、`bun run build`、Julong 差异文件 oxlint（0 错误、1 个已知 `react/no-danger` 警告）、`git diff --check` 均通过；全量 `bun run lint` 仍有上游基线 364 错误/73 警告，已列入已知问题。 |
 | 2026-07-20 | 日志维护的 MinIO 生图存储增加“清空全部 MinIO 图片”：二次确认框展示实际 Bucket/对象前缀，确认按钮强制等待 10 秒；后端通过 `delete_all` 任务 payload 复用 `image_storage_cleanup` 锁，只删除当前配置前缀下的全部非目录对象，与过期清理互斥，Bucket 其他对象不受影响。无数据库字段或迁移。 | `service.DeleteAllGeneratedImageObjects`、`imageObjectStorageScanMode`、`controller.StartImageObjectStoragePurge`、`POST /api/performance/image-storage/purge`、`imageStorageCleanupHandler`、`ImageStorageSettings`、locale files、`生图轮询接口说明.md` | `go test ./...`、`go test ./service ./controller ./router`、`bun run typecheck`、目标 `oxfmt/oxlint`、`bun run build`、`bun run i18n:sync`、`git diff --check` |
 | 2026-07-19 | 为 MinIO 生图对象增加可配置生命周期与每日自动清理：默认 30 天、`0` 永久保留，按对象 `LastModified` 删除当前 Bucket 前缀下的过期图片；复用系统任务数据库租约实现每日及手动清理互斥。日志维护页新增保留天数、对象数、占用空间、过期数量、最近清理时间、统计刷新和立即清理确认。 | `ImageGenerationStorageRetentionDays`、`ImageGenerationStorageLastCleanupAt`、`image_storage_cleanup`、`service/image_object_storage.go`、`controller/image_object_storage.go`、`GET /api/performance/image-storage/stats`、`POST /api/performance/image-storage/cleanup`、`ImageStorageSettings`、locale files、`生图轮询接口说明.md` | `go test ./...`、`bun run typecheck`、目标 `oxfmt/oxlint`、`bun run build`、`bun run i18n:sync`、`git diff --check` |
 | 2026-07-19 | 日志维护的“记录生图日志”增加可保存、测试连接的 MinIO 配置；异步生图完成后将 Base64 或可下载 URL 按 SHA-256 写入共享私有 Bucket，任务响应返回统一对象元数据，读取接口兼容本地/远程/MinIO 三种历史引用，并提供所有者专用预签名接口。Secret Key 不回显，留空沿用；存储失败保留原结果回退；远程图片下载使用 SSRF 防护客户端。 | `service/image_object_storage.go`、`controller/image_object_storage.go`、`GET/PUT /api/performance/image-storage`、`POST /api/performance/image-storage/test`、`GET /v1/images/generations/:task_id/images/:index/presign`、`ImageGenerationImage`、`service/image_generation_log.go`、`LogSettingsSection`、locale files、MinIO Go SDK | `go test ./...`、`bun run typecheck`、目标 `oxfmt/oxlint`、`bun run build`、`bun run i18n:sync`、`git diff --check` |
@@ -1053,16 +1056,16 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 | 2026-07-12 | 修复生图日志开关假开启：日志设置保存时明确提交全部字段；增加聊天/Responses `image_generation_call.result` 捕获、去重、文件落盘和日志写入。 | `log-settings-section.tsx`、`ResponsesOutput.result`、`service/image_generation_log.go`、OpenAI Responses/Chat 转换处理器 | `go test ./service ./relay/...`、`bun run typecheck`、`git diff --check` |
 | 2026-07-12 | 优化钱包页响应式布局与套餐卡片，展示套餐及当前订阅的生图日志查看范围。 | `wallet/index.tsx`、`wallet-stats-card.tsx`、`subscription-plans-card.tsx`、locale files | `bun run typecheck`、`bun run i18n:sync`、`git diff --check` |
 | 2026-07-12 | 新增订阅套餐生图日志权限和最近 N 条限制；0 为全部，多有效订阅取最大权益，列表及图片读取均强制鉴权。 | `SubscriptionPlan`、`UserSubscription`、`GetUserImageGenerationLogAccess`、`GET /api/image-generation-logs*`、订阅套餐编辑抽屉、locale files | `go test ./model ./controller`、`bun run typecheck`、`bun run i18n:sync`、`git diff --check` |
-| 2026-07-12 | 新增同步生图日志：root 开关、保留天数、base64 文件落盘、用户隔离查询/图片接口，以及任务日志中的生图日志和图片预览。 | `ImageGenerationLog`、`ImageGenerationLogEnabled`、`ImageGenerationLogRetentionDays`、`/api/image-generation-logs*`、Relay 图片适配器、`web/default/src/features/usage-logs/*`、日志维护设置、locale files | `go test ./model ./service ./controller ./relay/...`、`bun run typecheck`、`bun run i18n:sync`、`git diff --check` |
-| 2026-07-12 | 在后台用户详情基本信息区增加有效订阅摘要。 | `web/default/src/features/users/components/user-detail-dialog.tsx`、`DEVELOPMENT.md`；复用 `GET /api/subscription/admin/users/:id/subscriptions` 和 `GET /api/subscription/admin/plans` | `bun run typecheck`、`bun run i18n:sync`、Rsbuild 热更新编译、`git diff --check` |
-| 2026-07-12 | 优化代理详情和用户详情弹窗 UI，增加身份摘要、关键指标带、加载骨架、紧凑信息网格及移动端响应式表格。 | `web/default/src/features/users/components/agent-detail-dialog.tsx`、`user-detail-dialog.tsx`、`DEVELOPMENT.md` | `bun run typecheck`、Rsbuild 热更新编译、`git diff --check` |
+| 2026-07-12 | 新增同步生图日志：root 开关、保留天数、base64 文件落盘、用户隔离查询/图片接口，以及任务日志中的生图日志和图片预览。 | `ImageGenerationLog`、`ImageGenerationLogEnabled`、`ImageGenerationLogRetentionDays`、`/api/image-generation-logs*`、Relay 图片适配器、`web/src/features/usage-logs/*`、日志维护设置、locale files | `go test ./model ./service ./controller ./relay/...`、`bun run typecheck`、`bun run i18n:sync`、`git diff --check` |
+| 2026-07-12 | 在后台用户详情基本信息区增加有效订阅摘要。 | `web/src/features/users/components/user-detail-dialog.tsx`、`DEVELOPMENT.md`；复用 `GET /api/subscription/admin/users/:id/subscriptions` 和 `GET /api/subscription/admin/plans` | `bun run typecheck`、`bun run i18n:sync`、Rsbuild 热更新编译、`git diff --check` |
+| 2026-07-12 | 优化代理详情和用户详情弹窗 UI，增加身份摘要、关键指标带、加载骨架、紧凑信息网格及移动端响应式表格。 | `web/src/features/users/components/agent-detail-dialog.tsx`、`user-detail-dialog.tsx`、`DEVELOPMENT.md` | `bun run typecheck`、Rsbuild 热更新编译、`git diff --check` |
 | 2026-07-11 | 将 `DEVELOPMENT.md` 翻译为中文。 | `DEVELOPMENT.md` | `git diff --check` |
 | 2026-07-11 | 创建 `DEVELOPMENT.md` 作为强制项目开发记录。 | `DEVELOPMENT.md` | 文档变更 |
-| 2026-07-11 | 在计费设置中增加签到奖励额度预览。 | `web/default/src/features/system-settings/general/checkin-settings-section.tsx`、locale files | `bun run typecheck`、`bun run i18n:sync`、`git diff --check` |
+| 2026-07-11 | 在计费设置中增加签到奖励额度预览。 | `web/src/features/system-settings/general/checkin-settings-section.tsx`、locale files | `bun run typecheck`、`bun run i18n:sync`、`git diff --check` |
 | 2026-07-11 | 增强兑换码按 code/key 和生成者搜索。 | `model/redemption.go`、`redemptions-table.tsx`、locale files | `go test ./model ./controller`、`bun run typecheck`、`bun run i18n:sync` |
-| 2026-07-11 | 增加后台用户详情弹窗和 token 总量 API。 | `controller/user.go`、`model/log.go`、`router/api-router.go`、`web/default/src/features/users/*` | `go test ./...`、`bun run typecheck`、`bun run i18n:sync` |
-| 2026-07-11 | 增加 500 页面错误反馈提交/后台查看流程。 | `model/error_report.go`、`controller/error_report.go`、`router/api-router.go`、`web/default/src/features/error-reports/*`、routes、sidebar config | `go test ./...`、`bun run typecheck`、`bun run i18n:sync` |
-| 2026-07-11 | 添加/迭代代理兑换码退款日志和兑换码移动端操作。 | `model/redemption.go`、`controller/redemption.go`、`web/default/src/features/redemption-codes/*`、usage logs | 实现过程中执行 Go/前端检查 |
+| 2026-07-11 | 增加后台用户详情弹窗和 token 总量 API。 | `controller/user.go`、`model/log.go`、`router/api-router.go`、`web/src/features/users/*` | `go test ./...`、`bun run typecheck`、`bun run i18n:sync` |
+| 2026-07-11 | 增加 500 页面错误反馈提交/后台查看流程。 | `model/error_report.go`、`controller/error_report.go`、`router/api-router.go`、`web/src/features/error-reports/*`、routes、sidebar config | `go test ./...`、`bun run typecheck`、`bun run i18n:sync` |
+| 2026-07-11 | 添加/迭代代理兑换码退款日志和兑换码移动端操作。 | `model/redemption.go`、`controller/redemption.go`、`web/src/features/redemption-codes/*`、usage logs | 实现过程中执行 Go/前端检查 |
 | 2026-07-10 | 为 Julong 调整 Docker 部署命名/镜像。 | `docker-compose.yml`、README updates | Docker build/push/deploy 手动检查 |
 
 ## 后续开发 Checklist
