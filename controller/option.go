@@ -156,6 +156,12 @@ func UpdateOption(c *gin.Context) {
 	default:
 		option.Value = fmt.Sprintf("%v", option.Value)
 	}
+	previousLogo := ""
+	if option.Key == "Logo" {
+		common.OptionMapRWMutex.RLock()
+		previousLogo = common.Logo
+		common.OptionMapRWMutex.RUnlock()
+	}
 	switch option.Key {
 	case "QuotaForInviter", "QuotaForInvitee":
 		if isPositiveOptionValue(option.Value.(string)) && !operation_setting.IsPaymentComplianceConfirmed() {
@@ -425,6 +431,9 @@ func UpdateOption(c *gin.Context) {
 	if err != nil {
 		common.ApiError(c, err)
 		return
+	}
+	if option.Key == "Logo" {
+		removeObsoleteSiteLogo(previousLogo, option.Value.(string))
 	}
 	// 出于安全考虑只记录被修改的配置项名称，不记录配置值（可能含密钥等敏感信息）。
 	recordManageAudit(c, "option.update", map[string]interface{}{

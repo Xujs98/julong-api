@@ -27,8 +27,13 @@ import {
 import { toast } from 'sonner'
 
 type SettingsFormOptions<T extends FieldValues> = UseFormProps<T> & {
-  onSubmit: (data: T, changedFields: Record<string, unknown>) => Promise<void>
+  onSubmit: (
+    data: T,
+    changedFields: Record<string, unknown>
+  ) => Promise<T | false | void>
   compareValues?: (a: unknown, b: unknown) => boolean
+  externalDirty?: boolean
+  onExternalReset?: () => void
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -185,6 +190,8 @@ function expandDotPaths<T extends FieldValues>(
 export function useSettingsForm<T extends FieldValues>({
   onSubmit,
   compareValues,
+  externalDirty = false,
+  onExternalReset,
   defaultValues,
   ...formOptions
 }: SettingsFormOptions<T>) {
@@ -248,7 +255,7 @@ export function useSettingsForm<T extends FieldValues>({
       ([key, value]) => !compare(value, baselineRef.current[key])
     )
 
-    if (changedEntries.length === 0) {
+    if (changedEntries.length === 0 && !externalDirty) {
       toast.info(i18next.t('No changes to save'))
       return
     }
@@ -261,17 +268,20 @@ export function useSettingsForm<T extends FieldValues>({
       {}
     )
 
-    await onSubmit(data, changedFields)
+    const submittedValues = await onSubmit(data, changedFields)
+    if (submittedValues === false) return
 
-    const flattenedValues = flattenValues(data)
+    const savedValues = submittedValues ?? data
+    const flattenedValues = flattenValues(savedValues)
     baselineRef.current = flattenedValues
-    defaultValuesRef.current = data
+    defaultValuesRef.current = savedValues
     serializedDefaultsRef.current = JSON.stringify(flattenedValues)
-    form.reset(data)
+    form.reset(savedValues)
   }
 
   const handleReset = () => {
     form.reset(defaultValuesRef.current)
+    onExternalReset?.()
     toast.success(i18next.t('Form reset to saved values'))
   }
 
@@ -280,7 +290,7 @@ export function useSettingsForm<T extends FieldValues>({
     // eslint-disable-next-line react-hooks/refs
     handleSubmit: form.handleSubmit(handleSubmit),
     handleReset,
-    isDirty: form.formState.isDirty,
+    isDirty: form.formState.isDirty || externalDirty,
     isSubmitting: form.formState.isSubmitting,
   }
 }

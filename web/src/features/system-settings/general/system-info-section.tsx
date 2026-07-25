@@ -17,10 +17,14 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { zodResolver } from '@hookform/resolvers/zod'
-import type { Resolver } from 'react-hook-form'
+import { ImageIcon, Trash2, Upload } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { useWatch, type Resolver } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 import * as z from 'zod'
 
+import { Button } from '@/components/ui/button'
 import {
   Form,
   FormControl,
@@ -33,6 +37,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 
+import { deleteSiteLogo, uploadSiteLogo } from '../api'
 import { FormDirtyIndicator } from '../components/form-dirty-indicator'
 import { FormNavigationGuard } from '../components/form-navigation-guard'
 import {
@@ -45,10 +50,23 @@ import { SettingsSection } from '../components/settings-section'
 import { useSettingsForm } from '../hooks/use-settings-form'
 import { useUpdateOption } from '../hooks/use-update-option'
 
+const maxLogoFileBytes = 5 * 1024 * 1024
+const supportedLogoTypes = new Set(['image/png', 'image/jpeg', 'image/webp'])
+
+function isValidLogoURL(value: string): boolean {
+  if (value === '' || value.startsWith('/')) return true
+  try {
+    const parsed = new URL(value)
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
 const _systemInfoSchema = z.object({
   SystemName: z.string().min(1),
   ServerAddress: z.string().optional(),
-  Logo: z.string().url().optional().or(z.literal('')),
+  Logo: z.string().refine(isValidLogoURL),
   Footer: z.string().optional(),
   About: z.string().optional(),
   HomePageContent: z.string().optional(),
@@ -72,6 +90,10 @@ function normalizeValue(value: unknown): string {
 export function SystemInfoSection({ defaultValues }: SystemInfoSectionProps) {
   const { t } = useTranslation()
   const updateOption = useUpdateOption()
+  const logoFileInputRef = useRef<HTMLInputElement>(null)
+  const [pendingLogoFile, setPendingLogoFile] = useState<File | null>(null)
+  const [pendingLogoPreview, setPendingLogoPreview] = useState('')
+  const [logoPreviewFailed, setLogoPreviewFailed] = useState(false)
 
   const normalizedDefaults: SystemInfoFormValues = {
     SystemName: normalizeValue(defaultValues.SystemName),
@@ -91,7 +113,9 @@ export function SystemInfoSection({ defaultValues }: SystemInfoSectionProps) {
       error: () => t('System name is required'),
     }),
     ServerAddress: z.string().optional(),
-    Logo: z.string().url().optional().or(z.literal('')),
+    Logo: z.string().refine(isValidLogoURL, {
+      error: () => t('Enter a valid URL or upload an image'),
+    }),
     Footer: z.string().optional(),
     About: z.string().optional(),
     HomePageContent: z.string().optional(),
@@ -101,6 +125,11 @@ export function SystemInfoSection({ defaultValues }: SystemInfoSectionProps) {
     }),
   })
 
+  const clearPendingLogo = () => {
+    setPendingLogoFile(null)
+    if (logoFileInputRef.current) logoFileInputRef.current.value = ''
+  }
+
   const { form, handleSubmit, handleReset, isDirty, isSubmitting } =
     useSettingsForm<SystemInfoFormValues>({
       resolver: zodResolver(systemInfoSchemaWithI18n) as Resolver<
@@ -109,19 +138,85 @@ export function SystemInfoSection({ defaultValues }: SystemInfoSectionProps) {
         SystemInfoFormValues
       >,
       defaultValues: normalizedDefaults,
-      onSubmit: async (_data, changedFields) => {
-        for (const [key, value] of Object.entries(changedFields)) {
-          let v = normalizeValue(value)
-          if (key === 'ServerAddress') {
-            v = v.replace(/\/+$/, '')
+      externalDirty: pendingLogoFile !== null,
+      onExternalReset: clearPendingLogo,
+      onSubmit: async (data, changedFields) => {
+        let uploadedLogoURL = ''
+        const valuesToSave = { ...data }
+        const fieldsToSave = { ...changedFields }
+
+        try {
+          if (pendingLogoFile) {
+            const uploadResponse = await uploadSiteLogo(pendingLogoFile)
+            if (!uploadResponse.success || !uploadResponse.data?.url) {
+              toast.error(
+                uploadResponse.message || t('Failed to upload logo image')
+              )
+              return false
+            }
+            uploadedLogoURL = uploadResponse.data.url
+            valuesToSave.Logo = uploadedLogoURL
+            fieldsToSave.Logo = uploadedLogoURL
           }
-          await updateOption.mutateAsync({
-            key,
-            value: v,
-          })
+
+          for (const [key, value] of Object.entries(fieldsToSave)) {
+            let v = normalizeValue(value)
+            if (key === 'ServerAddress') {
+              v = v.replace(/\/+$/, '')
+              valuesToSave.ServerAddress = v
+            }
+            const response = await updateOption.mutateAsync({ key, value: v })
+            if (!response.success) {
+              if (uploadedLogoURL) await deleteSiteLogo(uploadedLogoURL)
+              return false
+            }
+          }
+
+          clearPendingLogo()
+          return valuesToSave
+        } catch {
+          if (uploadedLogoURL) await deleteSiteLogo(uploadedLogoURL)
+          return false
         }
       },
     })
+
+  const savedLogoURL = useWatch({ control: form.control, name: 'Logo' })
+  const logoPreviewURL = pendingLogoPreview || savedLogoURL
+
+  useEffect(() => {
+    if (!pendingLogoFile) {
+      setPendingLogoPreview('')
+      return
+    }
+    const objectURL = URL.createObjectURL(pendingLogoFile)
+    setPendingLogoPreview(objectURL)
+    return () => URL.revokeObjectURL(objectURL)
+  }, [pendingLogoFile])
+
+  useEffect(() => {
+    setLogoPreviewFailed(false)
+  }, [logoPreviewURL])
+
+  const handleLogoFileChange = (file: File | undefined) => {
+    if (!file) return
+    if (!supportedLogoTypes.has(file.type)) {
+      toast.error(t('Please select a PNG, JPG, or WebP image'))
+      if (logoFileInputRef.current) logoFileInputRef.current.value = ''
+      return
+    }
+    if (file.size > maxLogoFileBytes) {
+      toast.error(t('Logo image cannot exceed 5 MB'))
+      if (logoFileInputRef.current) logoFileInputRef.current.value = ''
+      return
+    }
+    setPendingLogoFile(file)
+  }
+
+  const removeLogo = () => {
+    clearPendingLogo()
+    form.setValue('Logo', '', { shouldDirty: true, shouldValidate: true })
+  }
 
   return (
     <>
@@ -180,14 +275,78 @@ export function SystemInfoSection({ defaultValues }: SystemInfoSectionProps) {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>{t('Logo URL')}</FormLabel>
-                    <FormControl>
-                      <Input
-                        placeholder={t('https://example.com/logo.png')}
-                        {...field}
-                      />
-                    </FormControl>
+                    <div className='flex items-start gap-3'>
+                      <div className='bg-muted/40 flex size-20 shrink-0 items-center justify-center overflow-hidden rounded-md border'>
+                        {logoPreviewURL && !logoPreviewFailed ? (
+                          <img
+                            src={logoPreviewURL}
+                            alt={t('Logo preview')}
+                            className='size-full object-contain p-2'
+                            onError={() => setLogoPreviewFailed(true)}
+                          />
+                        ) : (
+                          <ImageIcon
+                            className='text-muted-foreground size-7'
+                            aria-hidden='true'
+                          />
+                        )}
+                      </div>
+                      <div className='min-w-0 flex-1 space-y-2'>
+                        <FormControl>
+                          <Input
+                            placeholder={t('https://example.com/logo.png')}
+                            {...field}
+                            onChange={(event) => {
+                              clearPendingLogo()
+                              field.onChange(event)
+                            }}
+                          />
+                        </FormControl>
+                        <div className='flex flex-wrap items-center gap-2'>
+                          <input
+                            ref={logoFileInputRef}
+                            type='file'
+                            accept='image/png,image/jpeg,image/webp'
+                            className='hidden'
+                            onChange={(event) =>
+                              handleLogoFileChange(event.target.files?.[0])
+                            }
+                          />
+                          <Button
+                            type='button'
+                            size='sm'
+                            variant='outline'
+                            onClick={() => logoFileInputRef.current?.click()}
+                          >
+                            <Upload data-icon='inline-start' />
+                            {t('Upload')}
+                          </Button>
+                          {logoPreviewURL ? (
+                            <Button
+                              type='button'
+                              size='icon-sm'
+                              variant='destructive'
+                              onClick={removeLogo}
+                              aria-label={t('Remove logo')}
+                              title={t('Remove logo')}
+                            >
+                              <Trash2 />
+                            </Button>
+                          ) : null}
+                          {pendingLogoFile ? (
+                            <span className='text-muted-foreground max-w-full truncate text-xs'>
+                              {t('Selected: {{filename}}', {
+                                filename: pendingLogoFile.name,
+                              })}
+                            </span>
+                          ) : null}
+                        </div>
+                      </div>
+                    </div>
                     <FormDescription>
-                      {t('URL to your logo image (optional)')}
+                      {t(
+                        'Enter an image URL or upload PNG, JPG, or WebP. Maximum 5 MB and 4096 x 4096 pixels.'
+                      )}
                     </FormDescription>
                     <FormMessage />
                   </FormItem>

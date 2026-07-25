@@ -29,6 +29,8 @@ var auditContentTemplates = map[string]string{
 	"user.passkey_delete":   "Deleted a passkey",
 	"user.reset_passkey":    "Reset the user passkey",
 	"option.update":         "Updated system setting ${key}",
+	"site_logo.upload":      "Uploaded site logo ${filename}",
+	"site_logo.delete":      "Deleted site logo ${filename}",
 
 	"channel.create":             "Created channel ${name} (type ${type}, count ${count})",
 	"channel.update":             "Updated channel ${name} (ID: ${id})",

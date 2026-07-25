@@ -73,6 +73,33 @@ export async function updateSystemOption(request: UpdateOptionRequest) {
   return res.data
 }
 
+export type SiteLogoUploadResponse = {
+  success: boolean
+  message: string
+  data?: {
+    url: string
+  }
+}
+
+export async function uploadSiteLogo(file: File) {
+  const formData = new FormData()
+  formData.append('file', file)
+  const res = await api.post<SiteLogoUploadResponse>(
+    '/api/site-assets/logo',
+    formData
+  )
+  return res.data
+}
+
+export async function deleteSiteLogo(logoURL: string) {
+  if (!logoURL.startsWith('/api/site-assets/logo/')) return
+  try {
+    await api.delete(logoURL, { skipErrorHandler: true })
+  } catch {
+    // Candidate cleanup is best-effort and must not replace the save error.
+  }
+}
+
 export async function confirmPaymentCompliance() {
   const res = await api.post<ConfirmPaymentComplianceResponse>(
     '/api/option/payment_compliance',

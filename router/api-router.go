@@ -23,6 +23,12 @@ func SetApiRouter(router *gin.Engine) {
 		apiRouter.GET("/setup", controller.GetSetup)
 		apiRouter.POST("/setup", anonymousRequestBodyLimit, controller.PostSetup)
 		apiRouter.GET("/status", controller.GetStatus)
+		siteAssetsRoute := apiRouter.Group("/site-assets")
+		{
+			siteAssetsRoute.GET("/logo/:filename", controller.GetSiteLogo)
+			siteAssetsRoute.POST("/logo", middleware.AdminAuth(), middleware.RequirePermission(authz.SystemSettingsPermission("site.system-info")), controller.UploadSiteLogo)
+			siteAssetsRoute.DELETE("/logo/:filename", middleware.AdminAuth(), middleware.RequirePermission(authz.SystemSettingsPermission("site.system-info")), controller.DeleteSiteLogo)
+		}
 		apiRouter.GET("/uptime/status", controller.GetUptimeKumaStatus)
 		apiRouter.GET("/models", middleware.UserAuth(), controller.DashboardListModels)
 		apiRouter.GET("/status/test", middleware.AdminAuth(), controller.TestStatus)

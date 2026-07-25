@@ -31,6 +31,7 @@
 | 生图日志与异步生图 | 已实现 | 开启生图日志后，`async: true` 立即创建 `pending` 日志并返回任务 ID，支持 API Key 轮询、状态更新、图片读取和后台 JSON 详情；关闭日志时退回同步且不存图。 |
 | 系统设置权限 | 已实现 | root 可按 7 个一级菜单下的 41 个二级设置页面逐项授权管理员；菜单、路由、通用配置键和专用 API 均执行权限校验。 |
 | 客服联系 | 已实现 | 概览页展示联系客服弹窗；root 可授权指定管理员维护多条 QQ、微信和手机联系方式。 |
+| 站点徽标上传 | 已实现 | 系统信息支持 PNG/JPG/WebP 本地选择、保存前预览、移除和保存后应用；Docker 文件持久化在 `/data/site-assets`。 |
 | 文档纪律 | 新增 | 以后每次代码改动都必须同步维护本文档。 |
 
 ## 仓库结构
@@ -176,6 +177,8 @@ docker compose up -d
 | `ImageGenerationStorage*` | `service/image_object_storage.go`、`controller/image_object_storage.go`、`log-settings-section.tsx` | 异步生图 MinIO/S3 私有对象存储与生命周期 | 在“系统设置 → 运维 → 日志维护 → 记录生图日志”中配置；包含启用、Endpoint、Bucket、Region、Access/Secret Key、HTTPS、Path Style、对象前缀和图片保留天数。Secret Key 不回传前端，留空保存/测试沿用已存密钥。默认 Bucket `julong-media`、前缀 `generated/images`、保留 `30` 天；`ImageGenerationStorageRetentionDays=0` 表示永久保留，范围 `0-3650`。`ImageGenerationStorageLastCleanupAt` 保存最近一次成功的过期清理或全量清空任务完成时间。全量清空严格限制在当前 Bucket 的配置前缀内。 |
 | `async` 生图请求参数 | `dto/openai_image.go`、`controller/image_generation_task.go` | 将同步 `/v1/images/generations` 包装为本地异步任务 | 默认 `false`；仅在 `ImageGenerationLogEnabled=true` 时生效；转发上游前删除；有效异步模式与 `stream: true` 互斥。 |
 | `SupportContacts` | `common/constants.go`、`model/option.go` | 客服联系方式 JSON 数组 | 每项包含 `type`（qq/wechat/phone）、`label`、`value`；最多 30 条。 |
+| `Logo` | `model/option.go`、`controller/site_asset.go`、`system-info-section.tsx` | 站点徽标 URL | 可继续填写 HTTP/HTTPS 或根路径 URL；本地上传成功后保存为 `/api/site-assets/logo/<随机文件名>`。只有通用 Option 保存成功才会正式应用，新地址通过 `/api/status.logo` 下发，替换/清空时自动删除旧的本地徽标。 |
+| `SITE_ASSET_STORAGE_DIR` | `controller/site_asset.go` | 覆盖站点上传资源目录 | 默认 `site-assets`；Docker `WORKDIR /data` 下对应持久化卷 `/data/site-assets`。徽标文件使用 32 位随机十六进制文件名、`0640` 权限和同目录原子重命名。 |
 
 ## 架构
 
@@ -690,8 +693,34 @@ curl 'https://api.julongkj.top/v1/images/generations/img_xxx/images/0/presign?ex
 - `POST /api/option/waffo-pancake/save`
 - `POST /api/option/waffo-pancake/subscription-product`
 - `GET /api/option/waffo-pancake/subscription-product-options`
+- `GET /api/site-assets/logo/:filename`
+- `POST /api/site-assets/logo`
+- `DELETE /api/site-assets/logo/:filename`
 
 其中 `GET/PUT /api/option/` 要求管理员传入 `section=<一级菜单>.<二级页面>`，后端会同时校验页面权限和配置键归属；`POST /api/option/migrate_console_setting` 仍仅限 root。
+
+#### 站点徽标 API
+
+| 方法 | 路径 | Handler | 用途 | 请求参数 | 响应结构 | 权限 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| GET | `/api/site-assets/logo/:filename` | `controller.GetSiteLogo` | 读取已上传的站点徽标 | path `filename`，仅接受后端生成的 `logo-<32位十六进制>.(png\|jpg\|webp)` | 成功返回图片二进制和实际 `Content-Type`，缓存一年且 `nosniff` | 公开 | 完成 |
+| POST | `/api/site-assets/logo` | `controller.UploadSiteLogo` | 上传待保存的新徽标 | `multipart/form-data`，字段 `file`；PNG/JPG/WebP，最大 5 MB，宽高各不超过 4096 像素 | `{success:true,message:"",data:{url:"/api/site-assets/logo/logo-xxx.png"}}` | root 或拥有 `system_settings.site.system-info` 的管理员 | 完成 |
+| DELETE | `/api/site-assets/logo/:filename` | `controller.DeleteSiteLogo` | 清理尚未应用的上传文件；当前配置引用的文件禁止直接删除 | path `filename` | `{success:true,message:"",data:null}` | root 或拥有 `system_settings.site.system-info` 的管理员 | 完成 |
+
+上传参数缺失、空文件、伪造图片、格式不支持或尺寸超限返回 HTTP 400；请求/文件超过限制返回 413；落盘失败返回 500。读取参数非法或文件不存在返回 404。删除非法文件名返回 400，文件仍被当前 `Logo` 引用时返回 409，删除不存在文件按幂等成功处理。上传只产生候选文件，不修改 `Option`；前端随后通过 `PUT /api/option/?section=site.system-info` 保存返回 URL，失败时调用 DELETE 回滚候选文件。成功更新 `Logo` 后 `controller.UpdateOption` 自动清理上一个本地徽标，不删除外部 URL。
+
+```bash
+curl -X POST 'http://localhost:3000/api/site-assets/logo' \
+  -H 'Authorization: Bearer <dashboard-access-token>' \
+  -F 'file=@./logo.png'
+
+curl 'http://localhost:3000/api/site-assets/logo/logo-0123456789abcdef0123456789abcdef.png' \
+  -o logo.png
+
+curl -X DELETE \
+  'http://localhost:3000/api/site-assets/logo/logo-0123456789abcdef0123456789abcdef.png' \
+  -H 'Authorization: Bearer <dashboard-access-token>'
+```
 
 其他管理分组：
 
@@ -822,6 +851,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 - `User.last_login_ip` 由现有 `User` AutoMigrate 在服务启动时自动补列，无需注册新的迁移模型；长度 45，可保存 IPv4 和 IPv6。
 - `BlockedIP` 已加入 `migrateDB()` 和 `migrateDBFast()`；部署新版本启动后自动创建 `blocked_ips` 表，不改动现有用户和日志数据。
 - 本次上游同步新增 `users.auth_version`，并自动创建 `user_sessions`、`auth_flows`、`external_identity_claims`；`InitializeUserAuthVersions` 和 `InitializeExternalIdentityClaims` 会初始化认证版本及回填外部身份。升级前必须备份主库，升级后旧 Dashboard 登录态会失效，用户需重新登录，但余额、订阅、代理和日志数据不受影响。
+- 站点徽标上传不新增数据库表或字段；仍使用现有 `Option(key=Logo,value=<URL>)`。迁移/备份服务器时除数据库外必须同步 `SITE_ASSET_STORAGE_DIR`，默认 Docker 部署即宿主机 `./data/site-assets`。遗漏该目录只会使本地上传徽标返回 404，不影响用户、余额、订阅和日志数据。
 
 ## 前端路由
 
@@ -885,7 +915,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 | `users` | `users-table.tsx`、`users-columns.tsx`、`users-mutate-drawer.tsx`、`agent-detail-dialog.tsx`、`user-detail-dialog.tsx`、`user-request-content-panel.tsx:UserRequestContentPanel/RequestContentDetailDialog`、`lib/request-content.ts:extractRequestConversation` | 后台用户管理、代理详情、用户详情；详情弹窗包含头像身份摘要、关键指标带、订阅摘要、IP 管理及按用户开启的上下文与提示词审计。审计面板负责开关、最近 50 条摘要、清空、结构化对话、原始 JSON 复制/下载和移动端布局；解析工具兼容 Chat Completions、Responses 与 legacy prompt | `/api/user*`、`/api/log`、`/api/subscription/admin/*`、`/api/user/:id/request-content*`；依赖 React Query、Dialog/Tabs/ScrollArea/Switch、i18n | 完成 |
 | `models` | metadata/deployment tables and drawers | 模型元数据和部署管理 | `/api/models*`、`/api/vendors*`、`/api/deployments*` | 完成 |
 | `subscriptions` | subscription table/drawers | 后台订阅计划/用户绑定 | `/api/subscription/admin*` | 完成 |
-| `system-settings` | `auth`、`billing`、`content`、`models`、`request-limits`、`maintenance`、`integrations`、`general` 下的 section registries；`maintenance/log-settings-section.tsx:LogSettingsSection`、`models/group-ratio-form.tsx:GroupRatioForm`、内部 `ImageStorageSettings` | 管理员/root 运行时设置；`LogSettingsSection` 负责消费/生图日志、普通用户日志倍率展示、轮询频率和图片读取白名单；`GroupRatioForm` 独立配置模型广场和令牌分组倍率展示模式；`ImageStorageSettings` 负责 MinIO 凭据、保留天数、对象数/容量/过期数/最近清理统计、立即清理过期图片，以及带二次确认和 10 秒倒计时的全量清空；初始化请求并行，活动清理任务每 5 秒查询一次 | `/api/option*`、`/api/performance/image-storage*`、`/api/system-task/*` | 完成 |
+| `system-settings` | `auth`、`billing`、`content`、`models`、`request-limits`、`maintenance`、`integrations`、`general` 下的 section registries；`general/system-info-section.tsx:SystemInfoSection`、`maintenance/log-settings-section.tsx:LogSettingsSection`、`models/group-ratio-form.tsx:GroupRatioForm`、内部 `ImageStorageSettings` | 管理员/root 运行时设置；`SystemInfoSection` 维护站点信息并支持徽标 URL、本地上传、Object URL 保存前预览、移除和上传回滚，依赖 `useSettingsForm.externalDirty`、`uploadSiteLogo/deleteSiteLogo`、React Hook Form、Zod 与 i18n；`LogSettingsSection` 负责消费/生图日志、普通用户日志倍率展示、轮询频率和图片读取白名单；`GroupRatioForm` 独立配置模型广场和令牌分组倍率展示模式；`ImageStorageSettings` 负责 MinIO 凭据、生命周期和清理；初始化请求并行，活动清理任务每 5 秒查询一次 | `/api/option*`、`/api/site-assets/logo*`、`/api/performance/image-storage*`、`/api/system-task/*` | 完成 |
 | `system-info` | system instances/tasks panels | Root 系统运维 | `/api/system-info*`、`/api/system-task*` | 完成 |
 | `error-reports` | `submit-error-report.tsx`、`index.tsx`、`api.ts` | 提交/查看 500 页面反馈 | `/api/error-reports*` | 完成 |
 | `errors` | `general-error.tsx`、forbidden/not-found/maintenance/unauthorized | 错误页 | `/error-report` 路由用于反馈 | 完成 |
@@ -903,6 +933,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 - 产品名显示为 `矩龙-API`。
 - Docker 镜像/tag 目标为 `qq1371446705/julong-api:latest`。
 - Compose project/container 使用 `julong-api`。
+- 系统信息页的徽标既可使用外部 URL，也可上传本地文件；选择后仅在浏览器预览，点击保存并成功写入 `Logo` Option 后才全站生效。
 - 已知技术债：Go module import path 仍为上游 `github.com/QuantumNous/new-api`；重命名风险较高，暂不计划。
 
 ### 代理系统
@@ -1077,6 +1108,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 
 | 日期 | 变更 | 更新文件/API/模型 | 验证 |
 | --- | --- | --- | --- |
+| 2026-07-25 | 系统设置“站点与品牌 → 系统信息 → 徽标 URL”新增本地上传、保存前预览和移除。候选图片仅支持 PNG/JPG/WebP、最大 5 MB/4096 像素，随机命名并原子写入持久化目录；点击保存后才更新 `Logo` Option 和 `/api/status`，保存失败自动清理候选文件，替换/清空自动删除旧本地徽标。公开读取使用不可猜路径、长期缓存及 `nosniff`；上传/删除严格复用 `site.system-info` 权限。无数据库结构迁移。 | `controller/site_asset.go`、`controller/site_asset_test.go`、`controller.UpdateOption`、`GET/POST/DELETE /api/site-assets/logo*`、`SystemInfoSection`、`useSettingsForm.externalDirty/onExternalReset`、`uploadSiteLogo/deleteSiteLogo`、locale files、`DEVELOPMENT.md` | `go test ./...`、`go test ./controller ./router`、`bun run typecheck`、目标文件 `oxlint/oxfmt`、`bun run i18n:sync`、`bun run format:check`、`bun run build`、`git diff --check` 均通过；重启后 `3000/5173` 返回 200，非法徽标读取返回 404，未鉴权上传返回 401。 |
 | 2026-07-25 | 后台用户详情新增“上下文与提示词”审计。管理员/root 可按用户开启，仅记录开启后的 Relay DTO；请求发送上游前创建 `pending`，完成后标记 `success/error`，支持结构化对话、脱敏 JSON 查看/复制/下载和二次确认清空。每用户事务保留最近 50 条，单条脱敏正文严格限制 4 MiB 并 gzip 存主库；已知凭据和内嵌 Base64 媒体不入库。新增用户字段、记录表、Redis cache schema 3 和硬删除级联清理，不接触计费及上游请求。 | `User.request_content_logging_enabled`、`UserRequestContentLog`、`service.CaptureUserRequestContent/FinishUserRequestContent`、`GET/PUT/DELETE /api/user/:id/request-content`、`GET /api/user/:id/request-content/:log_id`、`UserRequestContentPanel`、`extractRequestConversation`、locale files、`DEVELOPMENT.md` | `go test ./...`、`go test ./model ./service ./controller ./middleware`、`bun run typecheck`、Bun 前端单元测试、目标文件 `oxlint/oxfmt`、`bun run i18n:sync`、`bun run format:check`、`bun run build`、`git diff --check` 均通过；本地 SQLite AutoMigrate 表/字段及 `3000/5173` HTTP 200 已验证。 |
 | 2026-07-25 | 使用日志新增持久化的用户展示倍率快照。每条新日志在写入时按 `system/pricing_group/manual` 保存 `user_display_group_ratio`，后续修改展示配置只影响新日志，历史日志不再被重新计算；旧日志回退到自身保存的真实倍率。普通用户单条日志响应中的费用、输入/输出 Tokens 和缓存 Tokens 按“展示倍率 / 真实倍率”换算；日志页顶部“用量”保持真实扣费、RPM 保持真实请求数，TPM 按最近 60 秒各日志快照换算。普通用户数据看板的额度、Token、TPM 和消费/分流图表读取新增的展示聚合列，调用次数/RPM 保持真实；管理员/root 的日志和看板保留真实数据。所有展示字段均在计费完成后写入，未接入预扣费、结算、退款、余额或订阅链路，数据库原 `quota/token` 和真实倍率字段保持不变。 | `Log.UserDisplayGroupRatio`、`QuotaData.{UserDisplayQuota,UserDisplayTokenUsed}`、`model.{createLog,snapshotUserDisplayGroupRatio,applyUserLogDisplayMetrics,userVisibleLogDataMetrics,formatUserLogs,SumUserVisibleUsedQuota,formatAdminLogGroupRatioDisplay,GetQuotaDataByUserId,getSelfFlowQuotaData}`、`controller.GetLogsSelfStat`、`migrateLOGDB`、ClickHouse `logs.user_display_group_ratio`、usage logs schema/columns/tests、locale files、`DEVELOPMENT.md` | `go test ./...`、`go test ./model`、`go test ./controller`、`bun run typecheck`、目标文件 oxlint、倍率前端单元测试、`bun run build`、`bun run i18n:sync`、`bun run format:check`、`git diff --check` 均通过。 |
 | 2026-07-25 | 新增倍率展示控制：日志维护可完全隐藏普通用户日志倍率、跟随真实倍率、跟随计费分组基础倍率或统一手动展示；管理员日志同时显示请求真实倍率和当前用户展示倍率。分组定价新增模型广场和令牌分组两个独立展示模式，均可选择包含特殊倍率规则的真实倍率，或始终使用基础定价分组倍率。初版在读取日志时实时转换展示倍率，不影响实际扣费。 | `UserLogGroupRatioDisplayEnabled`、`UserLogGroupRatioDisplayMode`、`UserLogGroupRatioManualValue`、`ModelSquareGroupRatioDisplayMode`、`TokenGroupRatioDisplayMode`、`controller.{GetPricing,GetUserGroups}`、`model.{formatUserLogs,formatAdminLogGroupRatioDisplay}`、`GroupRatioForm`、`LogSettingsSection`、`usage-logs/lib/group-ratio.ts`、locale files、`DEVELOPMENT.md` | `go test ./...`、`bun run typecheck`、目标文件 oxlint、`bun run build`、`bun run i18n:sync`、`bun run format:check`、倍率前端单元测试、`git diff --check` 均通过。 |
