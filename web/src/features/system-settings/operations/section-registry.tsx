@@ -25,6 +25,7 @@ import { PerformanceSection } from '../maintenance/performance-section'
 import { UpdateCheckerSection } from '../maintenance/update-checker-section'
 import type { OperationsSettings } from '../types'
 import { createSectionRegistry } from '../utils/section-registry'
+import { EmailCampaignsSection } from './email-campaigns-section'
 
 const OPERATIONS_SECTIONS = [
   {
@@ -77,6 +78,11 @@ const OPERATIONS_SECTIONS = [
         }}
       />
     ),
+  },
+  {
+    id: 'email-campaigns',
+    titleKey: 'Email Campaigns',
+    build: () => <EmailCampaignsSection />,
   },
   {
     id: 'worker',

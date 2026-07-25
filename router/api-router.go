@@ -271,6 +271,21 @@ func SetApiRouter(router *gin.Engine) {
 			performanceRoute.POST("/image-storage/cleanup", middleware.RequirePermission(authz.SystemSettingsPermission("operations.logs")), controller.StartImageObjectStorageCleanup)
 			performanceRoute.POST("/image-storage/purge", middleware.RequirePermission(authz.SystemSettingsPermission("operations.logs")), controller.StartImageObjectStoragePurge)
 		}
+		emailCampaignRoute := apiRouter.Group("/email-campaigns")
+		emailCampaignRoute.Use(middleware.AdminAuth(), middleware.RequirePermission(authz.SystemSettingsPermission("operations.email-campaigns")))
+		{
+			emailCampaignRoute.GET("", controller.ListEmailCampaigns)
+			emailCampaignRoute.GET("/stats", controller.GetEmailCampaignStats)
+			emailCampaignRoute.POST("", controller.CreateEmailCampaign)
+			emailCampaignRoute.POST("/preview", controller.PreviewEmailCampaign)
+			emailCampaignRoute.GET("/:id", controller.GetEmailCampaign)
+			emailCampaignRoute.PUT("/:id", controller.UpdateEmailCampaign)
+			emailCampaignRoute.DELETE("/:id", controller.DeleteEmailCampaign)
+			emailCampaignRoute.POST("/:id/activate", controller.ActivateEmailCampaign)
+			emailCampaignRoute.POST("/:id/pause", controller.PauseEmailCampaign)
+			emailCampaignRoute.POST("/:id/retry", controller.RetryEmailCampaign)
+			emailCampaignRoute.GET("/:id/deliveries", controller.ListEmailCampaignDeliveries)
+		}
 		ratioSyncRoute := apiRouter.Group("/ratio_sync")
 		ratioSyncRoute.Use(middleware.AdminAuth(), middleware.RequirePermission(authz.SystemSettingsPermission("billing.model-pricing")))
 		{

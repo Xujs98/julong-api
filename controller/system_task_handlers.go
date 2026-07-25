@@ -23,6 +23,7 @@ func RegisterScheduledSystemTasks() {
 	service.RegisterSystemTaskHandler(midjourneyPollHandler{})
 	service.RegisterSystemTaskHandler(asyncTaskPollHandler{})
 	service.RegisterSystemTaskHandler(imageStorageCleanupHandler{})
+	service.RegisterSystemTaskHandler(emailCampaignDispatchHandler{})
 }
 
 // channelTestHandler runs the scheduled "test all channels" job. Enablement and
@@ -157,6 +158,29 @@ type imageStorageCleanupHandler struct{}
 
 func (imageStorageCleanupHandler) Type() string {
 	return model.SystemTaskTypeImageStorageCleanup
+}
+
+type emailCampaignDispatchHandler struct{}
+
+func (emailCampaignDispatchHandler) Type() string {
+	return model.SystemTaskTypeEmailCampaignDispatch
+}
+
+func (emailCampaignDispatchHandler) Enabled() bool {
+	return model.HasDueEmailCampaigns(common.GetTimestamp())
+}
+
+func (emailCampaignDispatchHandler) Interval() time.Duration { return 15 * time.Second }
+
+func (emailCampaignDispatchHandler) NewPayload() any { return nil }
+
+func (emailCampaignDispatchHandler) Run(ctx context.Context, task *model.SystemTask, runnerID string) {
+	result, err := service.DispatchDueEmailCampaigns(ctx, common.SendEmail)
+	if err != nil {
+		finishSystemTaskHandler(task, runnerID, model.SystemTaskStatusFailed, result, err)
+		return
+	}
+	finishSystemTaskHandler(task, runnerID, model.SystemTaskStatusSucceeded, result, nil)
 }
 
 func (imageStorageCleanupHandler) Enabled() bool {

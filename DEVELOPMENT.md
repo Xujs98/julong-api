@@ -27,6 +27,7 @@
 | 错误反馈工单 | 已实现 | 500 页面跳转 `/error-report`，管理员/root 在 `/error-reports` 查看。 |
 | 用户详情、IP 与请求内容审计 | 已实现 | 后台用户详情显示登录 IP 历史并支持多选封禁/解封；用户列表标记共享 IP 和已封 IP；管理员/root 可按用户开启新请求的上下文与提示词记录。 |
 | 用户今日 Token 与分组分析 | 已实现 | 用户详情同时显示总 Token 和按服务器本地自然日统计的今日 Token；root 数据看板按分组分析真实额度、请求数、Token 和去重用户数。 |
+| 邮件群发与条件提醒 | 已实现 | 运维页面支持立即群发、定时发送和订阅到期条件提醒；使用注册邮箱、逐用户记录结果，并通过数据库任务租约防止多实例重复调度。 |
 | 兑换码搜索 | 已实现 | 后台兑换码支持按兑换码 key、生成者用户名/显示名、名称、ID、状态搜索。 |
 | 签到额度预览 | 已实现 | 计费与支付中的签到奖励输入框显示格式化额度预览。 |
 | 生图日志与异步生图 | 已实现 | 开启生图日志后，`async: true` 立即创建 `pending` 日志并返回任务 ID，支持 API Key 轮询、状态更新、图片读取和后台 JSON 详情；关闭日志时退回同步且不存图。 |
@@ -715,6 +716,40 @@ curl 'https://api.julongkj.top/v1/images/generations/img_xxx/images/0/presign?ex
 | GET | `/api/support-contacts` | `controller.GetSupportContacts` | 获取概览页客服联系方式 | 响应 `SupportContact[]` | 登录用户 | 完成 |
 | PUT | `/api/support-contacts` | `controller.UpdateSupportContacts` | 保存多条 QQ/微信/手机联系方式 | 请求 `{contacts:[{type,label,value}]}`；非法类型、空值、超长或超过 30 条时报错 | root 或拥有 `system_settings.content.support` 的管理员 | 完成 |
 
+### 邮件群发 API
+
+全部接口位于 `router/api-router.go` 的 `/api/email-campaigns` 路由组，要求 `AdminAuth()` 且拥有 `system_settings.operations.email-campaigns`；root 始终允许，管理员可由 root 单独授权。Dashboard 统一响应为 `{success,message,data}`，已完成。
+
+| 方法 | 路径 | Handler | 用途 | 请求参数 | 响应 `data` | 错误处理 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| GET | `/api/email-campaigns` | `controller.ListEmailCampaigns` | 分页读取邮件任务 | query：`p`、`page_size<=100`、可选 `search`（名称/主题）、`status` | `{page,page_size,total,items:EmailCampaign[]}` | 鉴权失败 401/403；数据库错误 `success:false` | 完成 |
+| GET | `/api/email-campaigns/stats` | `controller.GetEmailCampaignStats` | 获取全部任务累计统计 | 无 | `{campaign_count,recipient_count,success_count,failed_count}` | 鉴权失败 401/403；数据库错误 `success:false` | 完成 |
+| GET | `/api/email-campaigns/:id` | `controller.GetEmailCampaign` | 获取单个任务及结构化指定用户 ID | path `id>0` | `EmailCampaign`，`target_user_ids` 为 `number[]` | ID 非法或不存在返回 `success:false` | 完成 |
+| POST | `/api/email-campaigns/preview` | `controller.PreviewEmailCampaign` | 在保存前统计符合条件且已有注册邮箱的收件记录数 | 请求体同创建接口，`draft` 忽略 | `{recipient_count}` | 模式、范围、条件或指定用户非法时 `success:false` | 完成 |
+| POST | `/api/email-campaigns` | `controller.CreateEmailCampaign` | 创建草稿或立即/定时/条件任务 | `EmailCampaignRequest`；`draft=true` 仅保存，否则立即启用 | 新建 `EmailCampaign` | 非草稿时 SMTP 未配置、定时时间已过或参数非法均拒绝；立即/条件任务入调度队列 | 完成 |
+| PUT | `/api/email-campaigns/:id` | `controller.UpdateEmailCampaign` | 编辑任务内容和触发配置 | path `id`；请求体同创建 | 更新后的 `EmailCampaign` | 仅 `draft/paused` 可编辑；发送中或已完成任务拒绝 | 完成 |
+| POST | `/api/email-campaigns/:id/activate` | `controller.ActivateEmailCampaign` | 启用草稿或恢复暂停任务 | path `id`，无请求体 | 更新后的 `EmailCampaign` | 仅 `draft/paused` 可启动；过期的定时时间需先编辑；SMTP 未配置时拒绝 | 完成 |
+| POST | `/api/email-campaigns/:id/pause` | `controller.PauseEmailCampaign` | 暂停待执行或持续条件任务 | path `id`，无请求体 | `null` | 仅 `scheduled/active` 可暂停，`running` 不能中途暂停 | 完成 |
+| POST | `/api/email-campaigns/:id/retry` | `controller.RetryEmailCampaign` | 将一次性任务的失败明细重新入队 | path `id`，无请求体 | `null` | 仅 `completed/partial_failed` 一次性任务可重试；条件任务每天自动重试且最多 3 次 | 完成 |
+| DELETE | `/api/email-campaigns/:id` | `controller.DeleteEmailCampaign` | 删除任务及全部发送明细 | path `id` | `null` | `running` 状态禁止删除；其他状态事务删除 | 完成 |
+| GET | `/api/email-campaigns/:id/deliveries` | `controller.ListEmailCampaignDeliveries` | 分页查看逐用户发送结果 | path `id`；query：`p`、`page_size<=100`、可选 `status` | `{page,page_size,total,items:EmailDelivery[]}` | 任务不存在、ID 非法或数据库错误返回 `success:false` | 完成 |
+
+`EmailCampaignRequest`：`name` 最长 128 字、`subject` 最长 255 字、`content` 最长 200000 字节；`mode` 为 `immediate/scheduled/conditional`；一次性任务 `target_type` 为 `all_users/active_subscribers/selected_users`，指定用户通过 `target_user_ids:number[]`（去重后 1-5000 个）传入，不接收手填邮箱；定时任务使用 Unix 秒 `scheduled_at`；条件任务固定 `trigger_type=subscription_expiring`，`trigger_days` 范围 1-90。正文/主题支持 `{{username}}`、`{{display_name}}`、`{{email}}`、`{{system_name}}`、`{{subscription_name}}`、`{{subscription_end_time}}`、`{{days_remaining}}`。
+
+```bash
+# 立即向全部正常用户发送重要通知
+curl -X POST 'http://localhost:3000/api/email-campaigns' \
+  -H 'Authorization: Bearer <dashboard-access-token>' \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"维护通知","subject":"{{system_name}} 服务维护","content":"<p>你好 {{display_name}}</p>","mode":"immediate","target_type":"all_users","target_user_ids":[],"trigger_type":"","trigger_days":0,"scheduled_at":0,"draft":false}'
+
+# 每日扫描并提醒 3 天内订阅到期的用户；相同订阅到期批次只发送一次
+curl -X POST 'http://localhost:3000/api/email-campaigns' \
+  -H 'Authorization: Bearer <dashboard-access-token>' \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"订阅到期提醒","subject":"订阅将在 {{days_remaining}} 天后到期","content":"<p>{{subscription_name}} 到期时间：{{subscription_end_time}}</p>","mode":"conditional","target_type":"active_subscribers","target_user_ids":[],"trigger_type":"subscription_expiring","trigger_days":3,"scheduled_at":0,"draft":false}'
+```
+
 ### 后台设置与运维 API
 
 系统设置与运维接口（root 拥有全部权限；管理员按 `system_settings.<一级菜单>.<二级页面>` 权限访问）：
@@ -846,6 +881,8 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 | `Log` | `model/log.go` | 使用日志和审计日志 | `id`、`user_id`、`created_at`、`type`、`content`、`username`、`token_name`、`model_name`、`quota`、`prompt_tokens`、`completion_tokens`、`channel_id`、`ip`、`request_id`、`upstream_request_id`、可空 `user_display_group_ratio`、`other` | 可位于独立日志库/ClickHouse。`user_display_group_ratio` 是日志创建时面向用户的展示倍率快照，只供响应格式化和 UI 展示使用；实际扣费仍由 `quota` 及计费服务完成。`GetUserLoginIPStats` 聚合登录 IP、次数和最后时间；`SumUserUsedToken` 提供总 Token，`SumUserUsedTokenBetween` 按半开时间区间汇总消费 Token。 | 活跃 |
 | `ImageGenerationLog` / `ImageGenerationImage` | `model/image_generation_log.go` | 同步生图日志与本地异步任务 | 日志含 `id`；索引 `task_id/status/user_id/username/token_id/channel_id/model_name/request_id/created_at/updated_at`；`prompt/size/quality/image_count/quota/use_time`；内部 `images/response` JSON。`ImageGenerationImage` JSON 字段为 `type/value/bucket/mime_type/sha256/size/revised_prompt`，`type` 支持 `local/remote/minio`。 | 任务属于一个 User/Token；MinIO 元数据写入现有 `images` 文本 JSON，不新增数据库列或表。旧 local/remote JSON 继续兼容；AutoMigrate 无额外迁移。 | 活跃 |
 | `UserRequestContentLog` | `model/user_request_content_log.go` | 按用户留存 Relay 请求上下文与提示词 | `id int` 主键；`user_id int` 与 `created_at int64` 组成排序索引；唯一 `request_id varchar(64)`；`model_name/token_name varchar(191)`、`request_path varchar(255)`、索引 `status varchar(16)`、`error_message text`、`original_size/captured_size int`、`truncated bool`、`compressed_json []byte` | 逻辑上属于 `User`，硬删除用户时同步删除；不建立数据库外键以兼容现有删除流程。正文先脱敏、限制为 4 MiB，再 gzip 存主库；创建和清理旧记录位于同一事务，每用户只保留最近 50 条。 | 活跃 |
+| `EmailCampaign` | `model/email_campaign.go` | 邮件群发、定时和条件任务 | `id bigint` 主键；`name varchar(128)`、`subject varchar(255)`、`content text`；索引 `mode`；`target_type`、JSON 文本 `target_user_ids`；`trigger_type/trigger_days`；`scheduled_at/next_run_at/last_run_at bigint`；`status+next_run_at` 复合索引；`created_by` 索引；累计收件/成功/失败/跳过数、`last_error`、时间戳 | 状态为 `draft/scheduled/active/running/completed/partial_failed/paused`。立即和定时任务执行一次；条件任务完成后恢复 `active` 并把 `next_run_at` 推迟 24 小时。 | 活跃 |
+| `EmailDelivery` | `model/email_campaign.go` | 每位收件人的发送结果和条件去重 | `id bigint` 主键；索引 `campaign_id/user_id/email/status`；用户与订阅名称/到期时间快照；唯一 `dedupe_key varchar(191)`；`attempt_count`、`last_error text`、`sent_at`、时间戳 | 逻辑上属于 `EmailCampaign`，删除任务时事务级联删除。一次性任务按 `campaign:user` 去重；订阅提醒按 `campaign:user:subscription:end_time` 去重，续订后的新到期时间可再次提醒。状态为 `pending/sending/sent/failed/skipped`。 | 活跃 |
 | `Redemption` | `model/redemption.go` | 兑换码 | 唯一 `key`、`user_id` 生成者、`status`、`name`、`quota`、`created_time`、`redeemed_time`、`used_user_id`、`expired_time`、`agent_charge`、软删除 | 生成者显示字段是 transient。搜索支持 code、生成者、ID、名称。代理退款使用 `agent_charge`。 | 活跃 |
 | `TopUp` | `model/topup.go` | 在线支付/充值订单 | trade no、user、amount/money、provider、status | 支付回调结算。 | 活跃 |
 | `Checkin` / `CheckinRecord` | `model/checkin.go` | 每日签到奖励记录 | user/date/quota/time 字段 | 设置位于 `checkin_setting.*`。 | 活跃 |
@@ -867,7 +904,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 | `UserOAuthBinding` | `model/user_oauth_binding.go` | OAuth 账号绑定 | user/provider/external id | 用户/管理员解绑。 | 活跃 |
 | `PerfMetric` | `model/perf_metric.go` | 性能采样 | route/model/provider/time/error/cache 字段 | 公开性能指标/定价页。 | 活跃 |
 | `SystemInstance` | `model/system_instance.go` | 运行节点 | node name/status/time 字段 | 多实例状态。 | 活跃 |
-| `SystemTask` / `SystemTaskLock` | `model/system_task.go` | 后台维护任务 | task id/type/status/payload/state/lock；`image_storage_cleanup` 用于每日及手动 MinIO 图片清理，`payload.delete_all=true` 表示清空当前对象前缀，否则只清理过期对象 | 数据库活动键和租约保证同一任务类型在多节点只执行一次；全量清空复用现有类型和 payload，不新增字段或迁移。 | 活跃 |
+| `SystemTask` / `SystemTaskLock` | `model/system_task.go` | 后台维护任务 | task id/type/status/payload/state/lock；`image_storage_cleanup` 用于 MinIO 图片清理；`email_campaign_dispatch` 扫描到期邮件任务 | 数据库活动键和租约保证同一任务类型在多节点只执行一次；邮件调度约每 15 秒检查是否有到期工作，无到期任务时不创建空记录。 | 活跃 |
 | `CasbinRule` / `AuthzRole` | `model/casbin_rule.go`、`model/authz_role.go` | 细粒度管理员权限 | casbin p/v 字段和角色分配 | Admin authz catalog。 | 活跃 |
 | `ErrorReport` | `model/error_report.go` | 500 页面反馈 | `id`、`created_at`、索引 `user_id`、`username`、`title`、`message`、`page_url`、`error_status`、`user_agent`、`stack`、`ip` | Julong 二开。已加入两种迁移流程。 | 活跃 |
 | `QuotaData` / `FlowQuotaData` | `model/usedata.go`、`model/usedata_flow.go` | Dashboard 聚合用量 | `user_id/username/model_name/created_at/use_group/token_id/channel_id/node_name/count/quota/token_used`，以及可空 `user_display_quota/user_display_token_used` | 真实 `quota/token_used` 供管理员/root 看板使用；展示列在消费日志产生时按同一倍率快照计算，供普通用户模型分析和分流看板使用。`GetQuotaDataGroupByUseGroup` 以 `use_group` 聚合真实额度/请求/Token，并用 `COUNT(DISTINCT user_id)` 计算分组及全局用户数。`GroupQuotaData/GroupQuotaDataTotals/GroupQuotaDataAnalytics` 仅为查询响应结构，不建表。 | 活跃 |
@@ -879,6 +916,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 ### 迁移注意事项
 
 - 新增持久化模型时，必须同时加入 `model/main.go` 的 `migrateDB()` 和 `migrateDBFast()`。
+- `EmailCampaign`、`EmailDelivery` 已同时加入标准和快速 AutoMigrate。升级启动会自动创建 `email_campaigns`、`email_deliveries` 及索引，不修改用户、订阅、余额和既有日志；SQLite、MySQL、PostgreSQL 均使用 GORM 兼容类型，无需手工 SQL。部署前仍应备份主库。
 - 请求内容审计升级由 `AutoMigrate` 新增 `users.request_content_logging_enabled` 和 `user_request_content_logs`；三种数据库均由 GORM 映射 `[]byte`（SQLite/MySQL 为二进制列、PostgreSQL 为 `bytea`），无需手写方言 SQL。旧用户字段零值为关闭，部署后不会自动记录历史或新请求；Redis 用户缓存 schema 已由 2 升至 3，旧缓存会自动失效并从主库重建。
 - 日志表结构变化可能还需要更新 `migrateLOGDB()`。
 - `Log.user_display_group_ratio` 由 `migrateLOGDB()` 自动迁移：SQLite/MySQL/PostgreSQL 使用 GORM `AutoMigrate` 补充可空浮点列，ClickHouse 使用 `ALTER TABLE logs ADD COLUMN IF NOT EXISTS user_display_group_ratio Nullable(Float64)`；旧记录保持 `NULL` 并仅回退到该记录自身 `other` 中保存的真实倍率，不读取当前展示配置。
@@ -946,6 +984,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 | `dashboard` | `index.tsx:Dashboard`、`section-registry.tsx`、`components/groups/group-analysis.tsx:GroupAnalysis`、stats/charts libs | 用户/管理员/root 看板统计；`GroupAnalysis(filters)` 仅对 root 注册，复用模型分析时间/用户筛选，展示四项总计、可切换额度/请求/Token/用户数的分组横向柱图和完整明细表 | `/api/data*`、`/api/dashboard*`、`/api/status`；依赖 React Query、VChart、Tabs/Table、主题与 i18n | 完成 |
 | `announcements` | `api.ts`、`types.ts` | 公告类型和当前用户公告查询；供顶部通知中心、自动弹窗和后台公告编辑器共享 | `/api/announcements` | 完成 |
 | `custom-endpoints` | `types.ts`、`system-settings/content/custom-endpoints-section.tsx`、`keys/components/custom-endpoints.tsx` | 自定义端点共享类型、后台编辑器、API 密钥页复制条和悬停介绍 | `/api/option`、`/api/status` | 完成 |
+| `system-settings/operations/email-campaigns` | `email-campaigns-section.tsx:EmailCampaignsSection/Stat`、`email-campaigns-api.ts`、`operations/section-registry.tsx` | 运维邮件任务列表、全量统计、创建/编辑弹窗、收件人预估、草稿/启用/暂停/失败重试/删除、逐用户发送明细和变量插入；关键本地状态为 `page/form/editing/selected/deliveryPage`，组件无外部参数 | `/api/email-campaigns*`；依赖 React Query、Dialog、Table、Badge、NativeSelect、i18n | 完成 |
 | `channels` | `channels-table.tsx`、`channels-columns.tsx`、dialogs/drawers、`api.ts` | 上游渠道 CRUD/测试/配置 | `/api/channel*` | 完成 |
 | `keys` | `api-keys-table.tsx`、`api-keys-columns.tsx`、`api-keys-mutate-drawer.tsx`、`api-key-group-combobox.tsx`、mutate/delete dialogs | 用户 API key 管理；令牌分组下拉框和列表倍率统一读取 `/api/user/self/groups`，可配置展示真实特殊倍率或基础定价分组倍率 | `/api/token*`、`/api/user/self/groups` | 完成 |
 | `usage-logs` | `usage-logs-table.tsx`、普通/绘图/生图/任务 columns、`lib/group-ratio.ts:getAdminGroupRatioDetails`、`image-generation-task-dialog.tsx`、图片预览和筛选组件 | 普通消费日志、Midjourney 绘图日志、同步/异步生图日志、媒体任务日志；普通用户令牌下方倍率支持关闭、跟随实际倍率、跟随定价分组基础倍率或统一手动展示；管理员/root 紧凑显示“真实倍率 / 用户展示倍率”，悬浮查看定价分组、特殊、最终真实和本日志展示快照；未完成生图按 root 配置频率刷新（默认 15 秒） | `/api/log*`、`/api/mj`、`/api/image-generation-logs*`、`/api/task`；依赖 Tooltip、React Query、i18n | 完成 |
@@ -1087,6 +1126,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 | 错误反馈提交接口公开 | 可能被刷反馈 | 当前有全局限流和 body limit | 如被滥用，增加专用限流或验证码。 |
 | 代理规则需要更多回归测试 | 计费/退款 bug 风险高 | 当前依赖手动 QA 和已有测试 | 增加 agent 创建/删除/退款/兑换限制的 model/controller 测试。 |
 | 异步生图执行器是进程内任务 | 容器在上游请求执行期间重启时，该请求无法自动恢复，日志可能停留在 `pending/processing` | 正常完成/失败会更新状态；图片和任务记录已持久化 | 后续改为 Redis/数据库持久化队列，增加租约、超时失败回收和多节点 worker。 |
+| 大批量邮件没有可配置的每分钟发送速率 | 邮件按收件人串行发送，但仍可能触发 SMTP 服务商限流；系统任务会长时间占用邮件调度租约 | 每位用户独立记录成功/失败，一次性任务可手动重试，条件任务每天自动重试且最多 3 次 | 增加管理员可配置的速率/并发、指数退避和 SMTP `Retry-After` 识别。 |
 | 未启用 Redis 的多实例部署中，IP 黑名单负缓存最多延迟 60 秒同步 | 另一实例可能短暂继续放行刚封禁的 IP | 单实例立即失效；Redis 部署使用共享缓存并立即失效 | 生产多实例必须启用 Redis，或增加数据库通知机制。 |
 | 上游 `web/` 当前全量 lint 基线为 364 个错误、73 个警告 | `bun run lint` 不能作为本仓库合并后的全量绿色门禁 | 本次与上游差异的 Julong 文件单独执行 oxlint，结果为 0 错误、1 个已知警告；typecheck、format 和 build 仍作为硬性检查 | 分批修复上游存量 lint，或在 CI 中先按变更文件执行并逐步扩大覆盖范围。 |
 | 自定义 Footer HTML 使用 `dangerouslySetInnerHTML` | root 配置恶意 HTML 时可能形成持久型 XSS | 仅允许可信 root 配置，并在 Julong 差异 lint 中保留 `react/no-danger` 警告 | 引入可靠 HTML sanitizer 和允许标签/属性白名单后再渲染。 |
@@ -1102,6 +1142,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 - 对高风险 schema 变更引入迁移文件，而不是只依赖 AutoMigrate。
 - 对关键后台页面增加前端视觉回归检查。
 - 为请求内容审计增加全局按天保留、总容量上限和定时清理；当前只按用户条数清理。
+- 为 `email_deliveries` 增加可配置保留天数和归档/清理任务；当前发送明细随任务永久保留，只有删除邮件任务才会清理。
 - 继续优化所有后台表格移动端布局，而不只限兑换码。
 
 ## 进度
@@ -1130,6 +1171,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 - 订阅套餐可授予普通用户生图日志查看权限，并限制可见的最近记录数量。
 - 钱包页优化统计区移动端布局、宽屏双栏比例和套餐卡片信息层级；单个套餐不再保留空白列，并在可购套餐和当前订阅中展示生图日志权益。
 - 新增 UI 文案的多语言同步。
+- 运维邮件群发：立即发送、定时发送、订阅到期条件提醒、注册邮箱受众预估、模板变量、逐用户结果、失败重试和多实例防重。
 
 ### 进行中
 
@@ -1150,6 +1192,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 
 | 日期 | 变更 | 更新文件/API/模型 | 验证 |
 | --- | --- | --- | --- |
+| 2026-07-25 | 系统设置“运维”新增邮件群发：使用用户注册邮箱，支持全部正常用户、有效订阅用户或指定用户立即/定时发送，以及每日扫描的订阅到期条件提醒；支持草稿、暂停、启用、失败重试、收件人预估、模板变量和逐用户发送明细。新增 `EmailCampaign/EmailDelivery`，通过 `email_campaign_dispatch` 系统任务数据库租约保证多实例只执行一次；订阅提醒按任务、用户、订阅和到期时间唯一去重，续订后可再次提醒。root 可通过 `operations.email-campaigns` 单独授权管理员。 | `model/email_campaign.go`、`service/email_campaign.go`、`controller/email_campaign.go`、`email_campaign_dispatch`、`/api/email-campaigns*`、`EmailCampaignsSection`、`email-campaigns-api.ts`、权限目录、AutoMigrate、locale files、`DEVELOPMENT.md` | `go test ./...`、邮件条件去重/续订再提醒/失败重试回归测试、`bun run typecheck`、目标文件 oxlint、`bun run build`、`bun run i18n:sync`、`bun run format:check`、`git diff --check` 均通过；全量 lint 仍受已记录的上游基线错误影响。 |
 | 2026-07-25 | 用户详情新增今日 Token；root 数据看板新增分组数据分析，按时间/用户筛选并展示四项总计、分组指标图和明细表；管理员/root 使用日志令牌倍率改为“真实倍率 / 用户展示倍率”紧凑显示，悬浮展示基础定价分组、特殊倍率、最终真实倍率和本日志展示快照。统计均读取既有日志/`quota_data`，不修改扣费、余额、订阅结算或数据库结构。 | `model.{SumUserUsedTokenBetween,GetQuotaDataGroupByUseGroup,GroupQuotaDataAnalytics}`、`controller.{AdminGetUserUsageSummary,GetQuotaDatesByGroup}`、`GET /api/data/groups`、`GET /api/user/:id/usage-summary`、`GroupAnalysis`、`UserDetailDialog`、`getAdminGroupRatioDetails`、locale files、`DEVELOPMENT.md` | `go test ./...`、`go test ./model ./controller`、`bun run typecheck`、目标文件 oxlint、倍率前端单元测试、`bun run i18n:sync`、`bun run format:check`、`bun run build`、`git diff --check` 均通过。 |
 | 2026-07-25 | 系统设置“站点与品牌 → 系统信息 → 徽标 URL”新增本地上传、保存前预览和移除。候选图片仅支持 PNG/JPG/WebP、最大 5 MB/4096 像素，随机命名并原子写入持久化目录；点击保存后才更新 `Logo` Option 和 `/api/status`，保存失败自动清理候选文件，替换/清空自动删除旧本地徽标。公开读取使用不可猜路径、长期缓存及 `nosniff`；上传/删除严格复用 `site.system-info` 权限。无数据库结构迁移。 | `controller/site_asset.go`、`controller/site_asset_test.go`、`controller.UpdateOption`、`GET/POST/DELETE /api/site-assets/logo*`、`SystemInfoSection`、`useSettingsForm.externalDirty/onExternalReset`、`uploadSiteLogo/deleteSiteLogo`、locale files、`DEVELOPMENT.md` | `go test ./...`、`go test ./controller ./router`、`bun run typecheck`、目标文件 `oxlint/oxfmt`、`bun run i18n:sync`、`bun run format:check`、`bun run build`、`git diff --check` 均通过；重启后 `3000/5173` 返回 200，非法徽标读取返回 404，未鉴权上传返回 401。 |
 | 2026-07-25 | 后台用户详情新增“上下文与提示词”审计。管理员/root 可按用户开启，仅记录开启后的 Relay DTO；请求发送上游前创建 `pending`，完成后标记 `success/error`，支持结构化对话、脱敏 JSON 查看/复制/下载和二次确认清空。每用户事务保留最近 50 条，单条脱敏正文严格限制 4 MiB 并 gzip 存主库；已知凭据和内嵌 Base64 媒体不入库。新增用户字段、记录表、Redis cache schema 3 和硬删除级联清理，不接触计费及上游请求。 | `User.request_content_logging_enabled`、`UserRequestContentLog`、`service.CaptureUserRequestContent/FinishUserRequestContent`、`GET/PUT/DELETE /api/user/:id/request-content`、`GET /api/user/:id/request-content/:log_id`、`UserRequestContentPanel`、`extractRequestConversation`、locale files、`DEVELOPMENT.md` | `go test ./...`、`go test ./model ./service ./controller ./middleware`、`bun run typecheck`、Bun 前端单元测试、目标文件 `oxlint/oxfmt`、`bun run i18n:sync`、`bun run format:check`、`bun run build`、`git diff --check` 均通过；本地 SQLite AutoMigrate 表/字段及 `3000/5173` HTTP 200 已验证。 |

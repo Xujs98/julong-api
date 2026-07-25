@@ -33,6 +33,7 @@ func init() {
 		{"content.chat", "Chat Presets"}, {"content.drawing", "Drawing"},
 		{"operations.behavior", "System Behavior"}, {"operations.alerts", "Monitoring & Alerts"},
 		{"operations.email", "SMTP Email"}, {"operations.worker", "Worker Proxy"},
+		{"operations.email-campaigns", "Email Campaigns"},
 		{"operations.logs", "Log Maintenance"}, {"operations.performance", "Performance"},
 		{"operations.update-checker", "System maintenance"},
 	}
