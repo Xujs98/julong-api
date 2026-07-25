@@ -324,6 +324,9 @@ func migrateDB() error {
 			return err
 		}
 	}
+	if err := backfillQuotaDataUserDisplayMetrics(); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -408,6 +411,9 @@ func migrateDBFast() error {
 			return err
 		}
 	}
+	if err := backfillQuotaDataUserDisplayMetrics(); err != nil {
+		return err
+	}
 	common.SysLog("database migrated")
 	return nil
 }
@@ -422,6 +428,9 @@ func migrateLOGDB() error {
 func migrateClickHouseLogDB() error {
 	ttlDays := clickHouseLogTTLDays()
 	if err := LOG_DB.Exec(clickHouseLogCreateTableSQL(ttlDays)).Error; err != nil {
+		return err
+	}
+	if err := LOG_DB.Exec("ALTER TABLE logs ADD COLUMN IF NOT EXISTS user_display_group_ratio Nullable(Float64)").Error; err != nil {
 		return err
 	}
 	return syncClickHouseLogTTL(ttlDays)
@@ -468,11 +477,12 @@ CREATE TABLE IF NOT EXISTS logs (
 	is_stream UInt8 DEFAULT 0,
 	channel_id Int32 DEFAULT 0,
 	token_id Int32 DEFAULT 0,
-	`+"`group`"+` String DEFAULT '',
-	ip String DEFAULT '',
-	request_id String DEFAULT '',
-	upstream_request_id String DEFAULT '',
-	other String DEFAULT ''
+		`+"`group`"+` String DEFAULT '',
+		ip String DEFAULT '',
+		request_id String DEFAULT '',
+		upstream_request_id String DEFAULT '',
+		user_display_group_ratio Nullable(Float64),
+		other String DEFAULT ''
 )
 ENGINE = MergeTree()
 PARTITION BY toYYYYMM(toDateTime(created_at))

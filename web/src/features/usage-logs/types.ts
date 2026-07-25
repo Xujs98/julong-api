@@ -180,7 +180,7 @@ export interface LogOtherData {
   model_price?: number
   group_ratio?: number
   user_group_ratio?: number
-  group_ratio_display_mode?: 'pricing_group' | 'manual'
+  group_ratio_display_mode?: 'pricing_group' | 'manual' | 'snapshot'
   user_group_ratio_display_enabled?: boolean
   user_group_ratio_display_mode?: 'system' | 'pricing_group' | 'manual'
   user_group_ratio_display_value?: number

@@ -4690,6 +4690,7 @@
     "The public URL of your server, used for OAuth callbacks, webhooks, and other external integrations": "OAuthコールバック、Webhook、その他の外部統合に使用されるサーバーの公開URL",
     "The requested chat preset does not exist or has been removed.": "要求されたチャットプリセットは存在しないか、削除されました。",
     "The reset request stays disabled until a credit is available.": "リセット回数が利用可能になるまで、リセット要求は無効です。",
+    "The selected ratio is saved with each new log. Changing this setting does not rewrite historical logs or affect actual billing.": "選択した倍率は新しいログごとに保存されます。この設定を変更しても、過去のログや実際の課金には影響しません。",
     "The setup wizard will use this database during initialization.": "セットアップウィザードは初期化時にこのデータベースを使用します。",
     "The site is not available at the moment.": "現在、このサイトは利用できません。",
     "The slug is appended to the URL:": "スラッグがURLに追加されます:",

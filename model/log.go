@@ -59,27 +59,28 @@ func sanitizeClickHouseLikePattern(input string) (string, error) {
 }
 
 type Log struct {
-	Id                int    `json:"id" gorm:"index:idx_created_at_id,priority:2;index:idx_user_id_id,priority:2"`
-	UserId            int    `json:"user_id" gorm:"index;index:idx_user_id_id,priority:1"`
-	CreatedAt         int64  `json:"created_at" gorm:"bigint;index:idx_created_at_id,priority:1;index:idx_created_at_type"`
-	Type              int    `json:"type" gorm:"index:idx_created_at_type"`
-	Content           string `json:"content"`
-	Username          string `json:"username" gorm:"index;index:index_username_model_name,priority:2;default:''"`
-	TokenName         string `json:"token_name" gorm:"index;default:''"`
-	ModelName         string `json:"model_name" gorm:"index;index:index_username_model_name,priority:1;default:''"`
-	Quota             int    `json:"quota" gorm:"default:0"`
-	PromptTokens      int    `json:"prompt_tokens" gorm:"default:0"`
-	CompletionTokens  int    `json:"completion_tokens" gorm:"default:0"`
-	UseTime           int    `json:"use_time" gorm:"default:0"`
-	IsStream          bool   `json:"is_stream"`
-	ChannelId         int    `json:"channel" gorm:"index"`
-	ChannelName       string `json:"channel_name" gorm:"->"`
-	TokenId           int    `json:"token_id" gorm:"default:0;index"`
-	Group             string `json:"group" gorm:"index"`
-	Ip                string `json:"ip" gorm:"index;default:''"`
-	RequestId         string `json:"request_id,omitempty" gorm:"type:varchar(64);index:idx_logs_request_id;default:''"`
-	UpstreamRequestId string `json:"upstream_request_id,omitempty" gorm:"type:varchar(128);index:idx_logs_upstream_request_id;default:''"`
-	Other             string `json:"other"`
+	Id                    int      `json:"id" gorm:"index:idx_created_at_id,priority:2;index:idx_user_id_id,priority:2"`
+	UserId                int      `json:"user_id" gorm:"index;index:idx_user_id_id,priority:1"`
+	CreatedAt             int64    `json:"created_at" gorm:"bigint;index:idx_created_at_id,priority:1;index:idx_created_at_type"`
+	Type                  int      `json:"type" gorm:"index:idx_created_at_type"`
+	Content               string   `json:"content"`
+	Username              string   `json:"username" gorm:"index;index:index_username_model_name,priority:2;default:''"`
+	TokenName             string   `json:"token_name" gorm:"index;default:''"`
+	ModelName             string   `json:"model_name" gorm:"index;index:index_username_model_name,priority:1;default:''"`
+	Quota                 int      `json:"quota" gorm:"default:0"`
+	PromptTokens          int      `json:"prompt_tokens" gorm:"default:0"`
+	CompletionTokens      int      `json:"completion_tokens" gorm:"default:0"`
+	UseTime               int      `json:"use_time" gorm:"default:0"`
+	IsStream              bool     `json:"is_stream"`
+	ChannelId             int      `json:"channel" gorm:"index"`
+	ChannelName           string   `json:"channel_name" gorm:"->"`
+	TokenId               int      `json:"token_id" gorm:"default:0;index"`
+	Group                 string   `json:"group" gorm:"index"`
+	UserDisplayGroupRatio *float64 `json:"user_display_group_ratio,omitempty"`
+	Ip                    string   `json:"ip" gorm:"index;default:''"`
+	RequestId             string   `json:"request_id,omitempty" gorm:"type:varchar(64);index:idx_logs_request_id;default:''"`
+	UpstreamRequestId     string   `json:"upstream_request_id,omitempty" gorm:"type:varchar(128);index:idx_logs_upstream_request_id;default:''"`
+	Other                 string   `json:"other"`
 }
 
 type UserLoginIPStat struct {
@@ -109,6 +110,7 @@ func ensureLogRequestId(log *Log) {
 }
 
 func createLog(log *Log) error {
+	snapshotUserDisplayGroupRatio(log)
 	ensureLogRequestId(log)
 	return LOG_DB.Create(log).Error
 }
@@ -123,11 +125,9 @@ func assignDisplayLogIds(logs []*Log, startIdx int) {
 	}
 }
 
-type userLogGroupRatioDisplay struct {
+type logGroupRatioDisplay struct {
 	applicable bool
-	enabled    bool
 	visible    bool
-	mode       string
 	value      float64
 }
 
@@ -135,47 +135,126 @@ func isFiniteLogRatio(value float64) bool {
 	return !math.IsNaN(value) && !math.IsInf(value, 0)
 }
 
-func resolveUserLogGroupRatioDisplay(log *Log, otherMap map[string]interface{}) userLogGroupRatioDisplay {
+func actualLogGroupRatioDisplay(otherMap map[string]interface{}) logGroupRatioDisplay {
 	groupRatio, hasGroupRatio := otherMap["group_ratio"].(float64)
 	userGroupRatio, hasUserGroupRatio := otherMap["user_group_ratio"].(float64)
 	if (!hasGroupRatio || !isFiniteLogRatio(groupRatio)) &&
 		(!hasUserGroupRatio || !isFiniteLogRatio(userGroupRatio)) {
-		return userLogGroupRatioDisplay{}
+		return logGroupRatioDisplay{}
 	}
 
-	display := userLogGroupRatioDisplay{
-		applicable: true,
-		enabled:    common.UserLogGroupRatioDisplayEnabled,
-		mode:       common.UserLogGroupRatioDisplayMode,
+	display := logGroupRatioDisplay{applicable: true}
+	if hasUserGroupRatio && isFiniteLogRatio(userGroupRatio) && userGroupRatio != -1 {
+		display.value = userGroupRatio
+		display.visible = true
+	} else if hasGroupRatio && isFiniteLogRatio(groupRatio) {
+		display.value = groupRatio
+		display.visible = groupRatio != 1
 	}
-	if !display.enabled {
-		return display
+	return display
+}
+
+func configuredUserDisplayGroupRatio(log *Log, otherMap map[string]interface{}) logGroupRatioDisplay {
+	actualDisplay := actualLogGroupRatioDisplay(otherMap)
+	if !actualDisplay.applicable {
+		return actualDisplay
 	}
 
-	switch display.mode {
+	switch common.UserLogGroupRatioDisplayMode {
 	case common.UserLogGroupRatioDisplayModePricingGroup:
 		group := strings.TrimSpace(log.Group)
 		if group == "" {
 			group, _ = otherMap["group"].(string)
 		}
 		if ratio_setting.ContainsGroupRatio(group) {
-			display.value = ratio_setting.GetGroupRatio(group)
-			display.visible = true
+			ratio := ratio_setting.GetGroupRatio(group)
+			if ratio >= 0 && isFiniteLogRatio(ratio) {
+				return logGroupRatioDisplay{applicable: true, visible: true, value: ratio}
+			}
 		}
 	case common.UserLogGroupRatioDisplayModeManual:
-		display.value = common.UserLogGroupRatioManualValue
-		display.visible = true
-	default:
-		display.mode = common.UserLogGroupRatioDisplayModeSystem
-		if hasUserGroupRatio && isFiniteLogRatio(userGroupRatio) && userGroupRatio != -1 {
-			display.value = userGroupRatio
-			display.visible = true
-		} else if hasGroupRatio && isFiniteLogRatio(groupRatio) && groupRatio != 1 {
-			display.value = groupRatio
-			display.visible = true
+		if common.UserLogGroupRatioManualValue >= 0 && isFiniteLogRatio(common.UserLogGroupRatioManualValue) {
+			return logGroupRatioDisplay{
+				applicable: true,
+				visible:    true,
+				value:      common.UserLogGroupRatioManualValue,
+			}
 		}
 	}
-	return display
+	return actualDisplay
+}
+
+func snapshotUserDisplayGroupRatio(log *Log) {
+	if log == nil || log.UserDisplayGroupRatio != nil {
+		return
+	}
+	otherMap, _ := common.StrToMap(log.Other)
+	if otherMap == nil {
+		return
+	}
+	display := configuredUserDisplayGroupRatio(log, otherMap)
+	if !display.visible {
+		return
+	}
+	value := display.value
+	log.UserDisplayGroupRatio = &value
+}
+
+func storedUserDisplayGroupRatio(log *Log, otherMap map[string]interface{}) logGroupRatioDisplay {
+	if log.UserDisplayGroupRatio != nil &&
+		*log.UserDisplayGroupRatio >= 0 &&
+		isFiniteLogRatio(*log.UserDisplayGroupRatio) {
+		return logGroupRatioDisplay{
+			applicable: true,
+			visible:    true,
+			value:      *log.UserDisplayGroupRatio,
+		}
+	}
+	return actualLogGroupRatioDisplay(otherMap)
+}
+
+func applyUserLogDisplayMetrics(log *Log, otherMap map[string]interface{}, actual logGroupRatioDisplay, display logGroupRatioDisplay) {
+	if log.Type != LogTypeConsume || !actual.applicable || !display.visible || actual.value <= 0 {
+		return
+	}
+	scale := display.value / actual.value
+	if scale < 0 || !isFiniteLogRatio(scale) || scale == 1 {
+		return
+	}
+
+	log.Quota = common.QuotaRound(float64(log.Quota) * scale)
+	log.PromptTokens = common.QuotaRound(float64(log.PromptTokens) * scale)
+	log.CompletionTokens = common.QuotaRound(float64(log.CompletionTokens) * scale)
+	if feeQuota, ok := otherMap["fee_quota"].(float64); ok && feeQuota >= 0 && isFiniteLogRatio(feeQuota) {
+		otherMap["fee_quota"] = common.QuotaRound(feeQuota * scale)
+	}
+	for _, key := range []string{
+		"cache_tokens",
+		"cache_creation_tokens",
+		"cache_creation_tokens_5m",
+		"cache_creation_tokens_1h",
+	} {
+		value, ok := otherMap[key].(float64)
+		if !ok || value < 0 || !isFiniteLogRatio(value) {
+			continue
+		}
+		otherMap[key] = common.QuotaRound(value * scale)
+	}
+}
+
+func userVisibleLogDataMetrics(log *Log) (quota int, tokenUsed int) {
+	if log == nil {
+		return 0, 0
+	}
+	displayLog := *log
+	otherMap, _ := common.StrToMap(displayLog.Other)
+	if otherMap != nil {
+		actualDisplay := actualLogGroupRatioDisplay(otherMap)
+		display := storedUserDisplayGroupRatio(&displayLog, otherMap)
+		applyUserLogDisplayMetrics(&displayLog, otherMap, actualDisplay, display)
+	}
+	tokenUsed = common.QuotaFromFloat(float64(displayLog.PromptTokens) + float64(displayLog.CompletionTokens))
+	return displayLog.Quota, tokenUsed
 }
 
 func formatAdminLogGroupRatioDisplay(logs []*Log) {
@@ -188,11 +267,10 @@ func formatAdminLogGroupRatioDisplay(logs []*Log) {
 		delete(otherMap, "user_group_ratio_display_enabled")
 		delete(otherMap, "user_group_ratio_display_mode")
 		delete(otherMap, "user_group_ratio_display_value")
-		display := resolveUserLogGroupRatioDisplay(logs[i], otherMap)
+		display := storedUserDisplayGroupRatio(logs[i], otherMap)
 		if display.applicable {
-			otherMap["user_group_ratio_display_enabled"] = display.enabled
-			otherMap["user_group_ratio_display_mode"] = display.mode
-			if display.visible {
+			otherMap["user_group_ratio_display_enabled"] = common.UserLogGroupRatioDisplayEnabled
+			if common.UserLogGroupRatioDisplayEnabled && display.visible {
 				otherMap["user_group_ratio_display_value"] = display.value
 			}
 		}
@@ -206,6 +284,9 @@ func formatUserLogs(logs []*Log, startIdx int) {
 		var otherMap map[string]interface{}
 		otherMap, _ = common.StrToMap(logs[i].Other)
 		if otherMap != nil {
+			actualDisplay := actualLogGroupRatioDisplay(otherMap)
+			display := storedUserDisplayGroupRatio(logs[i], otherMap)
+			applyUserLogDisplayMetrics(logs[i], otherMap, actualDisplay, display)
 			// Remove admin-only debug fields.
 			delete(otherMap, "admin_info")
 			// Remove operation-audit details (operator/route info), admin-only.
@@ -214,25 +295,14 @@ func formatUserLogs(logs []*Log, startIdx int) {
 			delete(otherMap, "user_group_ratio_display_enabled")
 			delete(otherMap, "user_group_ratio_display_mode")
 			delete(otherMap, "user_group_ratio_display_value")
-			display := resolveUserLogGroupRatioDisplay(logs[i], otherMap)
-			if display.applicable && !display.enabled {
-				delete(otherMap, "group_ratio")
-				delete(otherMap, "user_group_ratio")
-			} else if display.applicable {
-				switch display.mode {
-				case common.UserLogGroupRatioDisplayModePricingGroup:
-					if display.visible {
-						otherMap["group_ratio"] = display.value
-						otherMap["group_ratio_display_mode"] = common.UserLogGroupRatioDisplayModePricingGroup
-					} else {
-						delete(otherMap, "group_ratio")
-					}
-					delete(otherMap, "user_group_ratio")
-				case common.UserLogGroupRatioDisplayModeManual:
-					otherMap["group_ratio"] = display.value
-					otherMap["group_ratio_display_mode"] = common.UserLogGroupRatioDisplayModeManual
-					delete(otherMap, "user_group_ratio")
-				}
+			delete(otherMap, "group_ratio")
+			delete(otherMap, "user_group_ratio")
+			logs[i].UserDisplayGroupRatio = nil
+			if common.UserLogGroupRatioDisplayEnabled && display.visible {
+				value := display.value
+				logs[i].UserDisplayGroupRatio = &value
+				otherMap["group_ratio"] = value
+				otherMap["group_ratio_display_mode"] = "snapshot"
 			}
 			// delete(otherMap, "reject_reason")
 			delete(otherMap, "stream_status")
@@ -544,17 +614,21 @@ func RecordConsumeLog(c *gin.Context, userId int, params RecordConsumeLogParams)
 		logger.LogError(c, "failed to record log: "+err.Error())
 	}
 	if common.DataExportEnabled {
+		userDisplayQuota, userDisplayTokenUsed := userVisibleLogDataMetrics(log)
+		tokenUsed := common.QuotaFromFloat(float64(params.PromptTokens) + float64(params.CompletionTokens))
 		LogQuotaData(QuotaDataLogParams{
-			UserID:    userId,
-			Username:  username,
-			ModelName: params.ModelName,
-			Quota:     params.Quota,
-			CreatedAt: createdAt,
-			TokenUsed: params.PromptTokens + params.CompletionTokens,
-			UseGroup:  params.Group,
-			TokenID:   params.TokenId,
-			ChannelID: params.ChannelId,
-			NodeName:  common.NodeName,
+			UserID:               userId,
+			Username:             username,
+			ModelName:            params.ModelName,
+			Quota:                params.Quota,
+			CreatedAt:            createdAt,
+			TokenUsed:            tokenUsed,
+			UseGroup:             params.Group,
+			TokenID:              params.TokenId,
+			ChannelID:            params.ChannelId,
+			NodeName:             common.NodeName,
+			UserDisplayQuota:     common.GetPointer(userDisplayQuota),
+			UserDisplayTokenUsed: common.GetPointer(userDisplayTokenUsed),
 		})
 	}
 }
@@ -607,16 +681,19 @@ func RecordTaskBillingLog(params RecordTaskBillingLogParams) {
 		if nodeName == "" {
 			nodeName = common.NodeName
 		}
+		userDisplayQuota, userDisplayTokenUsed := userVisibleLogDataMetrics(log)
 		LogQuotaData(QuotaDataLogParams{
-			UserID:    params.UserId,
-			Username:  username,
-			ModelName: params.ModelName,
-			Quota:     params.Quota,
-			CreatedAt: createdAt,
-			UseGroup:  params.Group,
-			TokenID:   params.TokenId,
-			ChannelID: params.ChannelId,
-			NodeName:  nodeName,
+			UserID:               params.UserId,
+			Username:             username,
+			ModelName:            params.ModelName,
+			Quota:                params.Quota,
+			CreatedAt:            createdAt,
+			UseGroup:             params.Group,
+			TokenID:              params.TokenId,
+			ChannelID:            params.ChannelId,
+			NodeName:             nodeName,
+			UserDisplayQuota:     common.GetPointer(userDisplayQuota),
+			UserDisplayTokenUsed: common.GetPointer(userDisplayTokenUsed),
 		})
 	}
 }
@@ -825,6 +902,51 @@ func SumUsedQuota(logType int, startTimestamp int64, endTimestamp int64, modelNa
 		return stat, errors.New("查询统计数据失败")
 	}
 
+	return stat, nil
+}
+
+func SumUserVisibleUsedQuota(logType int, startTimestamp int64, endTimestamp int64, modelName string, username string, tokenName string, channel int, group string) (stat Stat, err error) {
+	stat, err = SumUsedQuota(logType, startTimestamp, endTimestamp, modelName, username, tokenName, channel, group)
+	if err != nil {
+		return stat, err
+	}
+
+	tx := LOG_DB.Model(&Log{}).
+		Select("type, prompt_tokens, completion_tokens, user_display_group_ratio, other").
+		Where("type = ?", LogTypeConsume).
+		Where("created_at >= ?", time.Now().Add(-60*time.Second).Unix())
+	if tx, err = applyExplicitLogTextFilter(tx, "username", username); err != nil {
+		return stat, err
+	}
+	if tokenName != "" {
+		tx = tx.Where("token_name = ?", tokenName)
+	}
+	if tx, err = applyExplicitLogTextFilter(tx, "model_name", modelName); err != nil {
+		return stat, err
+	}
+	if channel != 0 {
+		tx = tx.Where("channel_id = ?", channel)
+	}
+	if group != "" {
+		tx = tx.Where(logGroupCol+" = ?", group)
+	}
+
+	var logs []*Log
+	if err = tx.Find(&logs).Error; err != nil {
+		common.SysError("failed to query user-visible tpm: " + err.Error())
+		return stat, errors.New("查询统计数据失败")
+	}
+	var visibleTPM int64
+	for _, log := range logs {
+		otherMap, _ := common.StrToMap(log.Other)
+		if otherMap != nil {
+			actualDisplay := actualLogGroupRatioDisplay(otherMap)
+			display := storedUserDisplayGroupRatio(log, otherMap)
+			applyUserLogDisplayMetrics(log, otherMap, actualDisplay, display)
+		}
+		visibleTPM += int64(log.PromptTokens) + int64(log.CompletionTokens)
+	}
+	stat.Tpm = common.QuotaFromFloat(float64(visibleTPM))
 	return stat, nil
 }
 

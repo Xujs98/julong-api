@@ -59,6 +59,19 @@ describe('getDisplayedGroupRatio', () => {
     )
   })
 
+  test('prefers the display ratio snapshot stored with the log', () => {
+    assert.equal(
+      getDisplayedGroupRatio(
+        {
+          group_ratio: 0.095,
+          user_group_ratio: 0.095,
+        },
+        0.01
+      ),
+      0.01
+    )
+  })
+
   test('shows no ratio after the backend strips ratio fields', () => {
     assert.equal(getDisplayedGroupRatio({ model_price: 0.004 }), null)
   })

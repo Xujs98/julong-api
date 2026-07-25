@@ -33,8 +33,13 @@ export function getActualGroupRatio(other: LogOtherData | null): number | null {
 }
 
 export function getDisplayedGroupRatio(
-  other: LogOtherData | null
+  other: LogOtherData | null,
+  storedDisplayRatio?: number | null
 ): number | null {
+  if (storedDisplayRatio != null && Number.isFinite(storedDisplayRatio)) {
+    return storedDisplayRatio
+  }
+
   const userGroupRatio = other?.user_group_ratio
   if (
     userGroupRatio != null &&

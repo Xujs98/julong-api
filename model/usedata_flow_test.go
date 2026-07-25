@@ -139,28 +139,32 @@ func TestLogQuotaDataSplitsRowsByUseGroupTokenChannelAndNode(t *testing.T) {
 	CacheQuotaDataLock.Unlock()
 
 	LogQuotaData(QuotaDataLogParams{
-		UserID:    1,
-		Username:  "alice",
-		ModelName: "gpt-a",
-		CreatedAt: 3661,
-		UseGroup:  "vip",
-		TokenID:   11,
-		ChannelID: 1,
-		NodeName:  "node-a",
-		Quota:     100,
-		TokenUsed: 40,
+		UserID:               1,
+		Username:             "alice",
+		ModelName:            "gpt-a",
+		CreatedAt:            3661,
+		UseGroup:             "vip",
+		TokenID:              11,
+		ChannelID:            1,
+		NodeName:             "node-a",
+		Quota:                100,
+		TokenUsed:            40,
+		UserDisplayQuota:     common.GetPointer(10),
+		UserDisplayTokenUsed: common.GetPointer(4),
 	})
 	LogQuotaData(QuotaDataLogParams{
-		UserID:    1,
-		Username:  "alice",
-		ModelName: "gpt-a",
-		CreatedAt: 3700,
-		UseGroup:  "vip",
-		TokenID:   11,
-		ChannelID: 1,
-		NodeName:  "node-a",
-		Quota:     50,
-		TokenUsed: 20,
+		UserID:               1,
+		Username:             "alice",
+		ModelName:            "gpt-a",
+		CreatedAt:            3700,
+		UseGroup:             "vip",
+		TokenID:              11,
+		ChannelID:            1,
+		NodeName:             "node-a",
+		Quota:                50,
+		TokenUsed:            20,
+		UserDisplayQuota:     common.GetPointer(5),
+		UserDisplayTokenUsed: common.GetPointer(2),
 	})
 	LogQuotaData(QuotaDataLogParams{
 		UserID:    1,
@@ -188,6 +192,119 @@ func TestLogQuotaDataSplitsRowsByUseGroupTokenChannelAndNode(t *testing.T) {
 	require.Equal(t, 2, rows[0].Count)
 	require.Equal(t, 150, rows[0].Quota)
 	require.Equal(t, 60, rows[0].TokenUsed)
+	require.NotNil(t, rows[0].UserDisplayQuota)
+	require.Equal(t, 15, *rows[0].UserDisplayQuota)
+	require.NotNil(t, rows[0].UserDisplayTokenUsed)
+	require.Equal(t, 6, *rows[0].UserDisplayTokenUsed)
 	require.Equal(t, "default", rows[1].UseGroup)
 	require.Equal(t, 25, rows[1].Quota)
+	require.NotNil(t, rows[1].UserDisplayQuota)
+	require.Equal(t, 25, *rows[1].UserDisplayQuota)
+	require.NotNil(t, rows[1].UserDisplayTokenUsed)
+	require.Equal(t, 10, *rows[1].UserDisplayTokenUsed)
+}
+
+func TestSelfQuotaDataUsesDisplayMetricsWhileAdminKeepsActualMetrics(t *testing.T) {
+	truncateTables(t)
+	seedFlowQuotaData(t, QuotaData{
+		UserID:               1,
+		Username:             "alice",
+		UseGroup:             "vip",
+		ModelName:            "gpt-a",
+		CreatedAt:            3600,
+		Count:                2,
+		Quota:                9500,
+		TokenUsed:            1140,
+		UserDisplayQuota:     common.GetPointer(1000),
+		UserDisplayTokenUsed: common.GetPointer(120),
+	})
+
+	selfRows, err := GetQuotaDataByUserId(1, 3600, 3600)
+	require.NoError(t, err)
+	require.Len(t, selfRows, 1)
+	require.Equal(t, 2, selfRows[0].Count)
+	require.Equal(t, 1000, selfRows[0].Quota)
+	require.Equal(t, 120, selfRows[0].TokenUsed)
+
+	selfFlowRows, err := GetFlowQuotaData(3600, 3600, "", 1, common.RoleCommonUser)
+	require.NoError(t, err)
+	require.Len(t, selfFlowRows, 1)
+	require.Equal(t, 1000, selfFlowRows[0].Quota)
+	require.Equal(t, 120, selfFlowRows[0].TokenUsed)
+
+	adminFlowRows, err := GetFlowQuotaData(3600, 3600, "alice", 0, common.RoleAdminUser)
+	require.NoError(t, err)
+	require.Len(t, adminFlowRows, 1)
+	require.Equal(t, 9500, adminFlowRows[0].Quota)
+	require.Equal(t, 1140, adminFlowRows[0].TokenUsed)
+
+	adminRows, err := GetAllQuotaDates(3600, 3600, "alice")
+	require.NoError(t, err)
+	require.Len(t, adminRows, 1)
+	require.Equal(t, 9500, adminRows[0].Quota)
+	require.Equal(t, 1140, adminRows[0].TokenUsed)
+}
+
+func TestSaveQuotaDataCacheIncrementsActualAndDisplayMetricsIndependently(t *testing.T) {
+	truncateTables(t)
+	CacheQuotaDataLock.Lock()
+	CacheQuotaData = make(map[string]*QuotaData)
+	CacheQuotaDataLock.Unlock()
+	seedFlowQuotaData(t, QuotaData{
+		UserID:               1,
+		Username:             "alice",
+		UseGroup:             "vip",
+		ModelName:            "gpt-a",
+		CreatedAt:            3600,
+		Count:                1,
+		Quota:                100,
+		TokenUsed:            40,
+		UserDisplayQuota:     common.GetPointer(10),
+		UserDisplayTokenUsed: common.GetPointer(4),
+	})
+	LogQuotaData(QuotaDataLogParams{
+		UserID:               1,
+		Username:             "alice",
+		UseGroup:             "vip",
+		ModelName:            "gpt-a",
+		CreatedAt:            3661,
+		Quota:                50,
+		TokenUsed:            20,
+		UserDisplayQuota:     common.GetPointer(5),
+		UserDisplayTokenUsed: common.GetPointer(2),
+	})
+
+	SaveQuotaDataCache()
+
+	var stored QuotaData
+	require.NoError(t, DB.Where("username = ?", "alice").First(&stored).Error)
+	require.Equal(t, 2, stored.Count)
+	require.Equal(t, 150, stored.Quota)
+	require.Equal(t, 60, stored.TokenUsed)
+	require.NotNil(t, stored.UserDisplayQuota)
+	require.Equal(t, 15, *stored.UserDisplayQuota)
+	require.NotNil(t, stored.UserDisplayTokenUsed)
+	require.Equal(t, 6, *stored.UserDisplayTokenUsed)
+}
+
+func TestBackfillQuotaDataDisplayMetricsPreservesLegacyActualValues(t *testing.T) {
+	truncateTables(t)
+	seedFlowQuotaData(t, QuotaData{
+		UserID:    1,
+		Username:  "legacy",
+		ModelName: "gpt-a",
+		CreatedAt: 3600,
+		Count:     1,
+		Quota:     321,
+		TokenUsed: 654,
+	})
+
+	require.NoError(t, backfillQuotaDataUserDisplayMetrics())
+
+	var stored QuotaData
+	require.NoError(t, DB.Where("username = ?", "legacy").First(&stored).Error)
+	require.NotNil(t, stored.UserDisplayQuota)
+	require.Equal(t, 321, *stored.UserDisplayQuota)
+	require.NotNil(t, stored.UserDisplayTokenUsed)
+	require.Equal(t, 654, *stored.UserDisplayTokenUsed)
 }

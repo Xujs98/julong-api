@@ -551,16 +551,22 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
       const displayName = sensitiveVisible ? tokenName : '••••'
       let group = log.group
       if (!group) group = other?.group || ''
-      const groupRatio = getDisplayedGroupRatio(other)
+      const groupRatio = getDisplayedGroupRatio(
+        other,
+        log.user_display_group_ratio
+      )
       const actualGroupRatio = isAdmin ? getActualGroupRatio(other) : null
       const hasUserRatioDisplay =
         isAdmin && other?.user_group_ratio_display_enabled != null
       const userDisplayedGroupRatio =
-        other?.user_group_ratio_display_value ?? null
+        log.user_display_group_ratio ??
+        other?.user_group_ratio_display_value ??
+        null
       const hasRatioDetails = isAdmin
         ? actualGroupRatio != null || hasUserRatioDisplay
         : groupRatio != null
       const userDisplayedRatioText =
+        other?.user_group_ratio_display_enabled !== false &&
         userDisplayedGroupRatio != null
           ? `${formatRatioCompact(userDisplayedGroupRatio)}x`
           : t('Not shown')

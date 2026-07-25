@@ -163,8 +163,8 @@ docker compose up -d
 | `SidebarModulesAdmin` | `web/src/features/system-settings/maintenance/config.ts` | 控制侧边栏模块显示 | 自定义模块包含 `errorReports`。 |
 | 模型定价订阅抵扣 | `web/src/features/system-settings/models/model-pricing-sheet.tsx` 及后端计费设置 | 按次模型是否允许订阅额度抵扣 | 适用于所有模型，不局限于 `gpt-image-2`。 |
 | `UserLogGroupRatioDisplayEnabled` | `common/constants.go`、`model/log.go`、`log-settings-section.tsx` | 普通用户使用日志是否显示令牌分组倍率 | 默认 `true`；关闭后 `/api/log/self` 和 Token 日志响应剥离 `group_ratio`、`user_group_ratio`，管理员/root 日志不受影响。 |
-| `UserLogGroupRatioDisplayMode` | 同上、`setting/ratio_setting/group_ratio.go` | 普通用户日志倍率展示来源 | `system` 跟随请求实际倍率（默认）；`pricing_group` 展示该日志计费分组当前基础倍率；`manual` 展示统一手动倍率。只改变展示，不改变实际扣费。 |
-| `UserLogGroupRatioManualValue` | 同上 | 手动模式统一展示倍率 | 默认 `1`，必须为大于等于 `0` 的有效数字；只在展示开关开启且模式为 `manual` 时用于普通用户日志响应。 |
+| `UserLogGroupRatioDisplayMode` | 同上、`setting/ratio_setting/group_ratio.go` | 新使用日志的用户展示倍率快照来源 | `system` 保存请求实际倍率（默认）；`pricing_group` 保存日志产生时的基础定价分组倍率；`manual` 保存当时配置的统一手动倍率。普通用户单条日志响应的 `quota/prompt_tokens/completion_tokens` 及缓存 Tokens 按“展示倍率 / 真实倍率”换算；顶部“用量”保持数据库真实扣费、RPM 保持真实请求数，TPM 按最近 60 秒各日志快照换算。模式变更只影响后续新日志，不改写历史日志，也不参与实际扣费。 |
+| `UserLogGroupRatioManualValue` | 同上 | 手动模式写入新日志的展示倍率 | 默认 `1`，必须为大于等于 `0` 的有效数字；保存到 `Log.UserDisplayGroupRatio` 后不再随全局配置变化。 |
 | `ModelSquareGroupRatioDisplayMode` | `common/constants.go`、`controller/pricing.go`、`group-ratio-form.tsx` | 模型广场使用哪种分组倍率展示价格 | `actual`（默认）包含当前登录用户命中的特殊倍率规则；`pricing_group` 始终使用“分组定价”的基础倍率并忽略用户特殊倍率。只改变 `/api/pricing` 展示数据，不改变实际扣费。 |
 | `TokenGroupRatioDisplayMode` | `common/constants.go`、`controller/group.go`、`group-ratio-form.tsx` | API 密钥令牌分组选择器展示哪种倍率 | `actual`（默认）展示当前用户命中的特殊倍率；`pricing_group` 始终展示基础定价分组倍率。只改变 `/api/user/self/groups` 返回的展示倍率，不改变实际扣费。 |
 | `ImageGenerationLogEnabled` | `common/constants.go`、`model/option.go`、`log-settings-section.tsx` | 是否记录生图请求并启用本地异步生图 | Root 或获授权管理员配置，默认 `false`；关闭时 `async: true` 退回同步，不创建任务、不捕获或保存图片。 |
@@ -441,10 +441,10 @@ curl 'http://localhost:3000/api/redemption/search?keyword=agent001&p=1&page_size
 
 | 方法 | 路径 | Handler | 用途 | 权限 | 状态 |
 | --- | --- | --- | --- | --- | --- |
-| GET | `/api/log/` | `controller.GetAllLogs` | 管理员日志；保留请求真实 `group_ratio/user_group_ratio`，并在 `other` 中附加当前普通用户倍率展示状态、模式和值 | 管理员/root | 完成 |
+| GET | `/api/log/` | `controller.GetAllLogs` | 管理员日志；保留请求真实 `group_ratio/user_group_ratio` 和持久化的 `user_display_group_ratio`，并在 `other` 中附加当前普通用户倍率显示开关和值 | 管理员/root | 完成 |
 | GET | `/api/log/stat` | `controller.GetLogsStat` | 管理员日志统计 | 管理员/root | 完成 |
-| GET | `/api/log/self` | `controller.GetUserLogs` | 当前用户日志；倍率字段根据显示开关和 `system/pricing_group/manual` 模式进行保留、替换或剥离 | 用户 | 完成 |
-| GET | `/api/log/self/stat` | `controller.GetLogsSelfStat` | 当前用户统计 | 用户 | 完成 |
+| GET | `/api/log/self` | `controller.GetUserLogs` | 当前用户日志；总开关打开时返回每条日志保存的 `user_display_group_ratio` 快照，关闭时剥离倍率；非系统展示倍率下，单条日志响应中的费用和 Tokens 按快照换算，但不回写数据库 | 用户 | 完成 |
+| GET | `/api/log/self/stat` | `controller.GetLogsSelfStat` | 当前用户统计；`quota` 为真实用量、RPM 为真实请求数，TPM 按各日志持久化展示倍率换算 | 用户 | 完成 |
 | GET | `/api/log/search` | `controller.SearchAllLogs` | 已废弃搜索接口 | 管理员/root | 已废弃 |
 | GET | `/api/log/self/search` | `controller.SearchUserLogs` | 已废弃用户搜索接口 | 用户 | 已废弃 |
 | DELETE | `/api/log/` | `controller.DeleteHistoryLogs` | 旧版同步日志清理 | Root | 默认前端已不使用 |
@@ -452,14 +452,16 @@ curl 'http://localhost:3000/api/redemption/search?keyword=agent001&p=1&page_size
 | GET | `/api/log/token` | `controller.GetLogByKey` | Token 日志查询；倍率字段遵循普通用户日志显示配置 | Token read-only | 完成 |
 | GET | `/api/data/` | `controller.GetAllQuotaDates` | 额度日期数据 | 管理员/root | 完成 |
 | GET | `/api/data/users` | `controller.GetQuotaDatesByUser` | 用户额度日期数据 | 管理员/root | 完成 |
-| GET | `/api/data/self` | `controller.GetUserQuotaDates` | 当前用户额度日期数据 | 用户 | 完成 |
+| GET | `/api/data/self` | `controller.GetUserQuotaDates` | 当前用户额度日期数据；额度和 Token 使用日志写入时保存的展示聚合值 | 用户 | 完成 |
 | GET | `/api/data/flow` | `controller.GetAllFlowQuotaDates` | 流量数据 | 管理员/root | 完成 |
-| GET | `/api/data/flow/self` | `controller.GetUserFlowQuotaDates` | 当前用户流量数据 | 用户 | 完成 |
+| GET | `/api/data/flow/self` | `controller.GetUserFlowQuotaDates` | 当前用户分流数据；额度和 Token 使用展示聚合值，调用次数保持真实 | 用户 | 完成 |
 
 日志倍率响应字段：
 
-- 管理员/root 的 `/api/log/` 保留日志原始 `other.group_ratio` 和 `other.user_group_ratio`，前端据此展示“实际倍率”。后端同时临时附加 `user_group_ratio_display_enabled`、`user_group_ratio_display_mode` 和可选 `user_group_ratio_display_value`，用于展示当前普通用户所见倍率；这些字段不写回日志数据库。
-- 普通用户 `/api/log/self` 和 Token `/api/log/token` 不返回上述管理员临时字段。关闭总开关时剥离倍率；`pricing_group`/`manual` 模式通过临时 `group_ratio_display_mode` 标记保证配置值为 `1x` 时仍显示。
+- `Log.UserDisplayGroupRatio` 映射日志表可空字段 `user_display_group_ratio`。`createLog` 只在请求计费完成后的日志写入阶段生成快照，不读取或修改 quota，不参与预扣费、结算、退款或余额/订阅额度选择。
+- 管理员/root 的 `/api/log/` 保留日志原始 `other.group_ratio`、`other.user_group_ratio` 和持久化展示快照，前端据此同时展示“实际倍率”和“用户展示倍率”。`other.user_group_ratio_display_enabled/value` 仅为响应辅助字段，不写回数据库。
+- 普通用户 `/api/log/self` 和 Token `/api/log/token` 不返回真实倍率。总开关打开时将持久化快照映射为展示倍率，关闭时剥离倍率；列表响应副本中的 `quota`、输入/输出 Tokens、缓存 Tokens 和 `fee_quota` 按快照倍率换算。旧日志的快照字段为 `NULL`，只能回退到该日志自身保存的真实倍率，绝不按当前手动值或当前分组定价重新计算。
+- `/api/log/self/stat` 的“用量”继续读取真实 `sum(quota)`，RPM 继续统计真实请求数；仅 TPM 按最近 60 秒日志的快照倍率换算。`/api/log/stat` 管理员统计保持全部真实。
 
 ### 生图日志 API
 
@@ -750,7 +752,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 | `Token` | `model/token.go` | API keys | `id`、`user_id`、`key`、`name`、额度字段、模型限制、group、allow IPs | Relay 鉴权和计费使用。 | 活跃 |
 | `Channel` | `model/channel.go` | 上游 provider 渠道 | `id`、`type`、`key`、`base_url`、`models`、`group`、状态、priority/weight、计费/override 字段 | 由 distributor middleware 选择。敏感 key 需要脱敏。 | 活跃 |
 | `Ability` | `model/ability.go` | 渠道/模型能力映射 | channel/model/group enabled 字段 | 用于模型可用性和路由。 | 活跃 |
-| `Log` | `model/log.go` | 使用日志和审计日志 | `id`、`user_id`、`created_at`、`type`、`content`、`username`、`token_name`、`model_name`、`quota`、`prompt_tokens`、`completion_tokens`、`channel_id`、`ip`、`request_id`、`upstream_request_id`、`other` | 可位于独立日志库/ClickHouse。`GetUserLoginIPStats` 聚合登录 IP、次数和最后时间；`SumUserUsedToken` 提供总 token 消耗。 | 活跃 |
+| `Log` | `model/log.go` | 使用日志和审计日志 | `id`、`user_id`、`created_at`、`type`、`content`、`username`、`token_name`、`model_name`、`quota`、`prompt_tokens`、`completion_tokens`、`channel_id`、`ip`、`request_id`、`upstream_request_id`、可空 `user_display_group_ratio`、`other` | 可位于独立日志库/ClickHouse。`user_display_group_ratio` 是日志创建时面向用户的展示倍率快照，只供响应格式化和 UI 展示使用；实际扣费仍由 `quota` 及计费服务完成。`GetUserLoginIPStats` 聚合登录 IP、次数和最后时间；`SumUserUsedToken` 提供总 token 消耗。 | 活跃 |
 | `ImageGenerationLog` / `ImageGenerationImage` | `model/image_generation_log.go` | 同步生图日志与本地异步任务 | 日志含 `id`；索引 `task_id/status/user_id/username/token_id/channel_id/model_name/request_id/created_at/updated_at`；`prompt/size/quality/image_count/quota/use_time`；内部 `images/response` JSON。`ImageGenerationImage` JSON 字段为 `type/value/bucket/mime_type/sha256/size/revised_prompt`，`type` 支持 `local/remote/minio`。 | 任务属于一个 User/Token；MinIO 元数据写入现有 `images` 文本 JSON，不新增数据库列或表。旧 local/remote JSON 继续兼容；AutoMigrate 无额外迁移。 | 活跃 |
 | `Redemption` | `model/redemption.go` | 兑换码 | 唯一 `key`、`user_id` 生成者、`status`、`name`、`quota`、`created_time`、`redeemed_time`、`used_user_id`、`expired_time`、`agent_charge`、软删除 | 生成者显示字段是 transient。搜索支持 code、生成者、ID、名称。代理退款使用 `agent_charge`。 | 活跃 |
 | `TopUp` | `model/topup.go` | 在线支付/充值订单 | trade no、user、amount/money、provider、status | 支付回调结算。 | 活跃 |
@@ -776,7 +778,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 | `SystemTask` / `SystemTaskLock` | `model/system_task.go` | 后台维护任务 | task id/type/status/payload/state/lock；`image_storage_cleanup` 用于每日及手动 MinIO 图片清理，`payload.delete_all=true` 表示清空当前对象前缀，否则只清理过期对象 | 数据库活动键和租约保证同一任务类型在多节点只执行一次；全量清空复用现有类型和 payload，不新增字段或迁移。 | 活跃 |
 | `CasbinRule` / `AuthzRole` | `model/casbin_rule.go`、`model/authz_role.go` | 细粒度管理员权限 | casbin p/v 字段和角色分配 | Admin authz catalog。 | 活跃 |
 | `ErrorReport` | `model/error_report.go` | 500 页面反馈 | `id`、`created_at`、索引 `user_id`、`username`、`title`、`message`、`page_url`、`error_status`、`user_agent`、`stack`、`ip` | Julong 二开。已加入两种迁移流程。 | 活跃 |
-| `QuotaData` / `FlowQuotaData` | `model/usedata.go`、`model/usedata_flow.go` | Dashboard 聚合用量 | date/user/quota/flow 字段 | 数据看板。 | 活跃 |
+| `QuotaData` / `FlowQuotaData` | `model/usedata.go`、`model/usedata_flow.go` | Dashboard 聚合用量 | `user_id/username/model_name/created_at/use_group/token_id/channel_id/node_name/count/quota/token_used`，以及可空 `user_display_quota/user_display_token_used` | 真实 `quota/token_used` 供管理员/root 看板使用；展示列在消费日志产生时按同一倍率快照计算，供普通用户模型分析和分流看板使用。调用次数始终真实。 | 活跃 |
 
 `setting/console_setting/config.go:ConsoleSetting` 是存储于 `Option` 的运行时 JSON 配置结构，不单独建表。`custom_endpoints` 保存最多 20 条 `{id,name,url,description}`，经 URL、长度和危险内容校验后通过公开状态接口下发。公告相关字段为 `announcements`（JSON 数组字符串）和 `announcements_enabled`（公告总开关）。单条公告包含 `id/title/content/status/notificationMode/startTime/endTime/audienceMode/conditionGroups`；状态为 `draft/active/archived`，通知方式为 `silent/popup`，条件组之间为 OR、组内条件为 AND，当前支持订阅套餐包含/排除和余额比较。旧公告读取时自动归一化为展示中、静默、所有用户，无需数据库迁移。
 
@@ -786,6 +788,8 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 
 - 新增持久化模型时，必须同时加入 `model/main.go` 的 `migrateDB()` 和 `migrateDBFast()`。
 - 日志表结构变化可能还需要更新 `migrateLOGDB()`。
+- `Log.user_display_group_ratio` 由 `migrateLOGDB()` 自动迁移：SQLite/MySQL/PostgreSQL 使用 GORM `AutoMigrate` 补充可空浮点列，ClickHouse 使用 `ALTER TABLE logs ADD COLUMN IF NOT EXISTS user_display_group_ratio Nullable(Float64)`；旧记录保持 `NULL` 并仅回退到该记录自身 `other` 中保存的真实倍率，不读取当前展示配置。
+- `QuotaData.user_display_quota/user_display_token_used` 由主库 GORM `AutoMigrate` 补充可空整型列；启动迁移随后执行 `backfillQuotaDataUserDisplayMetrics`，只把旧记录的 `NULL` 展示值回填为该聚合记录原有真实值。新请求同时累加真实列和展示列，不改写真实看板数据。
 - PostgreSQL 保留字字段（如 `key`）要像 `model/redemption.go` 一样做数据库类型判断并加引号。
 - SQLite 字段变更必须用已有本地 `one-api.db` 测试迁移。
 - 仅用于 JSON 响应、不入库的字段要加 `gorm:"-:all"`。
@@ -1042,7 +1046,8 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 
 | 日期 | 变更 | 更新文件/API/模型 | 验证 |
 | --- | --- | --- | --- |
-| 2026-07-25 | 新增倍率展示控制：日志维护可完全隐藏普通用户日志倍率、跟随真实倍率、跟随计费分组基础倍率或统一手动展示；管理员日志同时显示请求真实倍率和当前用户展示倍率。分组定价新增模型广场和令牌分组两个独立展示模式，均可选择包含特殊倍率规则的真实倍率，或始终使用基础定价分组倍率。所有转换只影响接口响应和 UI，不修改历史日志、实际扣费或数据库结构，保存后运行时立即生效。 | `UserLogGroupRatioDisplayEnabled`、`UserLogGroupRatioDisplayMode`、`UserLogGroupRatioManualValue`、`ModelSquareGroupRatioDisplayMode`、`TokenGroupRatioDisplayMode`、`controller.{GetPricing,GetUserGroups}`、`model.{formatUserLogs,formatAdminLogGroupRatioDisplay}`、`GroupRatioForm`、`LogSettingsSection`、`usage-logs/lib/group-ratio.ts`、locale files、`DEVELOPMENT.md` | `go test ./...`、`bun run typecheck`、目标文件 oxlint、`bun run build`、`bun run i18n:sync`、`bun run format:check`、倍率前端单元测试、`git diff --check` 均通过。 |
+| 2026-07-25 | 使用日志新增持久化的用户展示倍率快照。每条新日志在写入时按 `system/pricing_group/manual` 保存 `user_display_group_ratio`，后续修改展示配置只影响新日志，历史日志不再被重新计算；旧日志回退到自身保存的真实倍率。普通用户单条日志响应中的费用、输入/输出 Tokens 和缓存 Tokens 按“展示倍率 / 真实倍率”换算；日志页顶部“用量”保持真实扣费、RPM 保持真实请求数，TPM 按最近 60 秒各日志快照换算。普通用户数据看板的额度、Token、TPM 和消费/分流图表读取新增的展示聚合列，调用次数/RPM 保持真实；管理员/root 的日志和看板保留真实数据。所有展示字段均在计费完成后写入，未接入预扣费、结算、退款、余额或订阅链路，数据库原 `quota/token` 和真实倍率字段保持不变。 | `Log.UserDisplayGroupRatio`、`QuotaData.{UserDisplayQuota,UserDisplayTokenUsed}`、`model.{createLog,snapshotUserDisplayGroupRatio,applyUserLogDisplayMetrics,userVisibleLogDataMetrics,formatUserLogs,SumUserVisibleUsedQuota,formatAdminLogGroupRatioDisplay,GetQuotaDataByUserId,getSelfFlowQuotaData}`、`controller.GetLogsSelfStat`、`migrateLOGDB`、ClickHouse `logs.user_display_group_ratio`、usage logs schema/columns/tests、locale files、`DEVELOPMENT.md` | `go test ./...`、`go test ./model`、`go test ./controller`、`bun run typecheck`、目标文件 oxlint、倍率前端单元测试、`bun run build`、`bun run i18n:sync`、`bun run format:check`、`git diff --check` 均通过。 |
+| 2026-07-25 | 新增倍率展示控制：日志维护可完全隐藏普通用户日志倍率、跟随真实倍率、跟随计费分组基础倍率或统一手动展示；管理员日志同时显示请求真实倍率和当前用户展示倍率。分组定价新增模型广场和令牌分组两个独立展示模式，均可选择包含特殊倍率规则的真实倍率，或始终使用基础定价分组倍率。初版在读取日志时实时转换展示倍率，不影响实际扣费。 | `UserLogGroupRatioDisplayEnabled`、`UserLogGroupRatioDisplayMode`、`UserLogGroupRatioManualValue`、`ModelSquareGroupRatioDisplayMode`、`TokenGroupRatioDisplayMode`、`controller.{GetPricing,GetUserGroups}`、`model.{formatUserLogs,formatAdminLogGroupRatioDisplay}`、`GroupRatioForm`、`LogSettingsSection`、`usage-logs/lib/group-ratio.ts`、locale files、`DEVELOPMENT.md` | `go test ./...`、`bun run typecheck`、目标文件 oxlint、`bun run build`、`bun run i18n:sync`、`bun run format:check`、倍率前端单元测试、`git diff --check` 均通过。 |
 | 2026-07-25 | 合并上游 `QuantumNous/new-api@84a79b68`。默认前端从 `web/default` 迁移为单一 `web/`，删除 Classic；接入新的 Dashboard access/refresh token 与 `UserSession`/`AuthFlow`/`ExternalIdentityClaim` 架构、模型未定价视图、用户排序/额度溢出保护、渠道模型发现以及计费、缓存写入、图片流和任务退款修复。Julong 的代理、兑换码退款、订阅抵扣、IP 管理、错误工单、客服/公告/自定义端点、系统设置权限、生图日志/轮询/白名单/MinIO 和品牌资源全部迁移保留；修复禁用用户未撤销活跃会话、新认证测试未迁移 `BlockedIP` 的合并回归，并将后端开发命令更新为可包含全部主包文件的 `go run .`。 | `upstream/main@84a79b68`、`controller/{user,model_list_test,auth_session_test,theme_compat_test}.go`、`middleware/{auth,auth_test}.go`、`model/{user,user_session,auth_flow,external_identity_claim,blocked_ip}.go`、`relay/channel/openai/relay_image.go`、`router/api-router.go`、`web/`、`README.md`、`electron/README.md`、`DEVELOPMENT.md` | `go test ./...`、`bun run typecheck`、`bun run i18n:sync`、`bun run format:check`、`bun run build`、Julong 差异文件 oxlint（0 错误、1 个已知 `react/no-danger` 警告）、`git diff --check` 均通过；全量 `bun run lint` 仍有上游基线 364 错误/73 警告，已列入已知问题。 |
 | 2026-07-20 | 日志维护的 MinIO 生图存储增加“清空全部 MinIO 图片”：二次确认框展示实际 Bucket/对象前缀，确认按钮强制等待 10 秒；后端通过 `delete_all` 任务 payload 复用 `image_storage_cleanup` 锁，只删除当前配置前缀下的全部非目录对象，与过期清理互斥，Bucket 其他对象不受影响。无数据库字段或迁移。 | `service.DeleteAllGeneratedImageObjects`、`imageObjectStorageScanMode`、`controller.StartImageObjectStoragePurge`、`POST /api/performance/image-storage/purge`、`imageStorageCleanupHandler`、`ImageStorageSettings`、locale files、`生图轮询接口说明.md` | `go test ./...`、`go test ./service ./controller ./router`、`bun run typecheck`、目标 `oxfmt/oxlint`、`bun run build`、`bun run i18n:sync`、`git diff --check` |
 | 2026-07-19 | 为 MinIO 生图对象增加可配置生命周期与每日自动清理：默认 30 天、`0` 永久保留，按对象 `LastModified` 删除当前 Bucket 前缀下的过期图片；复用系统任务数据库租约实现每日及手动清理互斥。日志维护页新增保留天数、对象数、占用空间、过期数量、最近清理时间、统计刷新和立即清理确认。 | `ImageGenerationStorageRetentionDays`、`ImageGenerationStorageLastCleanupAt`、`image_storage_cleanup`、`service/image_object_storage.go`、`controller/image_object_storage.go`、`GET /api/performance/image-storage/stats`、`POST /api/performance/image-storage/cleanup`、`ImageStorageSettings`、locale files、`生图轮询接口说明.md` | `go test ./...`、`bun run typecheck`、目标 `oxfmt/oxlint`、`bun run build`、`bun run i18n:sync`、`git diff --check` |

@@ -4690,6 +4690,7 @@
     "The public URL of your server, used for OAuth callbacks, webhooks, and other external integrations": "L'URL publique de votre serveur, utilisée pour les rappels OAuth, les webhooks et autres intégrations externes",
     "The requested chat preset does not exist or has been removed.": "Le préréglage de discussion demandé n'existe pas ou a été supprimé.",
     "The reset request stays disabled until a credit is available.": "La demande de réinitialisation reste désactivée tant qu’aucun crédit n’est disponible.",
+    "The selected ratio is saved with each new log. Changing this setting does not rewrite historical logs or affect actual billing.": "Le ratio sélectionné est enregistré dans chaque nouveau journal. Modifier ce réglage ne réécrit pas l'historique et n'affecte pas la facturation réelle.",
     "The setup wizard will use this database during initialization.": "L'assistant de configuration utilisera cette base de données lors de l'initialisation.",
     "The site is not available at the moment.": "Le site n'est pas disponible pour le moment.",
     "The slug is appended to the URL:": "Le slug est ajouté à l'URL :",

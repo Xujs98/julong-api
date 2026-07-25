@@ -4690,6 +4690,7 @@
     "The public URL of your server, used for OAuth callbacks, webhooks, and other external integrations": "The public URL of your server, used for OAuth callbacks, webhooks, and other external integrations",
     "The requested chat preset does not exist or has been removed.": "The requested chat preset does not exist or has been removed.",
     "The reset request stays disabled until a credit is available.": "The reset request stays disabled until a credit is available.",
+    "The selected ratio is saved with each new log. Changing this setting does not rewrite historical logs or affect actual billing.": "The selected ratio is saved with each new log. Changing this setting does not rewrite historical logs or affect actual billing.",
     "The setup wizard will use this database during initialization.": "The setup wizard will use this database during initialization.",
     "The site is not available at the moment.": "The site is not available at the moment.",
     "The slug is appended to the URL:": "The slug is appended to the URL:",

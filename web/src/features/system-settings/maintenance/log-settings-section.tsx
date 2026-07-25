@@ -1149,7 +1149,7 @@ export function LogSettingsSection({
                     </FormControl>
                     <FormDescription>
                       {t(
-                        'This setting changes display only and never changes actual billing.'
+                        'The selected ratio is saved with each new log. Changing this setting does not rewrite historical logs or affect actual billing.'
                       )}
                     </FormDescription>
                     <FormMessage />
