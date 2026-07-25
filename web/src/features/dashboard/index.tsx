@@ -114,6 +114,12 @@ const LazyFlowCharts = lazy(() =>
   }))
 )
 
+const LazyGroupAnalysis = lazy(() =>
+  import('./components/groups/group-analysis').then((m) => ({
+    default: m.GroupAnalysis,
+  }))
+)
+
 function LogStatCardsFallback() {
   return (
     <div className='overflow-hidden rounded-lg border'>
@@ -190,6 +196,9 @@ const SECTION_META: Record<DashboardSectionId, { titleKey: string }> = {
   users: {
     titleKey: 'User Analytics',
   },
+  groups: {
+    titleKey: 'Group Data Analysis',
+  },
 }
 
 export function Dashboard() {
@@ -205,6 +214,9 @@ export function Dashboard() {
   const [chartPreferences, setChartPreferences] =
     useState<DashboardChartPreferences>(() => getSavedChartPreferences())
   const [modelFilters, setModelFilters] = useState<DashboardFilters>(() =>
+    buildDefaultDashboardFilters(getSavedChartPreferences())
+  )
+  const [groupFilters, setGroupFilters] = useState<DashboardFilters>(() =>
     buildDefaultDashboardFilters(getSavedChartPreferences())
   )
   const [userChartsFilters, setUserChartsFilters] = useState<UserChartsFilters>(
@@ -227,6 +239,14 @@ export function Dashboard() {
     setModelFilters(buildDefaultDashboardFilters(chartPreferences))
   }, [chartPreferences])
 
+  const handleGroupFilterChange = useCallback((filters: DashboardFilters) => {
+    setGroupFilters(filters)
+  }, [])
+
+  const handleResetGroupFilters = useCallback(() => {
+    setGroupFilters(buildDefaultDashboardFilters(chartPreferences))
+  }, [chartPreferences])
+
   const handleDataUpdate = useCallback(
     (data: QuotaDataItem[], loading: boolean) => {
       setModelData(data)
@@ -246,12 +266,16 @@ export function Dashboard() {
 
   const meta = SECTION_META[activeSection] ?? SECTION_META.overview
   const isAdmin = Boolean(userRole && userRole >= ROLE.ADMIN)
+  const isRoot = userRole === ROLE.SUPER_ADMIN
   const visibleSections = useMemo(
     () =>
       DASHBOARD_SECTION_IDS.filter(
-        (section) => section !== 'overview' && (section !== 'users' || isAdmin)
+        (section) =>
+          section !== 'overview' &&
+          (section !== 'users' || isAdmin) &&
+          (section !== 'groups' || isRoot)
       ),
-    [isAdmin]
+    [isAdmin, isRoot]
   )
   const handleSectionChange = useCallback(
     (section: string) => {
@@ -316,7 +340,18 @@ export function Dashboard() {
         />
       </>
     ) : null
-  const sectionActions = modelActions ?? flowActions
+  const groupActions =
+    activeSection === 'groups' ? (
+      <ModelsFilter
+        preferences={chartPreferences}
+        currentFilters={groupFilters}
+        onFilterChange={handleGroupFilterChange}
+        onReset={handleResetGroupFilters}
+        titleKey='Group Analytics Filters'
+        descriptionKey='Filter the group analytics view by time range and user.'
+      />
+    ) : null
+  const sectionActions = modelActions ?? flowActions ?? groupActions
 
   return (
     <SectionPageLayout>
@@ -413,6 +448,13 @@ export function Dashboard() {
                   filters={modelFilters}
                   sensitiveVisible={flowSensitiveVisible}
                 />
+              </Suspense>
+            </FadeIn>
+          )}
+          {activeSection === 'groups' && isRoot && (
+            <FadeIn>
+              <Suspense fallback={<ModelChartsFallback />}>
+                <LazyGroupAnalysis filters={groupFilters} />
               </Suspense>
             </FadeIn>
           )}

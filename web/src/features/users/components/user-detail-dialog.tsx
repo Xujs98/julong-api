@@ -104,9 +104,18 @@ function InfoItem(props: {
   )
 }
 
-function Metric(props: { label: string; value: ReactNode }) {
+function Metric(props: {
+  label: string
+  value: ReactNode
+  className?: string
+}) {
   return (
-    <div className='border-r px-3 py-3 even:border-r-0 sm:border-r sm:border-b-0 sm:px-4 sm:last:border-r-0 sm:even:border-r [&:nth-child(-n+2)]:border-b'>
+    <div
+      className={cn(
+        'border-r border-b px-3 py-3 even:border-r-0 sm:border-b-0 sm:border-r sm:px-4 sm:even:border-r sm:last:border-r-0',
+        props.className
+      )}
+    >
       <div className='text-muted-foreground text-xs leading-4'>
         {props.label}
       </div>
@@ -372,6 +381,7 @@ export function UserDetailDialog() {
     ? USER_ROLES[user.role as keyof typeof USER_ROLES]
     : null
   const totalTokens = summaryQuery.data?.total_tokens ?? 0
+  const todayTokens = summaryQuery.data?.today_tokens ?? 0
   const logs = logsQuery.data || []
   const daysSinceLastLogin = getDaysSinceLastLogin(user?.last_login_at)
   let logRows: ReactNode
@@ -436,7 +446,7 @@ export function UserDetailDialog() {
               </div>
             </div>
           </div>
-          <div className='grid grid-cols-2 border-t sm:grid-cols-4'>
+          <div className='grid grid-cols-2 border-t sm:grid-cols-5'>
             <Metric
               label={t('Wallet balance')}
               value={formatQuota(user?.quota ?? 0)}
@@ -456,8 +466,19 @@ export function UserDetailDialog() {
               }
             />
             <Metric
+              label={t("Today's token consumption")}
+              value={
+                summaryQuery.isLoading ? (
+                  <Skeleton className='h-5 w-16' />
+                ) : (
+                  formatTokens(todayTokens)
+                )
+              }
+            />
+            <Metric
               label={t('Requests:')}
               value={formatNumber(user?.request_count ?? 0)}
+              className='col-span-2 border-r-0 sm:col-span-1'
             />
           </div>
         </DialogHeader>

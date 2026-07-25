@@ -51,7 +51,7 @@ import {
   renderAuditContent,
 } from '../../lib/format'
 import {
-  getActualGroupRatio,
+  getAdminGroupRatioDetails,
   getDisplayedGroupRatio,
 } from '../../lib/group-ratio'
 import {
@@ -555,36 +555,71 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
         other,
         log.user_display_group_ratio
       )
-      const actualGroupRatio = isAdmin ? getActualGroupRatio(other) : null
-      const hasUserRatioDisplay =
-        isAdmin && other?.user_group_ratio_display_enabled != null
-      const userDisplayedGroupRatio =
-        log.user_display_group_ratio ??
-        other?.user_group_ratio_display_value ??
-        null
+      const adminRatioDetails = isAdmin
+        ? getAdminGroupRatioDetails(other, log.user_display_group_ratio)
+        : null
       const hasRatioDetails = isAdmin
-        ? actualGroupRatio != null || hasUserRatioDisplay
+        ? Boolean(adminRatioDetails?.applicable)
         : groupRatio != null
       const userDisplayedRatioText =
-        other?.user_group_ratio_display_enabled !== false &&
-        userDisplayedGroupRatio != null
-          ? `${formatRatioCompact(userDisplayedGroupRatio)}x`
+        adminRatioDetails?.displayEnabled && adminRatioDetails.displayed != null
+          ? `${formatRatioCompact(adminRatioDetails.displayed)}x`
           : t('Not shown')
       let ratioDetails: ReactNode = null
-      if (isAdmin) {
+      if (isAdmin && adminRatioDetails?.applicable) {
+        const actualRatioText =
+          adminRatioDetails.actual != null
+            ? `${formatRatioCompact(adminRatioDetails.actual)}x`
+            : '-'
         ratioDetails = (
-          <span className='text-muted-foreground/70 inline-flex flex-wrap gap-x-1 tabular-nums'>
-            {actualGroupRatio != null ? (
-              <span>
-                {t('Actual ratio')} {formatRatioCompact(actualGroupRatio)}x
-              </span>
-            ) : null}
-            {hasUserRatioDisplay ? (
-              <span>
-                {t('User-visible ratio')} {userDisplayedRatioText}
-              </span>
-            ) : null}
-          </span>
+          <TooltipProvider delay={200}>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <span
+                    className='text-muted-foreground/70 cursor-help tabular-nums'
+                    aria-label={t('Actual ratio / user-visible ratio')}
+                  />
+                }
+              >
+                {actualRatioText} / {userDisplayedRatioText}
+              </TooltipTrigger>
+              <TooltipContent side='top' className='w-72 space-y-2 p-3'>
+                <div className='text-foreground text-xs font-semibold'>
+                  {t('Actual ratio / user-visible ratio')}
+                </div>
+                <div className='grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-1 text-xs tabular-nums'>
+                  {other?.group_ratio != null && (
+                    <>
+                      <span className='text-muted-foreground'>
+                        {t('Pricing group ratio')}
+                      </span>
+                      <span>{formatRatioCompact(other.group_ratio)}x</span>
+                    </>
+                  )}
+                  {other?.user_group_ratio != null &&
+                    other.user_group_ratio !== -1 && (
+                      <>
+                        <span className='text-muted-foreground'>
+                          {t('Special ratio')}
+                        </span>
+                        <span>
+                          {formatRatioCompact(other.user_group_ratio)}x
+                        </span>
+                      </>
+                    )}
+                  <span className='text-muted-foreground'>
+                    {t('Actual ratio (including special rules)')}
+                  </span>
+                  <span>{actualRatioText}</span>
+                  <span className='text-muted-foreground'>
+                    {t('User-visible ratio for this log')}
+                  </span>
+                  <span>{userDisplayedRatioText}</span>
+                </div>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         )
       } else if (groupRatio != null) {
         ratioDetails = (

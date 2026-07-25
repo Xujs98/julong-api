@@ -20,6 +20,7 @@ import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
 
 import {
+  getAdminGroupRatioDetails,
   getActualGroupRatio,
   getDisplayedGroupRatio,
 } from '../lib/group-ratio.ts'
@@ -31,6 +32,43 @@ describe('getActualGroupRatio', () => {
       0.095
     )
     assert.equal(getActualGroupRatio({ group_ratio: 1 }), 1)
+  })
+})
+
+describe('getAdminGroupRatioDetails', () => {
+  test('returns the real ratio and the display snapshot stored with the log', () => {
+    assert.deepEqual(
+      getAdminGroupRatioDetails(
+        {
+          group_ratio: 1,
+          user_group_ratio: 2,
+          user_group_ratio_display_enabled: true,
+          user_group_ratio_display_value: 1.5,
+        },
+        1.2
+      ),
+      {
+        actual: 2,
+        displayed: 1.2,
+        displayEnabled: true,
+        applicable: true,
+      }
+    )
+  })
+
+  test('keeps the real ratio while marking the user-visible ratio as disabled', () => {
+    assert.deepEqual(
+      getAdminGroupRatioDetails({
+        group_ratio: 2,
+        user_group_ratio_display_enabled: false,
+      }),
+      {
+        actual: 2,
+        displayed: null,
+        displayEnabled: false,
+        applicable: true,
+      }
+    )
   })
 })
 

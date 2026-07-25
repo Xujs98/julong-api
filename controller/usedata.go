@@ -60,6 +60,19 @@ func GetQuotaDatesByUser(c *gin.Context) {
 	})
 }
 
+func GetQuotaDatesByGroup(c *gin.Context) {
+	startTimestamp, endTimestamp, ok := parseFlowQuotaTimeRange(c)
+	if !ok {
+		return
+	}
+	data, err := model.GetQuotaDataGroupByUseGroup(startTimestamp, endTimestamp, c.Query("username"))
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, data)
+}
+
 func GetUserQuotaDates(c *gin.Context) {
 	userId := c.GetInt("id")
 	startTimestamp, _ := strconv.ParseInt(c.Query("start_timestamp"), 10, 64)

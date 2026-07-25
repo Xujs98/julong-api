@@ -42,6 +42,27 @@ type QuotaDataLogParams struct {
 	UserDisplayTokenUsed *int
 }
 
+type GroupQuotaData struct {
+	UseGroup  string `json:"group" gorm:"column:use_group"`
+	Quota     int64  `json:"quota"`
+	Count     int64  `json:"count"`
+	TokenUsed int64  `json:"token_used"`
+	UserCount int64  `json:"user_count"`
+}
+
+type GroupQuotaDataTotals struct {
+	Quota      int64 `json:"quota"`
+	Count      int64 `json:"count"`
+	TokenUsed  int64 `json:"token_used"`
+	UserCount  int64 `json:"user_count"`
+	GroupCount int   `json:"group_count"`
+}
+
+type GroupQuotaDataAnalytics struct {
+	Items  []GroupQuotaData     `json:"items"`
+	Totals GroupQuotaDataTotals `json:"totals"`
+}
+
 func UpdateQuotaData() {
 	for {
 		if common.DataExportEnabled {
@@ -198,6 +219,36 @@ func GetQuotaDataGroupByUser(startTime int64, endTime int64) (quotaData []*Quota
 		Group("username, created_at").
 		Find(&quotaDatas).Error
 	return quotaDatas, err
+}
+
+func GetQuotaDataGroupByUseGroup(startTime int64, endTime int64, username string) (*GroupQuotaDataAnalytics, error) {
+	items := make([]GroupQuotaData, 0)
+	itemsQuery := DB.Table("quota_data").
+		Select("use_group, COALESCE(SUM(quota), 0) AS quota, COALESCE(SUM(count), 0) AS count, COALESCE(SUM(token_used), 0) AS token_used, COUNT(DISTINCT user_id) AS user_count").
+		Where("created_at >= ? AND created_at <= ?", startTime, endTime)
+	if username != "" {
+		itemsQuery = itemsQuery.Where("username = ?", username)
+	}
+	if err := itemsQuery.Group("use_group").Order("quota DESC, use_group ASC").Scan(&items).Error; err != nil {
+		return nil, err
+	}
+
+	var totals GroupQuotaDataTotals
+	totalsQuery := DB.Table("quota_data").
+		Select("COALESCE(SUM(quota), 0) AS quota, COALESCE(SUM(count), 0) AS count, COALESCE(SUM(token_used), 0) AS token_used, COUNT(DISTINCT user_id) AS user_count").
+		Where("created_at >= ? AND created_at <= ?", startTime, endTime)
+	if username != "" {
+		totalsQuery = totalsQuery.Where("username = ?", username)
+	}
+	if err := totalsQuery.Scan(&totals).Error; err != nil {
+		return nil, err
+	}
+	totals.GroupCount = len(items)
+
+	return &GroupQuotaDataAnalytics{
+		Items:  items,
+		Totals: totals,
+	}, nil
 }
 
 func GetAllQuotaDates(startTime int64, endTime int64, username string) (quotaData []*QuotaData, err error) {

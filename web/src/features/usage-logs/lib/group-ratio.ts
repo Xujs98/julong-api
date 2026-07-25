@@ -61,3 +61,30 @@ export function getDisplayedGroupRatio(
 
   return null
 }
+
+export interface AdminGroupRatioDetails {
+  actual: number | null
+  displayed: number | null
+  displayEnabled: boolean
+  applicable: boolean
+}
+
+export function getAdminGroupRatioDetails(
+  other: LogOtherData | null,
+  storedDisplayRatio?: number | null
+): AdminGroupRatioDetails {
+  const actual = getActualGroupRatio(other)
+  const hasDisplaySetting = other?.user_group_ratio_display_enabled != null
+  const displayEnabled = other?.user_group_ratio_display_enabled !== false
+  const displayed = displayEnabled
+    ? (storedDisplayRatio ?? other?.user_group_ratio_display_value ?? null)
+    : null
+
+  return {
+    actual,
+    displayed:
+      displayed != null && Number.isFinite(displayed) ? displayed : null,
+    displayEnabled,
+    applicable: actual != null || hasDisplaySetting,
+  }
+}

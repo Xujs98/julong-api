@@ -26,6 +26,7 @@
 | 代理功能 | 已实现，仍需持续 QA | 代理折扣、代理生成兑换码、代理所属用户、代理充值链接、退款日志等。 |
 | 错误反馈工单 | 已实现 | 500 页面跳转 `/error-report`，管理员/root 在 `/error-reports` 查看。 |
 | 用户详情、IP 与请求内容审计 | 已实现 | 后台用户详情显示登录 IP 历史并支持多选封禁/解封；用户列表标记共享 IP 和已封 IP；管理员/root 可按用户开启新请求的上下文与提示词记录。 |
+| 用户今日 Token 与分组分析 | 已实现 | 用户详情同时显示总 Token 和按服务器本地自然日统计的今日 Token；root 数据看板按分组分析真实额度、请求数、Token 和去重用户数。 |
 | 兑换码搜索 | 已实现 | 后台兑换码支持按兑换码 key、生成者用户名/显示名、名称、ID、状态搜索。 |
 | 签到额度预览 | 已实现 | 计费与支付中的签到奖励输入框显示格式化额度预览。 |
 | 生图日志与异步生图 | 已实现 | 开启生图日志后，`async: true` 立即创建 `pending` 日志并返回任务 ID，支持 API Key 轮询、状态更新、图片读取和后台 JSON 详情；关闭日志时退回同步且不存图。 |
@@ -316,7 +317,7 @@ curl http://localhost:3000/api/error-reports \
 | DELETE | `/api/user/:id` | `controller.DeleteUser` | 删除用户 | path `id` | success | 完成 |
 | POST | `/api/user/manage` | `controller.ManageUser` | 晋升/降级/启用/禁用/删除/额度调整；`disable` 同时封禁全部已知登录 IP | `{id,action,...}` | partial `User` | 完成 |
 | GET | `/api/user/agent-detail/:id` | `controller.AdminGetAgentDetail` | 代理详情弹窗 | path `id` | `{agent,users,redemptions}` | 完成 |
-| GET | `/api/user/:id/usage-summary` | `controller.AdminGetUserUsageSummary` | 用户详情弹窗总 token 消耗 | path `id` | `{total_tokens:number}` | 完成 |
+| GET | `/api/user/:id/usage-summary` | `controller.AdminGetUserUsageSummary` | 用户详情弹窗总 Token 和今日 Token 消耗 | path `id` | `{total_tokens:number,today_tokens:number}` | 完成；管理员仅可查看低权限用户，root 可查看全部 |
 | GET | `/api/user/:id/login-ips` | `controller.AdminGetUserLoginIPs` | 用户历史登录 IP、登录次数、最后使用时间、封禁和共享状态 | path `id` | `UserLoginIPStat[]` | 完成；管理员仅可查看低权限用户，root 可查看全部 |
 | PUT | `/api/user/:id/login-ips` | `controller.AdminUpdateUserLoginIPs` | 批量封禁或解封登录 IP | path `id`；`{ips:string[],blocked:boolean}`，1-100 个标准 IPv4/IPv6 | success | 完成；管理员仅可操作低权限用户，root 可操作全部；非法 IP 返回参数错误 |
 | GET | `/api/user/:id/request-content` | `controller.AdminListUserRequestContentLogs` | 读取指定用户的请求内容记录开关和最近记录摘要 | path `id` | `{enabled:boolean,items:UserRequestContentLog[],max_items:50}`；列表不返回压缩正文 | 完成；管理员仅可查看低权限用户，root 可查看全部 |
@@ -372,6 +373,8 @@ curl -X DELETE 'http://localhost:3000/api/user/12/request-content' \
 curl 'http://localhost:3000/api/user/1/usage-summary' \
   -H 'Authorization: Bearer <dashboard-access-token>'
 ```
+
+成功响应的 `data.total_tokens` 汇总该用户全部 `type=2` 消费日志的输入与输出 Token；`data.today_tokens` 使用后端服务器本地时区，从今日 `00:00:00`（含）统计到明日 `00:00:00`（不含）。非法用户 ID 返回标准参数错误，日志库查询失败返回标准 API 错误，未登录或权限不足分别返回 401/403。
 
 ### 支付、钱包、订阅 API
 
@@ -479,6 +482,7 @@ curl 'http://localhost:3000/api/redemption/search?keyword=agent001&p=1&page_size
 | GET | `/api/log/token` | `controller.GetLogByKey` | Token 日志查询；倍率字段遵循普通用户日志显示配置 | Token read-only | 完成 |
 | GET | `/api/data/` | `controller.GetAllQuotaDates` | 额度日期数据 | 管理员/root | 完成 |
 | GET | `/api/data/users` | `controller.GetQuotaDatesByUser` | 用户额度日期数据 | 管理员/root | 完成 |
+| GET | `/api/data/groups` | `controller.GetQuotaDatesByGroup` | 按实际使用分组聚合额度、请求数、Token 和去重用户数 | Root | 完成 |
 | GET | `/api/data/self` | `controller.GetUserQuotaDates` | 当前用户额度日期数据；额度和 Token 使用日志写入时保存的展示聚合值 | 用户 | 完成 |
 | GET | `/api/data/flow` | `controller.GetAllFlowQuotaDates` | 流量数据 | 管理员/root | 完成 |
 | GET | `/api/data/flow/self` | `controller.GetUserFlowQuotaDates` | 当前用户分流数据；额度和 Token 使用展示聚合值，调用次数保持真实 | 用户 | 完成 |
@@ -489,6 +493,40 @@ curl 'http://localhost:3000/api/redemption/search?keyword=agent001&p=1&page_size
 - 管理员/root 的 `/api/log/` 保留日志原始 `other.group_ratio`、`other.user_group_ratio` 和持久化展示快照，前端据此同时展示“实际倍率”和“用户展示倍率”。`other.user_group_ratio_display_enabled/value` 仅为响应辅助字段，不写回数据库。
 - 普通用户 `/api/log/self` 和 Token `/api/log/token` 不返回真实倍率。总开关打开时将持久化快照映射为展示倍率，关闭时剥离倍率；列表响应副本中的 `quota`、输入/输出 Tokens、缓存 Tokens 和 `fee_quota` 按快照倍率换算。旧日志的快照字段为 `NULL`，只能回退到该日志自身保存的真实倍率，绝不按当前手动值或当前分组定价重新计算。
 - `/api/log/self/stat` 的“用量”继续读取真实 `sum(quota)`，RPM 继续统计真实请求数；仅 TPM 按最近 60 秒日志的快照倍率换算。`/api/log/stat` 管理员统计保持全部真实。
+
+`GET /api/data/groups` 请求参数：必填 query `start_timestamp`、`end_timestamp`（Unix 秒，均大于 0 且结束时间不早于开始时间）；可选 `username` 精确筛选用户，`default_time` 仅为前端兼容参数。成功响应如下，`items[].user_count` 是分组内 `COUNT(DISTINCT user_id)`，`totals.user_count` 是整个时间范围内全局去重用户数，不会把跨分组用户重复相加：
+
+```json
+{
+  "success": true,
+  "message": "",
+  "data": {
+    "items": [
+      {
+        "group": "codex-v1",
+        "quota": 250000,
+        "count": 42,
+        "token_used": 128000,
+        "user_count": 6
+      }
+    ],
+    "totals": {
+      "quota": 250000,
+      "count": 42,
+      "token_used": 128000,
+      "user_count": 6,
+      "group_count": 1
+    }
+  }
+}
+```
+
+该接口由 `middleware.RootAuth()` 强制限制为 root；普通用户/管理员返回 403，未登录返回 401。时间参数缺失、非数字、非正数或倒置时返回 `{success:false,message:"invalid ..."}`；数据库聚合失败走标准 API 错误。调用示例：
+
+```bash
+curl 'http://localhost:3000/api/data/groups?start_timestamp=1784908800&end_timestamp=1784995200&username=alice' \
+  -H 'Authorization: Bearer <root-dashboard-access-token>'
+```
 
 ### 生图日志 API
 
@@ -805,7 +843,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 | `Token` | `model/token.go` | API keys | `id`、`user_id`、`key`、`name`、额度字段、模型限制、group、allow IPs | Relay 鉴权和计费使用。 | 活跃 |
 | `Channel` | `model/channel.go` | 上游 provider 渠道 | `id`、`type`、`key`、`base_url`、`models`、`group`、状态、priority/weight、计费/override 字段 | 由 distributor middleware 选择。敏感 key 需要脱敏。 | 活跃 |
 | `Ability` | `model/ability.go` | 渠道/模型能力映射 | channel/model/group enabled 字段 | 用于模型可用性和路由。 | 活跃 |
-| `Log` | `model/log.go` | 使用日志和审计日志 | `id`、`user_id`、`created_at`、`type`、`content`、`username`、`token_name`、`model_name`、`quota`、`prompt_tokens`、`completion_tokens`、`channel_id`、`ip`、`request_id`、`upstream_request_id`、可空 `user_display_group_ratio`、`other` | 可位于独立日志库/ClickHouse。`user_display_group_ratio` 是日志创建时面向用户的展示倍率快照，只供响应格式化和 UI 展示使用；实际扣费仍由 `quota` 及计费服务完成。`GetUserLoginIPStats` 聚合登录 IP、次数和最后时间；`SumUserUsedToken` 提供总 token 消耗。 | 活跃 |
+| `Log` | `model/log.go` | 使用日志和审计日志 | `id`、`user_id`、`created_at`、`type`、`content`、`username`、`token_name`、`model_name`、`quota`、`prompt_tokens`、`completion_tokens`、`channel_id`、`ip`、`request_id`、`upstream_request_id`、可空 `user_display_group_ratio`、`other` | 可位于独立日志库/ClickHouse。`user_display_group_ratio` 是日志创建时面向用户的展示倍率快照，只供响应格式化和 UI 展示使用；实际扣费仍由 `quota` 及计费服务完成。`GetUserLoginIPStats` 聚合登录 IP、次数和最后时间；`SumUserUsedToken` 提供总 Token，`SumUserUsedTokenBetween` 按半开时间区间汇总消费 Token。 | 活跃 |
 | `ImageGenerationLog` / `ImageGenerationImage` | `model/image_generation_log.go` | 同步生图日志与本地异步任务 | 日志含 `id`；索引 `task_id/status/user_id/username/token_id/channel_id/model_name/request_id/created_at/updated_at`；`prompt/size/quality/image_count/quota/use_time`；内部 `images/response` JSON。`ImageGenerationImage` JSON 字段为 `type/value/bucket/mime_type/sha256/size/revised_prompt`，`type` 支持 `local/remote/minio`。 | 任务属于一个 User/Token；MinIO 元数据写入现有 `images` 文本 JSON，不新增数据库列或表。旧 local/remote JSON 继续兼容；AutoMigrate 无额外迁移。 | 活跃 |
 | `UserRequestContentLog` | `model/user_request_content_log.go` | 按用户留存 Relay 请求上下文与提示词 | `id int` 主键；`user_id int` 与 `created_at int64` 组成排序索引；唯一 `request_id varchar(64)`；`model_name/token_name varchar(191)`、`request_path varchar(255)`、索引 `status varchar(16)`、`error_message text`、`original_size/captured_size int`、`truncated bool`、`compressed_json []byte` | 逻辑上属于 `User`，硬删除用户时同步删除；不建立数据库外键以兼容现有删除流程。正文先脱敏、限制为 4 MiB，再 gzip 存主库；创建和清理旧记录位于同一事务，每用户只保留最近 50 条。 | 活跃 |
 | `Redemption` | `model/redemption.go` | 兑换码 | 唯一 `key`、`user_id` 生成者、`status`、`name`、`quota`、`created_time`、`redeemed_time`、`used_user_id`、`expired_time`、`agent_charge`、软删除 | 生成者显示字段是 transient。搜索支持 code、生成者、ID、名称。代理退款使用 `agent_charge`。 | 活跃 |
@@ -832,7 +870,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 | `SystemTask` / `SystemTaskLock` | `model/system_task.go` | 后台维护任务 | task id/type/status/payload/state/lock；`image_storage_cleanup` 用于每日及手动 MinIO 图片清理，`payload.delete_all=true` 表示清空当前对象前缀，否则只清理过期对象 | 数据库活动键和租约保证同一任务类型在多节点只执行一次；全量清空复用现有类型和 payload，不新增字段或迁移。 | 活跃 |
 | `CasbinRule` / `AuthzRole` | `model/casbin_rule.go`、`model/authz_role.go` | 细粒度管理员权限 | casbin p/v 字段和角色分配 | Admin authz catalog。 | 活跃 |
 | `ErrorReport` | `model/error_report.go` | 500 页面反馈 | `id`、`created_at`、索引 `user_id`、`username`、`title`、`message`、`page_url`、`error_status`、`user_agent`、`stack`、`ip` | Julong 二开。已加入两种迁移流程。 | 活跃 |
-| `QuotaData` / `FlowQuotaData` | `model/usedata.go`、`model/usedata_flow.go` | Dashboard 聚合用量 | `user_id/username/model_name/created_at/use_group/token_id/channel_id/node_name/count/quota/token_used`，以及可空 `user_display_quota/user_display_token_used` | 真实 `quota/token_used` 供管理员/root 看板使用；展示列在消费日志产生时按同一倍率快照计算，供普通用户模型分析和分流看板使用。调用次数始终真实。 | 活跃 |
+| `QuotaData` / `FlowQuotaData` | `model/usedata.go`、`model/usedata_flow.go` | Dashboard 聚合用量 | `user_id/username/model_name/created_at/use_group/token_id/channel_id/node_name/count/quota/token_used`，以及可空 `user_display_quota/user_display_token_used` | 真实 `quota/token_used` 供管理员/root 看板使用；展示列在消费日志产生时按同一倍率快照计算，供普通用户模型分析和分流看板使用。`GetQuotaDataGroupByUseGroup` 以 `use_group` 聚合真实额度/请求/Token，并用 `COUNT(DISTINCT user_id)` 计算分组及全局用户数。`GroupQuotaData/GroupQuotaDataTotals/GroupQuotaDataAnalytics` 仅为查询响应结构，不建表。 | 活跃 |
 
 `setting/console_setting/config.go:ConsoleSetting` 是存储于 `Option` 的运行时 JSON 配置结构，不单独建表。`custom_endpoints` 保存最多 20 条 `{id,name,url,description}`，经 URL、长度和危险内容校验后通过公开状态接口下发。公告相关字段为 `announcements`（JSON 数组字符串）和 `announcements_enabled`（公告总开关）。单条公告包含 `id/title/content/status/notificationMode/startTime/endTime/audienceMode/conditionGroups`；状态为 `draft/active/archived`，通知方式为 `silent/popup`，条件组之间为 OR、组内条件为 AND，当前支持订阅套餐包含/排除和余额比较。旧公告读取时自动归一化为展示中、静默、所有用户，无需数据库迁移。
 
@@ -845,6 +883,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 - 日志表结构变化可能还需要更新 `migrateLOGDB()`。
 - `Log.user_display_group_ratio` 由 `migrateLOGDB()` 自动迁移：SQLite/MySQL/PostgreSQL 使用 GORM `AutoMigrate` 补充可空浮点列，ClickHouse 使用 `ALTER TABLE logs ADD COLUMN IF NOT EXISTS user_display_group_ratio Nullable(Float64)`；旧记录保持 `NULL` 并仅回退到该记录自身 `other` 中保存的真实倍率，不读取当前展示配置。
 - `QuotaData.user_display_quota/user_display_token_used` 由主库 GORM `AutoMigrate` 补充可空整型列；启动迁移随后执行 `backfillQuotaDataUserDisplayMetrics`，只把旧记录的 `NULL` 展示值回填为该聚合记录原有真实值。新请求同时累加真实列和展示列，不改写真实看板数据。
+- 今日 Token 和分组分析仅新增查询函数及响应 DTO，不新增表、字段、索引或迁移；部署时无需单独执行数据库脚本。分组数据依赖现有 `quota_data` 定时落库，因此与模型调用分析保持相同的数据刷新节奏。
 - PostgreSQL 保留字字段（如 `key`）要像 `model/redemption.go` 一样做数据库类型判断并加引号。
 - SQLite 字段变更必须用已有本地 `one-api.db` 测试迁移。
 - 仅用于 JSON 响应、不入库的字段要加 `gorm:"-:all"`。
@@ -904,15 +943,15 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 | --- | --- | --- | --- | --- |
 | `auth` | `sign-in`、`sign-up`、`forgot-password`、`otp`、`passkey`、`secure-verification`、`components/oauth-providers.tsx` | 登录、注册、找回密码、OAuth、Passkey、2FA | `/api/user/*`、`/api/oauth/*`、`/api/verify` | 完成 |
 | `home` | `index.tsx`、hero/gateway/stat 组件 | 公开首页内容 | `/api/home_page_content` | 完成 |
-| `dashboard` | `index.tsx`、`section-registry.tsx`、stats/charts libs | 用户/管理员看板统计 | `/api/data*`、`/api/dashboard*`、`/api/status` | 完成 |
+| `dashboard` | `index.tsx:Dashboard`、`section-registry.tsx`、`components/groups/group-analysis.tsx:GroupAnalysis`、stats/charts libs | 用户/管理员/root 看板统计；`GroupAnalysis(filters)` 仅对 root 注册，复用模型分析时间/用户筛选，展示四项总计、可切换额度/请求/Token/用户数的分组横向柱图和完整明细表 | `/api/data*`、`/api/dashboard*`、`/api/status`；依赖 React Query、VChart、Tabs/Table、主题与 i18n | 完成 |
 | `announcements` | `api.ts`、`types.ts` | 公告类型和当前用户公告查询；供顶部通知中心、自动弹窗和后台公告编辑器共享 | `/api/announcements` | 完成 |
 | `custom-endpoints` | `types.ts`、`system-settings/content/custom-endpoints-section.tsx`、`keys/components/custom-endpoints.tsx` | 自定义端点共享类型、后台编辑器、API 密钥页复制条和悬停介绍 | `/api/option`、`/api/status` | 完成 |
 | `channels` | `channels-table.tsx`、`channels-columns.tsx`、dialogs/drawers、`api.ts` | 上游渠道 CRUD/测试/配置 | `/api/channel*` | 完成 |
 | `keys` | `api-keys-table.tsx`、`api-keys-columns.tsx`、`api-keys-mutate-drawer.tsx`、`api-key-group-combobox.tsx`、mutate/delete dialogs | 用户 API key 管理；令牌分组下拉框和列表倍率统一读取 `/api/user/self/groups`，可配置展示真实特殊倍率或基础定价分组倍率 | `/api/token*`、`/api/user/self/groups` | 完成 |
-| `usage-logs` | `usage-logs-table.tsx`、普通/绘图/生图/任务 columns、`lib/group-ratio.ts`、`image-generation-task-dialog.tsx`、图片预览和筛选组件 | 普通消费日志、Midjourney 绘图日志、同步/异步生图日志、媒体任务日志；普通用户令牌下方倍率支持关闭、跟随实际倍率、跟随定价分组基础倍率或统一手动展示，管理员/root 同时看到请求真实倍率和当前用户展示倍率；未完成生图按 root 配置频率刷新（默认 15 秒），任务 ID 弹窗由页面级状态持有并按需请求 JSON，不受表格轮询重建影响 | `/api/log*`、`/api/mj`、`/api/image-generation-logs*`、`/api/task` | 完成 |
+| `usage-logs` | `usage-logs-table.tsx`、普通/绘图/生图/任务 columns、`lib/group-ratio.ts:getAdminGroupRatioDetails`、`image-generation-task-dialog.tsx`、图片预览和筛选组件 | 普通消费日志、Midjourney 绘图日志、同步/异步生图日志、媒体任务日志；普通用户令牌下方倍率支持关闭、跟随实际倍率、跟随定价分组基础倍率或统一手动展示；管理员/root 紧凑显示“真实倍率 / 用户展示倍率”，悬浮查看定价分组、特殊、最终真实和本日志展示快照；未完成生图按 root 配置频率刷新（默认 15 秒） | `/api/log*`、`/api/mj`、`/api/image-generation-logs*`、`/api/task`；依赖 Tooltip、React Query、i18n | 完成 |
 | `wallet` | recharge cards、subscription cards、affiliate rewards、redemption hook | 钱包充值、兑换码、订阅 | `/api/user/topup*`、`/api/subscription*`、支付 API | 完成 |
 | `redemption-codes` | `redemptions-table.tsx`、`redemptions-columns.tsx`、mutate/delete dialogs | 管理员/代理兑换码管理 | `/api/redemption*`、`/api/user/agent/topup-link` | 完成 |
-| `users` | `users-table.tsx`、`users-columns.tsx`、`users-mutate-drawer.tsx`、`agent-detail-dialog.tsx`、`user-detail-dialog.tsx`、`user-request-content-panel.tsx:UserRequestContentPanel/RequestContentDetailDialog`、`lib/request-content.ts:extractRequestConversation` | 后台用户管理、代理详情、用户详情；详情弹窗包含头像身份摘要、关键指标带、订阅摘要、IP 管理及按用户开启的上下文与提示词审计。审计面板负责开关、最近 50 条摘要、清空、结构化对话、原始 JSON 复制/下载和移动端布局；解析工具兼容 Chat Completions、Responses 与 legacy prompt | `/api/user*`、`/api/log`、`/api/subscription/admin/*`、`/api/user/:id/request-content*`；依赖 React Query、Dialog/Tabs/ScrollArea/Switch、i18n | 完成 |
+| `users` | `users-table.tsx`、`users-columns.tsx`、`users-mutate-drawer.tsx`、`agent-detail-dialog.tsx`、`user-detail-dialog.tsx:UserDetailDialog/Metric`、`user-request-content-panel.tsx:UserRequestContentPanel/RequestContentDetailDialog`、`lib/request-content.ts:extractRequestConversation` | 后台用户管理、代理详情、用户详情；详情弹窗包含钱包、已用额度、总 Token、今日 Token、请求数、订阅摘要、IP 管理及按用户开启的上下文与提示词审计。今日 Token 按服务器本地自然日读取；审计面板负责开关、最近 50 条摘要、清空、结构化对话、原始 JSON 复制/下载和移动端布局 | `/api/user*`、`/api/log`、`/api/subscription/admin/*`、`/api/user/:id/request-content*`；依赖 React Query、Dialog/Tabs/ScrollArea/Switch、i18n | 完成 |
 | `models` | metadata/deployment tables and drawers | 模型元数据和部署管理 | `/api/models*`、`/api/vendors*`、`/api/deployments*` | 完成 |
 | `subscriptions` | subscription table/drawers | 后台订阅计划/用户绑定 | `/api/subscription/admin*` | 完成 |
 | `system-settings` | `auth`、`billing`、`content`、`models`、`request-limits`、`maintenance`、`integrations`、`general` 下的 section registries；`general/system-info-section.tsx:SystemInfoSection`、`maintenance/log-settings-section.tsx:LogSettingsSection`、`models/group-ratio-form.tsx:GroupRatioForm`、内部 `ImageStorageSettings` | 管理员/root 运行时设置；`SystemInfoSection` 维护站点信息并支持徽标 URL、本地上传、Object URL 保存前预览、移除和上传回滚，依赖 `useSettingsForm.externalDirty`、`uploadSiteLogo/deleteSiteLogo`、React Hook Form、Zod 与 i18n；`LogSettingsSection` 负责消费/生图日志、普通用户日志倍率展示、轮询频率和图片读取白名单；`GroupRatioForm` 独立配置模型广场和令牌分组倍率展示模式；`ImageStorageSettings` 负责 MinIO 凭据、生命周期和清理；初始化请求并行，活动清理任务每 5 秒查询一次 | `/api/option*`、`/api/site-assets/logo*`、`/api/performance/image-storage*`、`/api/system-task/*` | 完成 |
@@ -972,13 +1011,13 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 相关文件：
 
 - 前端：`web/src/features/users/components/user-detail-dialog.tsx`、`users-columns.tsx`、`users/index.tsx`。
-- 后端：`controller/user.go:AdminGetUserUsageSummary/AdminGetUserLoginIPs/AdminUpdateUserLoginIPs`、`model/log.go:GetUserLoginIPStats/SumUserUsedToken`、`model/blocked_ip.go`。
+- 后端：`controller/user.go:AdminGetUserUsageSummary/AdminGetUserLoginIPs/AdminUpdateUserLoginIPs`、`model/log.go:GetUserLoginIPStats/SumUserUsedToken/SumUserUsedTokenBetween`、`model/blocked_ip.go`。
 
 行为：
 
 - 后台用户表点击用户名打开详情弹窗。
-- 显示基本信息、最近登录时间和 IP、动态计算的未登录天数、格式化额度、请求数、总 token 消耗及最近 20 条消费日志；无成功登录记录时显示“从未登录”。
-- 总 token 消耗按 `user_id` 从日志表求和。
+- 显示基本信息、最近登录时间和 IP、动态计算的未登录天数、格式化额度、请求数、总 Token、今日 Token 及最近 20 条消费日志；无成功登录记录时显示“从未登录”。
+- 总 Token 按 `user_id` 汇总全部消费日志；今日 Token 按后端服务器本地自然日的半开区间汇总，跨日后自动归零重算。
 - 代理详情和用户详情采用统一的紧凑弹窗布局：身份摘要置顶，关键额度/用量指标独立展示，基本信息使用单一网格面板。
 - 弹窗限制在可视区域内滚动；移动端详情单列显示，日志、兑换码和所属用户表格支持横向滚动。
 - 用户详情基本信息区显示有效订阅摘要；前端并行读取用户订阅与套餐列表，展示套餐名称、状态、剩余额度、到期时间和有效订阅数量。
@@ -1078,6 +1117,9 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 - 兑换码列表移动端操作优化。
 - 从 500 页面提交/后台查看错误反馈。
 - 后台用户列表点击用户名查看用户详情。
+- 用户详情展示总 Token 和服务器本地自然日的今日 Token 消耗。
+- root 数据看板提供分组数据分析，展示每个分组的真实额度、请求数、Token 和去重用户数。
+- 管理员/root 使用日志以“真实倍率 / 用户展示倍率”显示，并可悬浮查看完整倍率来源。
 - 管理员/root 可查看、批量封禁/解封用户历史登录 IP；禁用用户自动封禁其已有 IP，用户列表标记共享和已封 IP。
 - 管理员/root 可在用户详情中按用户开启上下文与提示词记录，查看失败/成功请求的结构化对话和脱敏 JSON，并清空记录。
 - 禁用用户提升认证版本并撤销全部活跃 Dashboard 会话，避免旧 access/refresh token 继续使用。
@@ -1108,6 +1150,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 
 | 日期 | 变更 | 更新文件/API/模型 | 验证 |
 | --- | --- | --- | --- |
+| 2026-07-25 | 用户详情新增今日 Token；root 数据看板新增分组数据分析，按时间/用户筛选并展示四项总计、分组指标图和明细表；管理员/root 使用日志令牌倍率改为“真实倍率 / 用户展示倍率”紧凑显示，悬浮展示基础定价分组、特殊倍率、最终真实倍率和本日志展示快照。统计均读取既有日志/`quota_data`，不修改扣费、余额、订阅结算或数据库结构。 | `model.{SumUserUsedTokenBetween,GetQuotaDataGroupByUseGroup,GroupQuotaDataAnalytics}`、`controller.{AdminGetUserUsageSummary,GetQuotaDatesByGroup}`、`GET /api/data/groups`、`GET /api/user/:id/usage-summary`、`GroupAnalysis`、`UserDetailDialog`、`getAdminGroupRatioDetails`、locale files、`DEVELOPMENT.md` | `go test ./...`、`go test ./model ./controller`、`bun run typecheck`、目标文件 oxlint、倍率前端单元测试、`bun run i18n:sync`、`bun run format:check`、`bun run build`、`git diff --check` 均通过。 |
 | 2026-07-25 | 系统设置“站点与品牌 → 系统信息 → 徽标 URL”新增本地上传、保存前预览和移除。候选图片仅支持 PNG/JPG/WebP、最大 5 MB/4096 像素，随机命名并原子写入持久化目录；点击保存后才更新 `Logo` Option 和 `/api/status`，保存失败自动清理候选文件，替换/清空自动删除旧本地徽标。公开读取使用不可猜路径、长期缓存及 `nosniff`；上传/删除严格复用 `site.system-info` 权限。无数据库结构迁移。 | `controller/site_asset.go`、`controller/site_asset_test.go`、`controller.UpdateOption`、`GET/POST/DELETE /api/site-assets/logo*`、`SystemInfoSection`、`useSettingsForm.externalDirty/onExternalReset`、`uploadSiteLogo/deleteSiteLogo`、locale files、`DEVELOPMENT.md` | `go test ./...`、`go test ./controller ./router`、`bun run typecheck`、目标文件 `oxlint/oxfmt`、`bun run i18n:sync`、`bun run format:check`、`bun run build`、`git diff --check` 均通过；重启后 `3000/5173` 返回 200，非法徽标读取返回 404，未鉴权上传返回 401。 |
 | 2026-07-25 | 后台用户详情新增“上下文与提示词”审计。管理员/root 可按用户开启，仅记录开启后的 Relay DTO；请求发送上游前创建 `pending`，完成后标记 `success/error`，支持结构化对话、脱敏 JSON 查看/复制/下载和二次确认清空。每用户事务保留最近 50 条，单条脱敏正文严格限制 4 MiB 并 gzip 存主库；已知凭据和内嵌 Base64 媒体不入库。新增用户字段、记录表、Redis cache schema 3 和硬删除级联清理，不接触计费及上游请求。 | `User.request_content_logging_enabled`、`UserRequestContentLog`、`service.CaptureUserRequestContent/FinishUserRequestContent`、`GET/PUT/DELETE /api/user/:id/request-content`、`GET /api/user/:id/request-content/:log_id`、`UserRequestContentPanel`、`extractRequestConversation`、locale files、`DEVELOPMENT.md` | `go test ./...`、`go test ./model ./service ./controller ./middleware`、`bun run typecheck`、Bun 前端单元测试、目标文件 `oxlint/oxfmt`、`bun run i18n:sync`、`bun run format:check`、`bun run build`、`git diff --check` 均通过；本地 SQLite AutoMigrate 表/字段及 `3000/5173` HTTP 200 已验证。 |
 | 2026-07-25 | 使用日志新增持久化的用户展示倍率快照。每条新日志在写入时按 `system/pricing_group/manual` 保存 `user_display_group_ratio`，后续修改展示配置只影响新日志，历史日志不再被重新计算；旧日志回退到自身保存的真实倍率。普通用户单条日志响应中的费用、输入/输出 Tokens 和缓存 Tokens 按“展示倍率 / 真实倍率”换算；日志页顶部“用量”保持真实扣费、RPM 保持真实请求数，TPM 按最近 60 秒各日志快照换算。普通用户数据看板的额度、Token、TPM 和消费/分流图表读取新增的展示聚合列，调用次数/RPM 保持真实；管理员/root 的日志和看板保留真实数据。所有展示字段均在计费完成后写入，未接入预扣费、结算、退款、余额或订阅链路，数据库原 `quota/token` 和真实倍率字段保持不变。 | `Log.UserDisplayGroupRatio`、`QuotaData.{UserDisplayQuota,UserDisplayTokenUsed}`、`model.{createLog,snapshotUserDisplayGroupRatio,applyUserLogDisplayMetrics,userVisibleLogDataMetrics,formatUserLogs,SumUserVisibleUsedQuota,formatAdminLogGroupRatioDisplay,GetQuotaDataByUserId,getSelfFlowQuotaData}`、`controller.GetLogsSelfStat`、`migrateLOGDB`、ClickHouse `logs.user_display_group_ratio`、usage logs schema/columns/tests、locale files、`DEVELOPMENT.md` | `go test ./...`、`go test ./model`、`go test ./controller`、`bun run typecheck`、目标文件 oxlint、倍率前端单元测试、`bun run build`、`bun run i18n:sync`、`bun run format:check`、`git diff --check` 均通过。 |

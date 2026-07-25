@@ -33,6 +33,31 @@ export interface QuotaDataItem {
   quota?: number
 }
 
+export interface GroupQuotaDataItem {
+  group: string
+  quota: number
+  count: number
+  token_used: number
+  user_count: number
+}
+
+export interface GroupQuotaDataAnalytics {
+  items: GroupQuotaDataItem[]
+  totals: {
+    quota: number
+    count: number
+    token_used: number
+    user_count: number
+    group_count: number
+  }
+}
+
+export type GroupAnalyticsMetric =
+  | 'quota'
+  | 'count'
+  | 'token_used'
+  | 'user_count'
+
 export interface FlowQuotaDataItem {
   user_id?: number
   username?: string

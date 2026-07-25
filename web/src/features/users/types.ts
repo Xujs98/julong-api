@@ -169,6 +169,7 @@ export interface AgentDetailData {
 
 export interface UserUsageSummary {
   total_tokens: number
+  today_tokens: number
 }
 
 export interface UserLoginIP {

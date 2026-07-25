@@ -432,18 +432,25 @@ func GetUser(c *gin.Context) {
 }
 
 func AdminGetUserUsageSummary(c *gin.Context) {
-	id, err := strconv.Atoi(c.Param("id"))
+	user, ok := getManageableUserFromParam(c)
+	if !ok {
+		return
+	}
+	totalTokens, err := model.SumUserUsedToken(user.Id)
 	if err != nil {
 		common.ApiError(c, err)
 		return
 	}
-	totalTokens, err := model.SumUserUsedToken(id)
+	now := time.Now()
+	todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	todayTokens, err := model.SumUserUsedTokenBetween(user.Id, todayStart.Unix(), todayStart.AddDate(0, 0, 1).Unix())
 	if err != nil {
 		common.ApiError(c, err)
 		return
 	}
 	common.ApiSuccess(c, gin.H{
 		"total_tokens": totalTokens,
+		"today_tokens": todayTokens,
 	})
 }
 

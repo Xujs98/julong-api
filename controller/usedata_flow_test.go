@@ -17,6 +17,12 @@ type flowQuotaResponse struct {
 	Data    []model.FlowQuotaData `json:"data"`
 }
 
+type groupQuotaResponse struct {
+	Success bool                          `json:"success"`
+	Message string                        `json:"message"`
+	Data    model.GroupQuotaDataAnalytics `json:"data"`
+}
+
 func setupFlowControllerTestDB(t *testing.T) {
 	t.Helper()
 	db := setupModelListControllerTestDB(t)
@@ -97,6 +103,27 @@ func TestGetAllFlowQuotaDatesUsesRootDimensions(t *testing.T) {
 	require.Equal(t, "primary", payload.Data[0].TokenName)
 	require.Equal(t, "default", payload.Data[0].UseGroup)
 	require.Equal(t, "east", payload.Data[0].ChannelName)
+}
+
+func TestGetQuotaDatesByGroupReturnsAggregatedDashboardContract(t *testing.T) {
+	setupFlowControllerTestDB(t)
+
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodGet, "/api/data/groups?start_timestamp=1000&end_timestamp=2000", nil)
+
+	GetQuotaDatesByGroup(ctx)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	var payload groupQuotaResponse
+	require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &payload))
+	require.True(t, payload.Success, payload.Message)
+	require.Len(t, payload.Data.Items, 2)
+	require.Equal(t, "default", payload.Data.Items[0].UseGroup)
+	require.Equal(t, int64(100), payload.Data.Items[0].Quota)
+	require.Equal(t, int64(170), payload.Data.Totals.Quota)
+	require.Equal(t, int64(2), payload.Data.Totals.UserCount)
+	require.Equal(t, 2, payload.Data.Totals.GroupCount)
 }
 
 func TestGetUserFlowQuotaDatesRestrictsToAuthenticatedUser(t *testing.T) {

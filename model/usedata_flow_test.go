@@ -245,6 +245,46 @@ func TestSelfQuotaDataUsesDisplayMetricsWhileAdminKeepsActualMetrics(t *testing.
 	require.Equal(t, 1140, adminRows[0].TokenUsed)
 }
 
+func TestGetQuotaDataGroupByUseGroupAggregatesMetricsAndDistinctUsers(t *testing.T) {
+	truncateTables(t)
+	seedFlowQuotaData(t, QuotaData{
+		UserID: 1, Username: "alice", UseGroup: "vip", CreatedAt: 1000,
+		Count: 2, Quota: 100, TokenUsed: 40,
+	})
+	seedFlowQuotaData(t, QuotaData{
+		UserID: 1, Username: "alice", UseGroup: "vip", CreatedAt: 1100,
+		Count: 1, Quota: 50, TokenUsed: 20,
+	})
+	seedFlowQuotaData(t, QuotaData{
+		UserID: 2, Username: "bob", UseGroup: "vip", CreatedAt: 1200,
+		Count: 3, Quota: 75, TokenUsed: 30,
+	})
+	seedFlowQuotaData(t, QuotaData{
+		UserID: 1, Username: "alice", UseGroup: "default", CreatedAt: 1300,
+		Count: 4, Quota: 25, TokenUsed: 10,
+	})
+	seedFlowQuotaData(t, QuotaData{
+		UserID: 3, Username: "outside", UseGroup: "ignored", CreatedAt: 3000,
+		Count: 99, Quota: 999, TokenUsed: 999,
+	})
+
+	analytics, err := GetQuotaDataGroupByUseGroup(900, 2000, "")
+	require.NoError(t, err)
+	require.Len(t, analytics.Items, 2)
+	require.Equal(t, GroupQuotaData{
+		UseGroup: "vip", Quota: 225, Count: 6, TokenUsed: 90, UserCount: 2,
+	}, analytics.Items[0])
+	require.Equal(t, GroupQuotaDataTotals{
+		Quota: 250, Count: 10, TokenUsed: 100, UserCount: 2, GroupCount: 2,
+	}, analytics.Totals)
+
+	aliceAnalytics, err := GetQuotaDataGroupByUseGroup(900, 2000, "alice")
+	require.NoError(t, err)
+	require.Len(t, aliceAnalytics.Items, 2)
+	require.Equal(t, int64(175), aliceAnalytics.Totals.Quota)
+	require.Equal(t, int64(1), aliceAnalytics.Totals.UserCount)
+}
+
 func TestSaveQuotaDataCacheIncrementsActualAndDisplayMetricsIndependently(t *testing.T) {
 	truncateTables(t)
 	CacheQuotaDataLock.Lock()
