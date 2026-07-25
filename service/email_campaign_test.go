@@ -163,3 +163,44 @@ func TestOneShotEmailCampaignRetriesOnlyFailedDeliveries(t *testing.T) {
 	assert.Equal(t, 2, deliveries[0].AttemptCount)
 	assert.WithinDuration(t, time.Now(), time.Unix(deliveries[0].SentAt, 0), 2*time.Second)
 }
+
+func TestSearchEmailCampaignUserOptionsUsesFuzzyIdUsernameAndEmail(t *testing.T) {
+	db := setupEmailCampaignTestDB(t)
+	users := []model.User{
+		{Id: 1201, Username: "alpha-user", Email: "alpha@example.com", Password: "password", Status: common.UserStatusEnabled, Role: common.RoleCommonUser, AffCode: "campaign-1201"},
+		{Id: 3302, Username: "billing", Email: "sales+team@example.com", Password: "password", Status: common.UserStatusEnabled, Role: common.RoleCommonUser, AffCode: "campaign-3302"},
+		{Id: 4403, Username: "disabled-alpha", Email: "disabled@example.com", Password: "password", Status: common.UserStatusDisabled, Role: common.RoleCommonUser, AffCode: "campaign-4403"},
+		{Id: 5504, Username: "no-email", Email: "", Password: "password", Status: common.UserStatusEnabled, Role: common.RoleCommonUser, AffCode: "campaign-5504"},
+	}
+	require.NoError(t, db.Create(&users).Error)
+
+	byID, total, err := model.SearchEmailCampaignUserOptions("201", 0, 20)
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), total)
+	require.Len(t, byID, 1)
+	assert.Equal(t, 1201, byID[0].Id)
+
+	byUsername, total, err := model.SearchEmailCampaignUserOptions("ALPHA", 0, 20)
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), total)
+	require.Len(t, byUsername, 1)
+	assert.Equal(t, 1201, byUsername[0].Id)
+
+	byEmail, total, err := model.SearchEmailCampaignUserOptions("+team@", 0, 20)
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), total)
+	require.Len(t, byEmail, 1)
+	assert.Equal(t, 3302, byEmail[0].Id)
+
+	secondPage, total, err := model.SearchEmailCampaignUserOptions("", 1, 1)
+	require.NoError(t, err)
+	assert.Equal(t, int64(2), total)
+	require.Len(t, secondPage, 1)
+	assert.Equal(t, 1201, secondPage[0].Id)
+
+	resolved, err := model.GetEmailCampaignUserOptionsByIds([]int{1201, 3302, 4403, 5504})
+	require.NoError(t, err)
+	require.Len(t, resolved, 2)
+	assert.Equal(t, 3302, resolved[0].Id)
+	assert.Equal(t, 1201, resolved[1].Id)
+}

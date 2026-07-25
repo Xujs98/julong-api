@@ -724,6 +724,8 @@ curl 'https://api.julongkj.top/v1/images/generations/img_xxx/images/0/presign?ex
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | GET | `/api/email-campaigns` | `controller.ListEmailCampaigns` | 分页读取邮件任务 | query：`p`、`page_size<=100`、可选 `search`（名称/主题）、`status` | `{page,page_size,total,items:EmailCampaign[]}` | 鉴权失败 401/403；数据库错误 `success:false` | 完成 |
 | GET | `/api/email-campaigns/stats` | `controller.GetEmailCampaignStats` | 获取全部任务累计统计 | 无 | `{campaign_count,recipient_count,success_count,failed_count}` | 鉴权失败 401/403；数据库错误 `success:false` | 完成 |
+| GET | `/api/email-campaigns/users` | `controller.SearchEmailCampaignUsers` | 为指定收件人选择器分页搜索可收件用户 | query：`keyword` 可选，按 ID、用户名、邮箱模糊匹配；`p`、`page_size<=100` | `{page,page_size,total,items:[{id,username,display_name,email}]}` | 仅返回状态正常、未删除且注册邮箱非空的用户；数据库错误 `success:false` | 完成 |
+| POST | `/api/email-campaigns/users/resolve` | `controller.ResolveEmailCampaignUsers` | 按 ID 批量回显已选收件人 | `{user_ids:number[]}`，去重后最多 5000 个 | `[{id,username,display_name,email}]` | 忽略非正数、已删除、已禁用或无邮箱用户；超过 5000 个返回 `success:false` | 完成 |
 | GET | `/api/email-campaigns/:id` | `controller.GetEmailCampaign` | 获取单个任务及结构化指定用户 ID | path `id>0` | `EmailCampaign`，`target_user_ids` 为 `number[]` | ID 非法或不存在返回 `success:false` | 完成 |
 | POST | `/api/email-campaigns/preview` | `controller.PreviewEmailCampaign` | 在保存前统计符合条件且已有注册邮箱的收件记录数 | 请求体同创建接口，`draft` 忽略 | `{recipient_count}` | 模式、范围、条件或指定用户非法时 `success:false` | 完成 |
 | POST | `/api/email-campaigns` | `controller.CreateEmailCampaign` | 创建草稿或立即/定时/条件任务 | `EmailCampaignRequest`；`draft=true` 仅保存，否则立即启用 | 新建 `EmailCampaign` | 非草稿时 SMTP 未配置、定时时间已过或参数非法均拒绝；立即/条件任务入调度队列 | 完成 |
@@ -748,6 +750,16 @@ curl -X POST 'http://localhost:3000/api/email-campaigns' \
   -H 'Authorization: Bearer <dashboard-access-token>' \
   -H 'Content-Type: application/json' \
   -d '{"name":"订阅到期提醒","subject":"订阅将在 {{days_remaining}} 天后到期","content":"<p>{{subscription_name}} 到期时间：{{subscription_end_time}}</p>","mode":"conditional","target_type":"active_subscribers","target_user_ids":[],"trigger_type":"subscription_expiring","trigger_days":3,"scheduled_at":0,"draft":false}'
+
+# 按 ID、用户名或邮箱模糊搜索可收件用户
+curl 'http://localhost:3000/api/email-campaigns/users?keyword=alice&p=1&page_size=20' \
+  -H 'Authorization: Bearer <dashboard-access-token>'
+
+# 回显邮件任务中已保存的指定用户
+curl -X POST 'http://localhost:3000/api/email-campaigns/users/resolve' \
+  -H 'Authorization: Bearer <dashboard-access-token>' \
+  -H 'Content-Type: application/json' \
+  -d '{"user_ids":[12,25,38]}'
 ```
 
 ### 后台设置与运维 API
@@ -984,7 +996,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 | `dashboard` | `index.tsx:Dashboard`、`section-registry.tsx`、`components/groups/group-analysis.tsx:GroupAnalysis`、stats/charts libs | 用户/管理员/root 看板统计；`GroupAnalysis(filters)` 仅对 root 注册，复用模型分析时间/用户筛选，展示四项总计、可切换额度/请求/Token/用户数的分组横向柱图和完整明细表 | `/api/data*`、`/api/dashboard*`、`/api/status`；依赖 React Query、VChart、Tabs/Table、主题与 i18n | 完成 |
 | `announcements` | `api.ts`、`types.ts` | 公告类型和当前用户公告查询；供顶部通知中心、自动弹窗和后台公告编辑器共享 | `/api/announcements` | 完成 |
 | `custom-endpoints` | `types.ts`、`system-settings/content/custom-endpoints-section.tsx`、`keys/components/custom-endpoints.tsx` | 自定义端点共享类型、后台编辑器、API 密钥页复制条和悬停介绍 | `/api/option`、`/api/status` | 完成 |
-| `system-settings/operations/email-campaigns` | `email-campaigns-section.tsx:EmailCampaignsSection/Stat`、`email-campaigns-api.ts`、`operations/section-registry.tsx` | 运维邮件任务列表、全量统计、创建/编辑弹窗、收件人预估、草稿/启用/暂停/失败重试/删除、逐用户发送明细和变量插入；关键本地状态为 `page/form/editing/selected/deliveryPage`，组件无外部参数 | `/api/email-campaigns*`；依赖 React Query、Dialog、Table、Badge、NativeSelect、i18n | 完成 |
+| `system-settings/operations/email-campaigns` | `email-campaigns-section.tsx:EmailCampaignsSection/Stat`、`email-campaign-user-picker.tsx:EmailCampaignUserPicker`、`email-campaigns-api.ts`、`operations/section-registry.tsx` | 运维邮件任务列表、全量统计、创建/编辑弹窗、收件人预估、草稿/启用/暂停/失败重试/删除、逐用户发送明细和变量插入；指定用户通过分页弹层多选，使用 300ms 防抖按 ID、用户名或邮箱模糊搜索，并回显已保存用户；关键本地状态为 `page/form/editing/selected/deliveryPage` | `/api/email-campaigns*`；依赖 React Query、Popover/Command/Checkbox、Dialog、Table、Badge、NativeSelect、i18n | 完成 |
 | `channels` | `channels-table.tsx`、`channels-columns.tsx`、dialogs/drawers、`api.ts` | 上游渠道 CRUD/测试/配置 | `/api/channel*` | 完成 |
 | `keys` | `api-keys-table.tsx`、`api-keys-columns.tsx`、`api-keys-mutate-drawer.tsx`、`api-key-group-combobox.tsx`、mutate/delete dialogs | 用户 API key 管理；令牌分组下拉框和列表倍率统一读取 `/api/user/self/groups`，可配置展示真实特殊倍率或基础定价分组倍率 | `/api/token*`、`/api/user/self/groups` | 完成 |
 | `usage-logs` | `usage-logs-table.tsx`、普通/绘图/生图/任务 columns、`lib/group-ratio.ts:getAdminGroupRatioDetails`、`image-generation-task-dialog.tsx`、图片预览和筛选组件 | 普通消费日志、Midjourney 绘图日志、同步/异步生图日志、媒体任务日志；普通用户令牌下方倍率支持关闭、跟随实际倍率、跟随定价分组基础倍率或统一手动展示；管理员/root 紧凑显示“真实倍率 / 用户展示倍率”，悬浮查看定价分组、特殊、最终真实和本日志展示快照；未完成生图按 root 配置频率刷新（默认 15 秒） | `/api/log*`、`/api/mj`、`/api/image-generation-logs*`、`/api/task`；依赖 Tooltip、React Query、i18n | 完成 |
@@ -1192,6 +1204,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 
 | 日期 | 变更 | 更新文件/API/模型 | 验证 |
 | --- | --- | --- | --- |
+| 2026-07-25 | 邮件任务“指定用户”从手填 ID 升级为用户列表多选器：支持 300ms 防抖、分页浏览及按用户 ID/用户名/邮箱跨数据库模糊搜索，创建和编辑任务均可回显已选用户；搜索接口仅暴露正常且有注册邮箱的收件人最小字段，并复用邮件群发独立权限。无数据库结构变化，不影响既有任务。 | `model.SearchEmailCampaignUserOptions/GetEmailCampaignUserOptionsByIds`、`GET /api/email-campaigns/users`、`POST /api/email-campaigns/users/resolve`、`EmailCampaignUserPicker`、`email-campaigns-api.ts`、`email-campaigns-section.tsx`、`DEVELOPMENT.md` | `go test ./...`、搜索/分页/回显过滤回归测试、`bun run typecheck`、目标文件 oxlint、`bun run build`、`bun run i18n:sync`、`bun run format:check`、`git diff --check` 均通过。 |
 | 2026-07-25 | 系统设置“运维”新增邮件群发：使用用户注册邮箱，支持全部正常用户、有效订阅用户或指定用户立即/定时发送，以及每日扫描的订阅到期条件提醒；支持草稿、暂停、启用、失败重试、收件人预估、模板变量和逐用户发送明细。新增 `EmailCampaign/EmailDelivery`，通过 `email_campaign_dispatch` 系统任务数据库租约保证多实例只执行一次；订阅提醒按任务、用户、订阅和到期时间唯一去重，续订后可再次提醒。root 可通过 `operations.email-campaigns` 单独授权管理员。 | `model/email_campaign.go`、`service/email_campaign.go`、`controller/email_campaign.go`、`email_campaign_dispatch`、`/api/email-campaigns*`、`EmailCampaignsSection`、`email-campaigns-api.ts`、权限目录、AutoMigrate、locale files、`DEVELOPMENT.md` | `go test ./...`、邮件条件去重/续订再提醒/失败重试回归测试、`bun run typecheck`、目标文件 oxlint、`bun run build`、`bun run i18n:sync`、`bun run format:check`、`git diff --check` 均通过；全量 lint 仍受已记录的上游基线错误影响。 |
 | 2026-07-25 | 用户详情新增今日 Token；root 数据看板新增分组数据分析，按时间/用户筛选并展示四项总计、分组指标图和明细表；管理员/root 使用日志令牌倍率改为“真实倍率 / 用户展示倍率”紧凑显示，悬浮展示基础定价分组、特殊倍率、最终真实倍率和本日志展示快照。统计均读取既有日志/`quota_data`，不修改扣费、余额、订阅结算或数据库结构。 | `model.{SumUserUsedTokenBetween,GetQuotaDataGroupByUseGroup,GroupQuotaDataAnalytics}`、`controller.{AdminGetUserUsageSummary,GetQuotaDatesByGroup}`、`GET /api/data/groups`、`GET /api/user/:id/usage-summary`、`GroupAnalysis`、`UserDetailDialog`、`getAdminGroupRatioDetails`、locale files、`DEVELOPMENT.md` | `go test ./...`、`go test ./model ./controller`、`bun run typecheck`、目标文件 oxlint、倍率前端单元测试、`bun run i18n:sync`、`bun run format:check`、`bun run build`、`git diff --check` 均通过。 |
 | 2026-07-25 | 系统设置“站点与品牌 → 系统信息 → 徽标 URL”新增本地上传、保存前预览和移除。候选图片仅支持 PNG/JPG/WebP、最大 5 MB/4096 像素，随机命名并原子写入持久化目录；点击保存后才更新 `Logo` Option 和 `/api/status`，保存失败自动清理候选文件，替换/清空自动删除旧本地徽标。公开读取使用不可猜路径、长期缓存及 `nosniff`；上传/删除严格复用 `site.system-info` 权限。无数据库结构迁移。 | `controller/site_asset.go`、`controller/site_asset_test.go`、`controller.UpdateOption`、`GET/POST/DELETE /api/site-assets/logo*`、`SystemInfoSection`、`useSettingsForm.externalDirty/onExternalReset`、`uploadSiteLogo/deleteSiteLogo`、locale files、`DEVELOPMENT.md` | `go test ./...`、`go test ./controller ./router`、`bun run typecheck`、目标文件 `oxlint/oxfmt`、`bun run i18n:sync`、`bun run format:check`、`bun run build`、`git diff --check` 均通过；重启后 `3000/5173` 返回 200，非法徽标读取返回 404，未鉴权上传返回 401。 |

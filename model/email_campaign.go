@@ -104,6 +104,13 @@ type EmailCampaignStats struct {
 	FailedCount    int64 `json:"failed_count"`
 }
 
+type EmailCampaignUserOption struct {
+	Id          int    `json:"id"`
+	Username    string `json:"username"`
+	DisplayName string `json:"display_name"`
+	Email       string `json:"email"`
+}
+
 func (campaign *EmailCampaign) BeforeCreate(_ *gorm.DB) error {
 	now := common.GetTimestamp()
 	if campaign.CreatedAt == 0 {
@@ -194,6 +201,47 @@ func GetEmailCampaignStats() (EmailCampaignStats, error) {
 		"COUNT(*) AS campaign_count, COALESCE(SUM(recipient_count), 0) AS recipient_count, COALESCE(SUM(success_count), 0) AS success_count, COALESCE(SUM(failed_count), 0) AS failed_count",
 	).Scan(&stats).Error
 	return stats, err
+}
+
+func SearchEmailCampaignUserOptions(keyword string, startIdx, pageSize int) ([]EmailCampaignUserOption, int64, error) {
+	query := DB.Model(&User{}).
+		Select("id, username, display_name, email").
+		Where("status = ? AND email <> '' AND deleted_at IS NULL", common.UserStatusEnabled)
+	if keyword = strings.TrimSpace(keyword); keyword != "" {
+		idTextExpression := "CAST(id AS TEXT)"
+		if common.UsingMainDatabase(common.DatabaseTypeMySQL) {
+			idTextExpression = "CAST(id AS CHAR)"
+		}
+		like := "%" + strings.ToLower(keyword) + "%"
+		query = query.Where(
+			"("+idTextExpression+" LIKE ? OR LOWER(username) LIKE ? OR LOWER(email) LIKE ?)",
+			like, like, like,
+		)
+	}
+
+	var total int64
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	if pageSize <= 0 {
+		pageSize = 20
+	}
+	var users []EmailCampaignUserOption
+	err := query.Order("id DESC").Offset(startIdx).Limit(pageSize).Scan(&users).Error
+	return users, total, err
+}
+
+func GetEmailCampaignUserOptionsByIds(userIDs []int) ([]EmailCampaignUserOption, error) {
+	if len(userIDs) == 0 {
+		return []EmailCampaignUserOption{}, nil
+	}
+	var users []EmailCampaignUserOption
+	err := DB.Model(&User{}).
+		Select("id, username, display_name, email").
+		Where("id IN ? AND status = ? AND email <> '' AND deleted_at IS NULL", userIDs, common.UserStatusEnabled).
+		Order("id DESC").
+		Scan(&users).Error
+	return users, err
 }
 
 func PauseEmailCampaign(id int64) error {

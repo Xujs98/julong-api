@@ -276,6 +276,8 @@ func SetApiRouter(router *gin.Engine) {
 		{
 			emailCampaignRoute.GET("", controller.ListEmailCampaigns)
 			emailCampaignRoute.GET("/stats", controller.GetEmailCampaignStats)
+			emailCampaignRoute.GET("/users", controller.SearchEmailCampaignUsers)
+			emailCampaignRoute.POST("/users/resolve", controller.ResolveEmailCampaignUsers)
 			emailCampaignRoute.POST("", controller.CreateEmailCampaign)
 			emailCampaignRoute.POST("/preview", controller.PreviewEmailCampaign)
 			emailCampaignRoute.GET("/:id", controller.GetEmailCampaign)

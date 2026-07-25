@@ -51,6 +51,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { formatTimestampToDate } from '@/lib/format'
 
 import { SettingsSection } from '../components/settings-section'
+import { EmailCampaignUserPicker } from './email-campaign-user-picker'
 import {
   activateEmailCampaign,
   createEmailCampaign,
@@ -78,7 +79,7 @@ type CampaignForm = {
   content: string
   mode: EmailCampaignMode
   targetType: EmailCampaignTarget
-  targetUserIds: string
+  targetUserIds: number[]
   triggerDays: string
   scheduledAt: string
 }
@@ -89,7 +90,7 @@ const emptyForm = (): CampaignForm => ({
   content: '',
   mode: 'immediate',
   targetType: 'all_users',
-  targetUserIds: '',
+  targetUserIds: [],
   triggerDays: '3',
   scheduledAt: '',
 })
@@ -108,24 +109,20 @@ function campaignToForm(campaign: EmailCampaign): CampaignForm {
     content: campaign.content,
     mode: campaign.mode,
     targetType: campaign.target_type,
-    targetUserIds: campaign.target_user_ids.join(', '),
+    targetUserIds: [...campaign.target_user_ids],
     triggerDays: String(campaign.trigger_days || 3),
     scheduledAt: timestampToLocalInput(campaign.scheduled_at),
   }
 }
 
 function formToPayload(form: CampaignForm): EmailCampaignPayload {
-  const userIds = form.targetUserIds
-    .split(/[\s,，]+/)
-    .map((value) => Number.parseInt(value, 10))
-    .filter((value) => Number.isInteger(value) && value > 0)
   return {
     name: form.name.trim(),
     subject: form.subject.trim(),
     content: form.content.trim(),
     mode: form.mode,
     target_type: form.targetType,
-    target_user_ids: [...new Set(userIds)],
+    target_user_ids: [...new Set(form.targetUserIds)],
     trigger_type: form.mode === 'conditional' ? 'subscription_expiring' : '',
     trigger_days:
       form.mode === 'conditional'
@@ -274,7 +271,7 @@ export function EmailCampaignsSection() {
     if (
       form.mode !== 'conditional' &&
       form.targetType === 'selected_users' &&
-      !form.targetUserIds.trim()
+      form.targetUserIds.length === 0
     ) {
       toast.error(t('Enter at least one user ID'))
       return false
@@ -788,17 +785,13 @@ export function EmailCampaignsSection() {
           {form.mode !== 'conditional' &&
             form.targetType === 'selected_users' && (
               <div className='space-y-1.5'>
-                <Label htmlFor='campaign-user-ids'>{t('User IDs')}</Label>
-                <Textarea
-                  id='campaign-user-ids'
-                  rows={3}
-                  value={form.targetUserIds}
-                  placeholder='12, 25, 38'
-                  onChange={(event) =>
-                    setForm((current) => ({
-                      ...current,
-                      targetUserIds: event.target.value,
-                    }))
+                <Label htmlFor='campaign-user-picker'>
+                  {t('Selected users')}
+                </Label>
+                <EmailCampaignUserPicker
+                  selectedUserIds={form.targetUserIds}
+                  onChange={(targetUserIds) =>
+                    setForm((current) => ({ ...current, targetUserIds }))
                   }
                 />
               </div>

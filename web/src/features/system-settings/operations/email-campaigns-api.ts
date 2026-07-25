@@ -107,6 +107,13 @@ export type EmailCampaignStats = {
   failed_count: number
 }
 
+export type EmailCampaignUserOption = {
+  id: number
+  username: string
+  display_name: string
+  email: string
+}
+
 export async function listEmailCampaigns(page: number, pageSize: number) {
   const response = await api.get<ApiResponse<PageData<EmailCampaign>>>(
     '/api/email-campaigns',
@@ -118,6 +125,27 @@ export async function listEmailCampaigns(page: number, pageSize: number) {
 export async function getEmailCampaignStats() {
   const response = await api.get<ApiResponse<EmailCampaignStats>>(
     '/api/email-campaigns/stats'
+  )
+  return response.data
+}
+
+export async function searchEmailCampaignUsers(
+  keyword: string,
+  page: number,
+  pageSize: number
+) {
+  const response = await api.get<
+    ApiResponse<PageData<EmailCampaignUserOption>>
+  >('/api/email-campaigns/users', {
+    params: { keyword, p: page, page_size: pageSize },
+  })
+  return response.data
+}
+
+export async function resolveEmailCampaignUsers(userIds: number[]) {
+  const response = await api.post<ApiResponse<EmailCampaignUserOption[]>>(
+    '/api/email-campaigns/users/resolve',
+    { user_ids: userIds }
   )
   return response.data
 }

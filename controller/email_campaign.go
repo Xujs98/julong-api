@@ -32,6 +32,10 @@ type emailCampaignResponse struct {
 	TargetUserIds []int `json:"target_user_ids"`
 }
 
+type emailCampaignUserResolveRequest struct {
+	UserIds []int `json:"user_ids"`
+}
+
 func emailCampaignToResponse(campaign *model.EmailCampaign) emailCampaignResponse {
 	userIDs, err := campaign.TargetUserIDList()
 	if err != nil {
@@ -177,6 +181,52 @@ func GetEmailCampaignStats(c *gin.Context) {
 		return
 	}
 	common.ApiSuccess(c, stats)
+}
+
+func SearchEmailCampaignUsers(c *gin.Context) {
+	pageInfo := common.GetPageQuery(c)
+	users, total, err := model.SearchEmailCampaignUserOptions(
+		c.Query("keyword"),
+		pageInfo.GetStartIdx(),
+		pageInfo.GetPageSize(),
+	)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	pageInfo.SetTotal(int(total))
+	pageInfo.SetItems(users)
+	common.ApiSuccess(c, pageInfo)
+}
+
+func ResolveEmailCampaignUsers(c *gin.Context) {
+	var req emailCampaignUserResolveRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	if len(req.UserIds) > 5000 {
+		common.ApiErrorMsg(c, "指定用户数量不能超过 5000")
+		return
+	}
+	seen := make(map[int]struct{}, len(req.UserIds))
+	userIDs := make([]int, 0, len(req.UserIds))
+	for _, userID := range req.UserIds {
+		if userID <= 0 {
+			continue
+		}
+		if _, exists := seen[userID]; exists {
+			continue
+		}
+		seen[userID] = struct{}{}
+		userIDs = append(userIDs, userID)
+	}
+	users, err := model.GetEmailCampaignUserOptionsByIds(userIDs)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, users)
 }
 
 func PreviewEmailCampaign(c *gin.Context) {
