@@ -97,6 +97,7 @@ export type PricingData = {
   usable_group: Record<string, { desc: string; ratio: number }>
   supported_endpoint: Record<string, string>
   auto_groups: string[]
+  group_ratio_display_mode: 'actual' | 'pricing_group'
 }
 
 export type TokenUnit = 'M' | 'K'

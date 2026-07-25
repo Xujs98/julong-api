@@ -1,6 +1,7 @@
 package model
 
 import (
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -48,6 +49,11 @@ func InitOptionMap() {
 	common.OptionMap["AutomaticDisableChannelEnabled"] = strconv.FormatBool(common.AutomaticDisableChannelEnabled)
 	common.OptionMap["AutomaticEnableChannelEnabled"] = strconv.FormatBool(common.AutomaticEnableChannelEnabled)
 	common.OptionMap["LogConsumeEnabled"] = strconv.FormatBool(common.LogConsumeEnabled)
+	common.OptionMap["UserLogGroupRatioDisplayEnabled"] = strconv.FormatBool(common.UserLogGroupRatioDisplayEnabled)
+	common.OptionMap["UserLogGroupRatioDisplayMode"] = common.UserLogGroupRatioDisplayMode
+	common.OptionMap["UserLogGroupRatioManualValue"] = strconv.FormatFloat(common.UserLogGroupRatioManualValue, 'f', -1, 64)
+	common.OptionMap["ModelSquareGroupRatioDisplayMode"] = common.ModelSquareGroupRatioDisplayMode
+	common.OptionMap["TokenGroupRatioDisplayMode"] = common.TokenGroupRatioDisplayMode
 	common.OptionMap["ImageGenerationLogEnabled"] = strconv.FormatBool(common.ImageGenerationLogEnabled)
 	common.OptionMap["ImageGenerationLogRetentionDays"] = strconv.Itoa(common.ImageGenerationLogRetentionDays)
 	common.OptionMap["ImageGenerationLogPollingIntervalSeconds"] = strconv.Itoa(common.ImageGenerationLogPollingIntervalSeconds)
@@ -320,6 +326,8 @@ func updateOptionMap(key string, value string) (err error) {
 			common.AutomaticEnableChannelEnabled = boolValue
 		case "LogConsumeEnabled":
 			common.LogConsumeEnabled = boolValue
+		case "UserLogGroupRatioDisplayEnabled":
+			common.UserLogGroupRatioDisplayEnabled = boolValue
 		case "ImageGenerationLogEnabled":
 			common.ImageGenerationLogEnabled = boolValue
 		case "ImageGenerationLogImageAuthWhitelistEnabled":
@@ -402,6 +410,27 @@ func updateOptionMap(key string, value string) (err error) {
 		}
 	case "ImageGenerationLogImageAuthWhitelist":
 		common.ImageGenerationLogImageAuthWhitelist = value
+	case "UserLogGroupRatioDisplayMode":
+		if value == common.UserLogGroupRatioDisplayModeSystem ||
+			value == common.UserLogGroupRatioDisplayModePricingGroup ||
+			value == common.UserLogGroupRatioDisplayModeManual {
+			common.UserLogGroupRatioDisplayMode = value
+		}
+	case "UserLogGroupRatioManualValue":
+		floatValue, parseErr := strconv.ParseFloat(value, 64)
+		if parseErr == nil && floatValue >= 0 && !math.IsNaN(floatValue) && !math.IsInf(floatValue, 0) {
+			common.UserLogGroupRatioManualValue = floatValue
+		}
+	case "ModelSquareGroupRatioDisplayMode":
+		if value == common.ModelSquareGroupRatioDisplayModeActual ||
+			value == common.ModelSquareGroupRatioDisplayModePricingGroup {
+			common.ModelSquareGroupRatioDisplayMode = value
+		}
+	case "TokenGroupRatioDisplayMode":
+		if value == common.TokenGroupRatioDisplayModeActual ||
+			value == common.TokenGroupRatioDisplayModePricingGroup {
+			common.TokenGroupRatioDisplayMode = value
+		}
 	case "SMTPAccount":
 		common.SMTPAccount = value
 	case "SMTPFrom":

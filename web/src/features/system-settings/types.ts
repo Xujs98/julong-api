@@ -280,6 +280,8 @@ export type BillingSettings = {
   GroupGroupRatio: string
   AutoGroups: string
   DefaultUseAutoGroup: boolean
+  ModelSquareGroupRatioDisplayMode: 'actual' | 'pricing_group'
+  TokenGroupRatioDisplayMode: 'actual' | 'pricing_group'
   'group_ratio_setting.group_special_usable_group': string
   PayAddress: string
   EpayId: string
@@ -350,6 +352,9 @@ export type OperationsSettings = {
   WorkerValidKey: string
   WorkerAllowHttpImageRequestEnabled: boolean
   LogConsumeEnabled: boolean
+  UserLogGroupRatioDisplayEnabled: boolean
+  UserLogGroupRatioDisplayMode: 'system' | 'pricing_group' | 'manual'
+  UserLogGroupRatioManualValue: number
   ImageGenerationLogEnabled: boolean
   ImageGenerationLogRetentionDays: number
   ImageGenerationLogPollingIntervalSeconds: number

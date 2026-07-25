@@ -162,6 +162,11 @@ docker compose up -d
 | `QuotaForInviter` / `QuotaForInvitee` | 同上 | 邀请奖励 | 受支付合规确认约束。 |
 | `SidebarModulesAdmin` | `web/src/features/system-settings/maintenance/config.ts` | 控制侧边栏模块显示 | 自定义模块包含 `errorReports`。 |
 | 模型定价订阅抵扣 | `web/src/features/system-settings/models/model-pricing-sheet.tsx` 及后端计费设置 | 按次模型是否允许订阅额度抵扣 | 适用于所有模型，不局限于 `gpt-image-2`。 |
+| `UserLogGroupRatioDisplayEnabled` | `common/constants.go`、`model/log.go`、`log-settings-section.tsx` | 普通用户使用日志是否显示令牌分组倍率 | 默认 `true`；关闭后 `/api/log/self` 和 Token 日志响应剥离 `group_ratio`、`user_group_ratio`，管理员/root 日志不受影响。 |
+| `UserLogGroupRatioDisplayMode` | 同上、`setting/ratio_setting/group_ratio.go` | 普通用户日志倍率展示来源 | `system` 跟随请求实际倍率（默认）；`pricing_group` 展示该日志计费分组当前基础倍率；`manual` 展示统一手动倍率。只改变展示，不改变实际扣费。 |
+| `UserLogGroupRatioManualValue` | 同上 | 手动模式统一展示倍率 | 默认 `1`，必须为大于等于 `0` 的有效数字；只在展示开关开启且模式为 `manual` 时用于普通用户日志响应。 |
+| `ModelSquareGroupRatioDisplayMode` | `common/constants.go`、`controller/pricing.go`、`group-ratio-form.tsx` | 模型广场使用哪种分组倍率展示价格 | `actual`（默认）包含当前登录用户命中的特殊倍率规则；`pricing_group` 始终使用“分组定价”的基础倍率并忽略用户特殊倍率。只改变 `/api/pricing` 展示数据，不改变实际扣费。 |
+| `TokenGroupRatioDisplayMode` | `common/constants.go`、`controller/group.go`、`group-ratio-form.tsx` | API 密钥令牌分组选择器展示哪种倍率 | `actual`（默认）展示当前用户命中的特殊倍率；`pricing_group` 始终展示基础定价分组倍率。只改变 `/api/user/self/groups` 返回的展示倍率，不改变实际扣费。 |
 | `ImageGenerationLogEnabled` | `common/constants.go`、`model/option.go`、`log-settings-section.tsx` | 是否记录生图请求并启用本地异步生图 | Root 或获授权管理员配置，默认 `false`；关闭时 `async: true` 退回同步，不创建任务、不捕获或保存图片。 |
 | `ImageGenerationLogRetentionDays` | 同上、`service/image_generation_log.go` | 生图日志及本地图片自动保留天数 | 默认 `30`，范围 `0-3650`；`0` 表示永久保留，每小时至多触发一次过期清理。 |
 | `ImageGenerationLogPollingIntervalSeconds` | `common/constants.go`、`model/option.go`、`log-settings-section.tsx` | 未完成生图任务的前端轮询频率 | 默认 `15` 秒，允许 `5-3600` 秒；同时通过 `/api/status` 和任务响应公开。 |
@@ -237,7 +242,7 @@ type ApiResponse<T> = {
 | GET | `/api/privacy-policy` | `controller.GetPrivacyPolicy` | 隐私政策 | 无 | markdown/html | 公开 | 完成 |
 | GET | `/api/about` | `controller.GetAbout` | 关于页面内容 | 无 | 内容 | 公开 | 完成 |
 | GET | `/api/home_page_content` | `controller.GetHomePageContent` | 首页内容 | 无 | JSON 内容 | 公开 | 完成 |
-| GET | `/api/pricing` | `controller.GetPricing` | 定价/模型广场数据 | query filters | pricing data | 顶部导航模块权限 | 完成 |
+| GET | `/api/pricing` | `controller.GetPricing` | 定价/模型广场数据；`group_ratio` 按配置返回真实倍率或基础定价分组倍率，`group_ratio_display_mode` 返回当前模式 | query filters | pricing data | 顶部导航模块权限 | 完成 |
 | GET | `/api/rankings` | `controller.GetRankings` | 排行榜数据 | query filters | ranking data | 顶部导航模块权限 | 完成 |
 | GET | `/api/ratio_config` | `controller.GetRatioConfig` | 暴露给前端的倍率配置 | 无 | ratio object | Critical rate limit | 完成 |
 | GET | `/api/perf-metrics/summary` | `controller.GetPerfMetricsSummary` | 性能指标摘要 | query | summary | pricing 导航 public/user auth | 完成 |
@@ -276,7 +281,8 @@ curl http://localhost:3000/api/error-reports \
 | POST | `/api/user/login/2fa` | `controller.Verify2FALogin` | 完成 2FA 登录 | `{flow_token,code}` | 公开 + rate limit；返回 `AuthBundle` | 完成 |
 | POST | `/api/user/auth/refresh` | `controller.RefreshAuth` | 使用 HttpOnly refresh Cookie 轮换登录令牌 | Cookie + 可选 `X-Auth-Session` | Origin guard + rate limit；返回 `AuthBundle` | 完成 |
 | POST | `/api/user/auth/logout` | `controller.AuthLogout` | 撤销当前服务端会话并清理 refresh Cookie | Bearer token、Cookie、可选 `X-Auth-Session` | Origin guard + rate limit | 完成 |
-| GET | `/api/user/groups` | `controller.GetUserGroups` | 用户分组元数据 | 无 | 公开 | 完成 |
+| GET | `/api/user/groups` | `controller.GetUserGroups` | 公开可用分组元数据 | 无；响应 `{success,message,data,ratio_display_mode}`，未登录时倍率为基础定价分组倍率 | 公开 | 完成 |
+| GET | `/api/user/self/groups` | `controller.GetUserGroups` | 当前用户 API 密钥可选分组及展示倍率 | 无；`data.<group>={desc,ratio}`；`ratio` 按 `TokenGroupRatioDisplayMode` 返回真实特殊倍率或基础倍率 | 用户 | 完成 |
 | GET | `/api/user/sessions` | `controller.GetLoginSessions` | 当前用户登录设备/会话列表 | 无 | Dashboard 登录会话 | 完成 |
 | DELETE | `/api/user/sessions/:sid` | `controller.DeleteLoginSession` | 撤销指定登录会话 | path `sid` | Dashboard 登录会话 | 完成 |
 | POST | `/api/user/sessions/revoke-others` | `controller.RevokeOtherLoginSessions` | 撤销当前会话外的全部会话 | 无 | Dashboard 登录会话 | 完成 |
@@ -435,20 +441,25 @@ curl 'http://localhost:3000/api/redemption/search?keyword=agent001&p=1&page_size
 
 | 方法 | 路径 | Handler | 用途 | 权限 | 状态 |
 | --- | --- | --- | --- | --- | --- |
-| GET | `/api/log/` | `controller.GetAllLogs` | 管理员日志 | 管理员/root | 完成 |
+| GET | `/api/log/` | `controller.GetAllLogs` | 管理员日志；保留请求真实 `group_ratio/user_group_ratio`，并在 `other` 中附加当前普通用户倍率展示状态、模式和值 | 管理员/root | 完成 |
 | GET | `/api/log/stat` | `controller.GetLogsStat` | 管理员日志统计 | 管理员/root | 完成 |
-| GET | `/api/log/self` | `controller.GetUserLogs` | 当前用户日志 | 用户 | 完成 |
+| GET | `/api/log/self` | `controller.GetUserLogs` | 当前用户日志；倍率字段根据显示开关和 `system/pricing_group/manual` 模式进行保留、替换或剥离 | 用户 | 完成 |
 | GET | `/api/log/self/stat` | `controller.GetLogsSelfStat` | 当前用户统计 | 用户 | 完成 |
 | GET | `/api/log/search` | `controller.SearchAllLogs` | 已废弃搜索接口 | 管理员/root | 已废弃 |
 | GET | `/api/log/self/search` | `controller.SearchUserLogs` | 已废弃用户搜索接口 | 用户 | 已废弃 |
 | DELETE | `/api/log/` | `controller.DeleteHistoryLogs` | 旧版同步日志清理 | Root | 默认前端已不使用 |
 | GET | `/api/log/channel_affinity_usage_cache` | `controller.GetChannelAffinityUsageCacheStats` | 渠道亲和缓存统计 | 管理员/root | 完成 |
-| GET | `/api/log/token` | `controller.GetLogByKey` | Token 日志查询 | Token read-only | 完成 |
+| GET | `/api/log/token` | `controller.GetLogByKey` | Token 日志查询；倍率字段遵循普通用户日志显示配置 | Token read-only | 完成 |
 | GET | `/api/data/` | `controller.GetAllQuotaDates` | 额度日期数据 | 管理员/root | 完成 |
 | GET | `/api/data/users` | `controller.GetQuotaDatesByUser` | 用户额度日期数据 | 管理员/root | 完成 |
 | GET | `/api/data/self` | `controller.GetUserQuotaDates` | 当前用户额度日期数据 | 用户 | 完成 |
 | GET | `/api/data/flow` | `controller.GetAllFlowQuotaDates` | 流量数据 | 管理员/root | 完成 |
 | GET | `/api/data/flow/self` | `controller.GetUserFlowQuotaDates` | 当前用户流量数据 | 用户 | 完成 |
+
+日志倍率响应字段：
+
+- 管理员/root 的 `/api/log/` 保留日志原始 `other.group_ratio` 和 `other.user_group_ratio`，前端据此展示“实际倍率”。后端同时临时附加 `user_group_ratio_display_enabled`、`user_group_ratio_display_mode` 和可选 `user_group_ratio_display_value`，用于展示当前普通用户所见倍率；这些字段不写回日志数据库。
+- 普通用户 `/api/log/self` 和 Token `/api/log/token` 不返回上述管理员临时字段。关闭总开关时剥离倍率；`pricing_group`/`manual` 模式通过临时 `group_ratio_display_mode` 标记保证配置值为 `1x` 时仍显示。
 
 ### 生图日志 API
 
@@ -837,18 +848,18 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 | `announcements` | `api.ts`、`types.ts` | 公告类型和当前用户公告查询；供顶部通知中心、自动弹窗和后台公告编辑器共享 | `/api/announcements` | 完成 |
 | `custom-endpoints` | `types.ts`、`system-settings/content/custom-endpoints-section.tsx`、`keys/components/custom-endpoints.tsx` | 自定义端点共享类型、后台编辑器、API 密钥页复制条和悬停介绍 | `/api/option`、`/api/status` | 完成 |
 | `channels` | `channels-table.tsx`、`channels-columns.tsx`、dialogs/drawers、`api.ts` | 上游渠道 CRUD/测试/配置 | `/api/channel*` | 完成 |
-| `keys` | `api-keys-table.tsx`、`api-keys-columns.tsx`、mutate/delete dialogs | 用户 API key 管理 | `/api/token*` | 完成 |
-| `usage-logs` | `usage-logs-table.tsx`、普通/绘图/生图/任务 columns、`image-generation-task-dialog.tsx`、图片预览和筛选组件 | 普通消费日志、Midjourney 绘图日志、同步/异步生图日志、媒体任务日志；未完成生图按 root 配置频率刷新（默认 15 秒），任务 ID 弹窗由页面级状态持有并按需请求 JSON，不受表格轮询重建影响 | `/api/log*`、`/api/mj`、`/api/image-generation-logs*`、`/api/task` | 完成 |
+| `keys` | `api-keys-table.tsx`、`api-keys-columns.tsx`、`api-keys-mutate-drawer.tsx`、`api-key-group-combobox.tsx`、mutate/delete dialogs | 用户 API key 管理；令牌分组下拉框和列表倍率统一读取 `/api/user/self/groups`，可配置展示真实特殊倍率或基础定价分组倍率 | `/api/token*`、`/api/user/self/groups` | 完成 |
+| `usage-logs` | `usage-logs-table.tsx`、普通/绘图/生图/任务 columns、`lib/group-ratio.ts`、`image-generation-task-dialog.tsx`、图片预览和筛选组件 | 普通消费日志、Midjourney 绘图日志、同步/异步生图日志、媒体任务日志；普通用户令牌下方倍率支持关闭、跟随实际倍率、跟随定价分组基础倍率或统一手动展示，管理员/root 同时看到请求真实倍率和当前用户展示倍率；未完成生图按 root 配置频率刷新（默认 15 秒），任务 ID 弹窗由页面级状态持有并按需请求 JSON，不受表格轮询重建影响 | `/api/log*`、`/api/mj`、`/api/image-generation-logs*`、`/api/task` | 完成 |
 | `wallet` | recharge cards、subscription cards、affiliate rewards、redemption hook | 钱包充值、兑换码、订阅 | `/api/user/topup*`、`/api/subscription*`、支付 API | 完成 |
 | `redemption-codes` | `redemptions-table.tsx`、`redemptions-columns.tsx`、mutate/delete dialogs | 管理员/代理兑换码管理 | `/api/redemption*`、`/api/user/agent/topup-link` | 完成 |
 | `users` | `users-table.tsx`、`users-columns.tsx`、`users-mutate-drawer.tsx`、`agent-detail-dialog.tsx`、`user-detail-dialog.tsx` | 后台用户管理、代理详情、用户详情；详情弹窗包含头像身份摘要、关键指标带、订阅摘要、紧凑信息网格、响应式数据表和加载骨架 | `/api/user*`、`/api/log`、`/api/subscription/admin/*` | 完成 |
 | `models` | metadata/deployment tables and drawers | 模型元数据和部署管理 | `/api/models*`、`/api/vendors*`、`/api/deployments*` | 完成 |
 | `subscriptions` | subscription table/drawers | 后台订阅计划/用户绑定 | `/api/subscription/admin*` | 完成 |
-| `system-settings` | `auth`、`billing`、`content`、`models`、`request-limits`、`maintenance`、`integrations`、`general` 下的 section registries；`maintenance/log-settings-section.tsx:LogSettingsSection`、内部 `ImageStorageSettings` | 管理员/root 运行时设置；`LogSettingsSection` 负责消费/生图日志、轮询频率和图片读取白名单；`ImageStorageSettings` 负责 MinIO 凭据、保留天数、对象数/容量/过期数/最近清理统计、立即清理过期图片，以及带二次确认和 10 秒倒计时的全量清空；初始化请求并行，活动清理任务每 5 秒查询一次 | `/api/option*`、`/api/performance/image-storage*`、`/api/system-task/*` | 完成 |
+| `system-settings` | `auth`、`billing`、`content`、`models`、`request-limits`、`maintenance`、`integrations`、`general` 下的 section registries；`maintenance/log-settings-section.tsx:LogSettingsSection`、`models/group-ratio-form.tsx:GroupRatioForm`、内部 `ImageStorageSettings` | 管理员/root 运行时设置；`LogSettingsSection` 负责消费/生图日志、普通用户日志倍率展示、轮询频率和图片读取白名单；`GroupRatioForm` 独立配置模型广场和令牌分组倍率展示模式；`ImageStorageSettings` 负责 MinIO 凭据、保留天数、对象数/容量/过期数/最近清理统计、立即清理过期图片，以及带二次确认和 10 秒倒计时的全量清空；初始化请求并行，活动清理任务每 5 秒查询一次 | `/api/option*`、`/api/performance/image-storage*`、`/api/system-task/*` | 完成 |
 | `system-info` | system instances/tasks panels | Root 系统运维 | `/api/system-info*`、`/api/system-task*` | 完成 |
 | `error-reports` | `submit-error-report.tsx`、`index.tsx`、`api.ts` | 提交/查看 500 页面反馈 | `/api/error-reports*` | 完成 |
 | `errors` | `general-error.tsx`、forbidden/not-found/maintenance/unauthorized | 错误页 | `/error-report` 路由用于反馈 | 完成 |
-| `pricing` | pricing tables/model detail | 公开模型定价 | `/api/pricing` | 完成 |
+| `pricing` | `hooks/use-pricing-data.ts`、pricing tables/cards、model detail、`lib/model-helpers.ts` | 公开模型定价；卡片、表格和详情共享 `/api/pricing.group_ratio`，可展示真实特殊倍率或始终展示基础定价分组倍率 | `/api/pricing` | 完成 |
 | `rankings` | hero/model leaderboard/provider sections | 公开排行榜 | `/api/rankings` | 完成 |
 | `playground` | chat playground UI | 浏览器内请求测试 | `/pg/chat/completions` | 完成 |
 | `setup` | setup wizard steps | 初始化安装 | `/api/setup` | 完成 |
@@ -1031,6 +1042,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 
 | 日期 | 变更 | 更新文件/API/模型 | 验证 |
 | --- | --- | --- | --- |
+| 2026-07-25 | 新增倍率展示控制：日志维护可完全隐藏普通用户日志倍率、跟随真实倍率、跟随计费分组基础倍率或统一手动展示；管理员日志同时显示请求真实倍率和当前用户展示倍率。分组定价新增模型广场和令牌分组两个独立展示模式，均可选择包含特殊倍率规则的真实倍率，或始终使用基础定价分组倍率。所有转换只影响接口响应和 UI，不修改历史日志、实际扣费或数据库结构，保存后运行时立即生效。 | `UserLogGroupRatioDisplayEnabled`、`UserLogGroupRatioDisplayMode`、`UserLogGroupRatioManualValue`、`ModelSquareGroupRatioDisplayMode`、`TokenGroupRatioDisplayMode`、`controller.{GetPricing,GetUserGroups}`、`model.{formatUserLogs,formatAdminLogGroupRatioDisplay}`、`GroupRatioForm`、`LogSettingsSection`、`usage-logs/lib/group-ratio.ts`、locale files、`DEVELOPMENT.md` | `go test ./...`、`bun run typecheck`、目标文件 oxlint、`bun run build`、`bun run i18n:sync`、`bun run format:check`、倍率前端单元测试、`git diff --check` 均通过。 |
 | 2026-07-25 | 合并上游 `QuantumNous/new-api@84a79b68`。默认前端从 `web/default` 迁移为单一 `web/`，删除 Classic；接入新的 Dashboard access/refresh token 与 `UserSession`/`AuthFlow`/`ExternalIdentityClaim` 架构、模型未定价视图、用户排序/额度溢出保护、渠道模型发现以及计费、缓存写入、图片流和任务退款修复。Julong 的代理、兑换码退款、订阅抵扣、IP 管理、错误工单、客服/公告/自定义端点、系统设置权限、生图日志/轮询/白名单/MinIO 和品牌资源全部迁移保留；修复禁用用户未撤销活跃会话、新认证测试未迁移 `BlockedIP` 的合并回归，并将后端开发命令更新为可包含全部主包文件的 `go run .`。 | `upstream/main@84a79b68`、`controller/{user,model_list_test,auth_session_test,theme_compat_test}.go`、`middleware/{auth,auth_test}.go`、`model/{user,user_session,auth_flow,external_identity_claim,blocked_ip}.go`、`relay/channel/openai/relay_image.go`、`router/api-router.go`、`web/`、`README.md`、`electron/README.md`、`DEVELOPMENT.md` | `go test ./...`、`bun run typecheck`、`bun run i18n:sync`、`bun run format:check`、`bun run build`、Julong 差异文件 oxlint（0 错误、1 个已知 `react/no-danger` 警告）、`git diff --check` 均通过；全量 `bun run lint` 仍有上游基线 364 错误/73 警告，已列入已知问题。 |
 | 2026-07-20 | 日志维护的 MinIO 生图存储增加“清空全部 MinIO 图片”：二次确认框展示实际 Bucket/对象前缀，确认按钮强制等待 10 秒；后端通过 `delete_all` 任务 payload 复用 `image_storage_cleanup` 锁，只删除当前配置前缀下的全部非目录对象，与过期清理互斥，Bucket 其他对象不受影响。无数据库字段或迁移。 | `service.DeleteAllGeneratedImageObjects`、`imageObjectStorageScanMode`、`controller.StartImageObjectStoragePurge`、`POST /api/performance/image-storage/purge`、`imageStorageCleanupHandler`、`ImageStorageSettings`、locale files、`生图轮询接口说明.md` | `go test ./...`、`go test ./service ./controller ./router`、`bun run typecheck`、目标 `oxfmt/oxlint`、`bun run build`、`bun run i18n:sync`、`git diff --check` |
 | 2026-07-19 | 为 MinIO 生图对象增加可配置生命周期与每日自动清理：默认 30 天、`0` 永久保留，按对象 `LastModified` 删除当前 Bucket 前缀下的过期图片；复用系统任务数据库租约实现每日及手动清理互斥。日志维护页新增保留天数、对象数、占用空间、过期数量、最近清理时间、统计刷新和立即清理确认。 | `ImageGenerationStorageRetentionDays`、`ImageGenerationStorageLastCleanupAt`、`image_storage_cleanup`、`service/image_object_storage.go`、`controller/image_object_storage.go`、`GET /api/performance/image-storage/stats`、`POST /api/performance/image-storage/cleanup`、`ImageStorageSettings`、locale files、`生图轮询接口说明.md` | `go test ./...`、`bun run typecheck`、目标 `oxfmt/oxlint`、`bun run build`、`bun run i18n:sync`、`git diff --check` |

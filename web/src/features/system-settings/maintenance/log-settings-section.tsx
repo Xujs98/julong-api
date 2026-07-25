@@ -82,6 +82,9 @@ import type { LogCleanupTask } from '../types'
 
 const logSettingsSchema = z.object({
   LogConsumeEnabled: z.boolean(),
+  UserLogGroupRatioDisplayEnabled: z.boolean(),
+  UserLogGroupRatioDisplayMode: z.enum(['system', 'pricing_group', 'manual']),
+  UserLogGroupRatioManualValue: z.number().min(0),
   ImageGenerationLogEnabled: z.boolean(),
   ImageGenerationLogRetentionDays: z.number().int().min(0).max(3650),
   ImageGenerationLogPollingIntervalSeconds: z.number().int().min(5).max(3600),
@@ -93,6 +96,9 @@ type LogSettingsFormValues = z.infer<typeof logSettingsSchema>
 
 type LogSettingsSectionProps = {
   defaultEnabled: boolean
+  defaultUserLogGroupRatioDisplayEnabled: boolean
+  defaultUserLogGroupRatioDisplayMode: 'system' | 'pricing_group' | 'manual'
+  defaultUserLogGroupRatioManualValue: number
   defaultImageLogEnabled: boolean
   defaultImageLogRetentionDays: number
   defaultImageLogPollingIntervalSeconds: number
@@ -754,6 +760,9 @@ function isActiveLogCleanupTask(task: LogCleanupTask | null) {
 
 export function LogSettingsSection({
   defaultEnabled,
+  defaultUserLogGroupRatioDisplayEnabled,
+  defaultUserLogGroupRatioDisplayMode,
+  defaultUserLogGroupRatioManualValue,
   defaultImageLogEnabled,
   defaultImageLogRetentionDays,
   defaultImageLogPollingIntervalSeconds,
@@ -766,6 +775,9 @@ export function LogSettingsSection({
     resolver: zodResolver(logSettingsSchema),
     defaultValues: {
       LogConsumeEnabled: defaultEnabled,
+      UserLogGroupRatioDisplayEnabled: defaultUserLogGroupRatioDisplayEnabled,
+      UserLogGroupRatioDisplayMode: defaultUserLogGroupRatioDisplayMode,
+      UserLogGroupRatioManualValue: defaultUserLogGroupRatioManualValue,
       ImageGenerationLogEnabled: defaultImageLogEnabled,
       ImageGenerationLogRetentionDays: defaultImageLogRetentionDays,
       ImageGenerationLogPollingIntervalSeconds:
@@ -791,6 +803,12 @@ export function LogSettingsSection({
   const imageAuthWhitelistEnabled = form.watch(
     'ImageGenerationLogImageAuthWhitelistEnabled'
   )
+  const userLogGroupRatioDisplayEnabled = form.watch(
+    'UserLogGroupRatioDisplayEnabled'
+  )
+  const userLogGroupRatioDisplayMode = form.watch(
+    'UserLogGroupRatioDisplayMode'
+  )
 
   const fetchServerLogInfo = useCallback(async () => {
     try {
@@ -804,6 +822,9 @@ export function LogSettingsSection({
   useEffect(() => {
     form.reset({
       LogConsumeEnabled: defaultEnabled,
+      UserLogGroupRatioDisplayEnabled: defaultUserLogGroupRatioDisplayEnabled,
+      UserLogGroupRatioDisplayMode: defaultUserLogGroupRatioDisplayMode,
+      UserLogGroupRatioManualValue: defaultUserLogGroupRatioManualValue,
       ImageGenerationLogEnabled: defaultImageLogEnabled,
       ImageGenerationLogRetentionDays: defaultImageLogRetentionDays,
       ImageGenerationLogPollingIntervalSeconds:
@@ -814,6 +835,9 @@ export function LogSettingsSection({
     })
   }, [
     defaultEnabled,
+    defaultUserLogGroupRatioDisplayEnabled,
+    defaultUserLogGroupRatioDisplayMode,
+    defaultUserLogGroupRatioManualValue,
     defaultImageLogEnabled,
     defaultImageLogImageAuthWhitelist,
     defaultImageLogImageAuthWhitelistEnabled,
@@ -906,6 +930,18 @@ export function LogSettingsSection({
       {
         key: 'LogConsumeEnabled',
         value: values.LogConsumeEnabled,
+      },
+      {
+        key: 'UserLogGroupRatioDisplayEnabled',
+        value: values.UserLogGroupRatioDisplayEnabled,
+      },
+      {
+        key: 'UserLogGroupRatioDisplayMode',
+        value: values.UserLogGroupRatioDisplayMode,
+      },
+      {
+        key: 'UserLogGroupRatioManualValue',
+        value: values.UserLogGroupRatioManualValue,
       },
       {
         key: 'ImageGenerationLogEnabled',
@@ -1037,6 +1073,124 @@ export function LogSettingsSection({
               </SettingsSwitchItem>
             )}
           />
+
+          <FormField
+            control={form.control}
+            name='UserLogGroupRatioDisplayEnabled'
+            render={({ field }) => (
+              <SettingsSwitchItem>
+                <SettingsSwitchContent>
+                  <FormLabel>
+                    {t('Show group ratios to users in usage logs')}
+                  </FormLabel>
+                  <FormDescription>
+                    {t(
+                      'When disabled, regular users can still see charged quota but not base or user-specific group ratios. Administrators and root users can always see them.'
+                    )}
+                  </FormDescription>
+                </SettingsSwitchContent>
+                <FormControl>
+                  <Switch
+                    checked={field.value}
+                    onCheckedChange={field.onChange}
+                  />
+                </FormControl>
+                <FormMessage />
+              </SettingsSwitchItem>
+            )}
+          />
+
+          {userLogGroupRatioDisplayEnabled && (
+            <SettingsControlGroup className='flex flex-col gap-4'>
+              <FormField
+                control={form.control}
+                name='UserLogGroupRatioDisplayMode'
+                render={({ field }) => (
+                  <div className='flex flex-col gap-2'>
+                    <FormLabel>{t('Group ratio display mode')}</FormLabel>
+                    <FormControl>
+                      <Select
+                        items={[
+                          {
+                            value: 'system',
+                            label: t('Follow system (actual ratio)'),
+                          },
+                          {
+                            value: 'pricing_group',
+                            label: t('Follow pricing group ratio'),
+                          },
+                          {
+                            value: 'manual',
+                            label: t('Manual display'),
+                          },
+                        ]}
+                        value={field.value}
+                        onValueChange={(value) => {
+                          if (value !== null) field.onChange(value)
+                        }}
+                      >
+                        <SelectTrigger className='max-w-sm'>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent alignItemWithTrigger={false}>
+                          <SelectGroup>
+                            <SelectItem value='system'>
+                              {t('Follow system (actual ratio)')}
+                            </SelectItem>
+                            <SelectItem value='pricing_group'>
+                              {t('Follow pricing group ratio')}
+                            </SelectItem>
+                            <SelectItem value='manual'>
+                              {t('Manual display')}
+                            </SelectItem>
+                          </SelectGroup>
+                        </SelectContent>
+                      </Select>
+                    </FormControl>
+                    <FormDescription>
+                      {t(
+                        'This setting changes display only and never changes actual billing.'
+                      )}
+                    </FormDescription>
+                    <FormMessage />
+                  </div>
+                )}
+              />
+
+              {userLogGroupRatioDisplayMode === 'manual' && (
+                <FormField
+                  control={form.control}
+                  name='UserLogGroupRatioManualValue'
+                  render={({ field }) => (
+                    <div className='flex flex-col gap-2'>
+                      <FormLabel>{t('Manual display ratio')}</FormLabel>
+                      <FormControl>
+                        <Input
+                          type='number'
+                          min={0}
+                          step='0.000001'
+                          className='max-w-40'
+                          value={field.value}
+                          onBlur={field.onBlur}
+                          name={field.name}
+                          ref={field.ref}
+                          onChange={(event) =>
+                            field.onChange(Number(event.target.value))
+                          }
+                        />
+                      </FormControl>
+                      <FormDescription>
+                        {t(
+                          'This value is shown to all regular users and does not affect billing.'
+                        )}
+                      </FormDescription>
+                      <FormMessage />
+                    </div>
+                  )}
+                />
+              )}
+            </SettingsControlGroup>
+          )}
 
           <SettingsControlGroup className='flex flex-col gap-4'>
             <FormField

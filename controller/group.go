@@ -3,6 +3,7 @@ package controller
 import (
 	"net/http"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting"
@@ -10,6 +11,13 @@ import (
 
 	"github.com/gin-gonic/gin"
 )
+
+func displayedTokenGroupRatio(userGroup, tokenGroup string) float64 {
+	if common.TokenGroupRatioDisplayMode == common.TokenGroupRatioDisplayModePricingGroup {
+		return ratio_setting.GetGroupRatio(tokenGroup)
+	}
+	return service.GetUserGroupRatio(userGroup, tokenGroup)
+}
 
 func GetGroups(c *gin.Context) {
 	groupNames := make([]string, 0)
@@ -33,7 +41,7 @@ func GetUserGroups(c *gin.Context) {
 		// UserUsableGroups contains the groups that the user can use
 		if desc, ok := userUsableGroups[groupName]; ok {
 			usableGroups[groupName] = map[string]interface{}{
-				"ratio": service.GetUserGroupRatio(userGroup, groupName),
+				"ratio": displayedTokenGroupRatio(userGroup, groupName),
 				"desc":  desc,
 			}
 		}
@@ -45,8 +53,9 @@ func GetUserGroups(c *gin.Context) {
 		}
 	}
 	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": "",
-		"data":    usableGroups,
+		"success":            true,
+		"message":            "",
+		"data":               usableGroups,
+		"ratio_display_mode": common.TokenGroupRatioDisplayMode,
 	})
 }

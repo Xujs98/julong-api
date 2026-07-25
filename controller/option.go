@@ -2,6 +2,7 @@ package controller
 
 import (
 	"fmt"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
@@ -319,6 +320,46 @@ func UpdateOption(c *gin.Context) {
 			c.JSON(http.StatusOK, gin.H{
 				"success": false,
 				"message": "生图任务刷新频率必须为 5 到 3600 秒之间的整数",
+			})
+			return
+		}
+	case "UserLogGroupRatioDisplayMode":
+		mode := option.Value.(string)
+		if mode != common.UserLogGroupRatioDisplayModeSystem &&
+			mode != common.UserLogGroupRatioDisplayModePricingGroup &&
+			mode != common.UserLogGroupRatioDisplayModeManual {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": "用户日志倍率展示模式无效",
+			})
+			return
+		}
+	case "UserLogGroupRatioManualValue":
+		ratio, parseErr := strconv.ParseFloat(option.Value.(string), 64)
+		if parseErr != nil || ratio < 0 || math.IsNaN(ratio) || math.IsInf(ratio, 0) {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": "手动展示倍率必须是大于等于 0 的有效数字",
+			})
+			return
+		}
+	case "ModelSquareGroupRatioDisplayMode":
+		mode := option.Value.(string)
+		if mode != common.ModelSquareGroupRatioDisplayModeActual &&
+			mode != common.ModelSquareGroupRatioDisplayModePricingGroup {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": "模型广场倍率展示模式无效",
+			})
+			return
+		}
+	case "TokenGroupRatioDisplayMode":
+		mode := option.Value.(string)
+		if mode != common.TokenGroupRatioDisplayModeActual &&
+			mode != common.TokenGroupRatioDisplayModePricingGroup {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": "令牌分组倍率展示模式无效",
 			})
 			return
 		}

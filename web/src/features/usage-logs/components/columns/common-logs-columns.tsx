@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import type { ColumnDef } from '@tanstack/react-table'
 import { GitBranch, Sparkles, KeyRound } from 'lucide-react'
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { GroupBadge } from '@/components/group-badge'
@@ -51,6 +51,10 @@ import {
   renderAuditContent,
 } from '../../lib/format'
 import {
+  getActualGroupRatio,
+  getDisplayedGroupRatio,
+} from '../../lib/group-ratio'
+import {
   isDisplayableLogType,
   isTimingLogType,
   getLogTypeConfig,
@@ -73,24 +77,6 @@ function formatRatioCompact(ratio: number | undefined): string {
   return ratio % 1 === 0
     ? String(ratio)
     : ratio.toFixed(4).replace(/\.?0+$/, '')
-}
-
-function getGroupRatio(other: LogOtherData | null): number | null {
-  const userGroupRatio = other?.user_group_ratio
-  if (
-    userGroupRatio != null &&
-    userGroupRatio !== -1 &&
-    Number.isFinite(userGroupRatio)
-  ) {
-    return userGroupRatio
-  }
-
-  const groupRatio = other?.group_ratio
-  if (groupRatio != null && groupRatio !== 1 && Number.isFinite(groupRatio)) {
-    return groupRatio
-  }
-
-  return null
 }
 
 function splitQuotaDisplay(value: string): { prefix: string; amount: string } {
@@ -565,7 +551,42 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
       const displayName = sensitiveVisible ? tokenName : '••••'
       let group = log.group
       if (!group) group = other?.group || ''
-      const groupRatio = getGroupRatio(other)
+      const groupRatio = getDisplayedGroupRatio(other)
+      const actualGroupRatio = isAdmin ? getActualGroupRatio(other) : null
+      const hasUserRatioDisplay =
+        isAdmin && other?.user_group_ratio_display_enabled != null
+      const userDisplayedGroupRatio =
+        other?.user_group_ratio_display_value ?? null
+      const hasRatioDetails = isAdmin
+        ? actualGroupRatio != null || hasUserRatioDisplay
+        : groupRatio != null
+      const userDisplayedRatioText =
+        userDisplayedGroupRatio != null
+          ? `${formatRatioCompact(userDisplayedGroupRatio)}x`
+          : t('Not shown')
+      let ratioDetails: ReactNode = null
+      if (isAdmin) {
+        ratioDetails = (
+          <span className='text-muted-foreground/70 inline-flex flex-wrap gap-x-1 tabular-nums'>
+            {actualGroupRatio != null ? (
+              <span>
+                {t('Actual ratio')} {formatRatioCompact(actualGroupRatio)}x
+              </span>
+            ) : null}
+            {hasUserRatioDisplay ? (
+              <span>
+                {t('User-visible ratio')} {userDisplayedRatioText}
+              </span>
+            ) : null}
+          </span>
+        )
+      } else if (groupRatio != null) {
+        ratioDetails = (
+          <span className='text-muted-foreground/60 relative top-px align-baseline tabular-nums'>
+            {formatRatioCompact(groupRatio)}x
+          </span>
+        )
+      }
 
       return (
         <div className='flex max-w-[200px] flex-col gap-0.5'>
@@ -588,8 +609,8 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
               )}
             </Tooltip>
           </TooltipProvider>
-          {(group || groupRatio != null) && (
-            <span className='block max-w-full truncate text-xs leading-none'>
+          {(group || hasRatioDetails) && (
+            <span className='block max-w-full text-xs leading-tight'>
               {group ? (
                 <GroupBadge
                   group={group}
@@ -599,12 +620,8 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
                   className='inline align-baseline text-xs leading-none [&>span]:leading-none'
                 />
               ) : null}
-              {group && groupRatio != null ? ' ' : null}
-              {groupRatio != null ? (
-                <span className='text-muted-foreground/60 relative top-px align-baseline tabular-nums'>
-                  {formatRatioCompact(groupRatio)}x
-                </span>
-              ) : null}
+              {group && hasRatioDetails ? ' ' : null}
+              {ratioDetails}
             </span>
           )}
         </div>

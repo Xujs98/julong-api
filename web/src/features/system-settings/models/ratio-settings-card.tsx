@@ -133,6 +133,8 @@ const createGroupSchema = (t: Translate) =>
       predicateMessage: 'Expected a JSON array of group identifiers',
     }),
     DefaultUseAutoGroup: z.boolean(),
+    ModelSquareGroupRatioDisplayMode: z.enum(['actual', 'pricing_group']),
+    TokenGroupRatioDisplayMode: z.enum(['actual', 'pricing_group']),
     GroupSpecialUsableGroup: createJsonStringField(t),
   })
 
@@ -211,6 +213,9 @@ export function RatioSettingsCard({
     GroupGroupRatio: normalizeJsonString(groupDefaults.GroupGroupRatio),
     AutoGroups: normalizeJsonString(groupDefaults.AutoGroups),
     DefaultUseAutoGroup: groupDefaults.DefaultUseAutoGroup,
+    ModelSquareGroupRatioDisplayMode:
+      groupDefaults.ModelSquareGroupRatioDisplayMode,
+    TokenGroupRatioDisplayMode: groupDefaults.TokenGroupRatioDisplayMode,
     GroupSpecialUsableGroup: normalizeJsonString(
       groupDefaults.GroupSpecialUsableGroup
     ),
@@ -306,6 +311,9 @@ export function RatioSettingsCard({
       GroupGroupRatio: normalizeJsonString(groupDefaults.GroupGroupRatio),
       AutoGroups: normalizeJsonString(groupDefaults.AutoGroups),
       DefaultUseAutoGroup: groupDefaults.DefaultUseAutoGroup,
+      ModelSquareGroupRatioDisplayMode:
+        groupDefaults.ModelSquareGroupRatioDisplayMode,
+      TokenGroupRatioDisplayMode: groupDefaults.TokenGroupRatioDisplayMode,
       GroupSpecialUsableGroup: normalizeJsonString(
         groupDefaults.GroupSpecialUsableGroup
       ),
@@ -418,6 +426,9 @@ export function RatioSettingsCard({
         GroupGroupRatio: normalizeJsonString(values.GroupGroupRatio),
         AutoGroups: normalizeJsonString(values.AutoGroups),
         DefaultUseAutoGroup: values.DefaultUseAutoGroup,
+        ModelSquareGroupRatioDisplayMode:
+          values.ModelSquareGroupRatioDisplayMode,
+        TokenGroupRatioDisplayMode: values.TokenGroupRatioDisplayMode,
         GroupSpecialUsableGroup: normalizeJsonString(
           values.GroupSpecialUsableGroup
         ),
@@ -439,8 +450,17 @@ export function RatioSettingsCard({
         const apiKey = apiKeyMap[key] || key
         await updateOption.mutateAsync({ key: apiKey, value: normalized[key] })
       }
+
+      if (updates.length > 0) {
+        groupNormalizedDefaults.current = normalized
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: ['pricing'] }),
+          queryClient.invalidateQueries({ queryKey: ['user-groups'] }),
+          queryClient.invalidateQueries({ queryKey: ['playground-groups'] }),
+        ])
+      }
     },
-    [updateOption]
+    [queryClient, updateOption]
   )
 
   const handleResetRatios = useCallback(() => {

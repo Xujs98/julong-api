@@ -4,11 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/logger"
+	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/QuantumNous/new-api/types"
 
 	"github.com/gin-gonic/gin"
@@ -121,6 +123,83 @@ func assignDisplayLogIds(logs []*Log, startIdx int) {
 	}
 }
 
+type userLogGroupRatioDisplay struct {
+	applicable bool
+	enabled    bool
+	visible    bool
+	mode       string
+	value      float64
+}
+
+func isFiniteLogRatio(value float64) bool {
+	return !math.IsNaN(value) && !math.IsInf(value, 0)
+}
+
+func resolveUserLogGroupRatioDisplay(log *Log, otherMap map[string]interface{}) userLogGroupRatioDisplay {
+	groupRatio, hasGroupRatio := otherMap["group_ratio"].(float64)
+	userGroupRatio, hasUserGroupRatio := otherMap["user_group_ratio"].(float64)
+	if (!hasGroupRatio || !isFiniteLogRatio(groupRatio)) &&
+		(!hasUserGroupRatio || !isFiniteLogRatio(userGroupRatio)) {
+		return userLogGroupRatioDisplay{}
+	}
+
+	display := userLogGroupRatioDisplay{
+		applicable: true,
+		enabled:    common.UserLogGroupRatioDisplayEnabled,
+		mode:       common.UserLogGroupRatioDisplayMode,
+	}
+	if !display.enabled {
+		return display
+	}
+
+	switch display.mode {
+	case common.UserLogGroupRatioDisplayModePricingGroup:
+		group := strings.TrimSpace(log.Group)
+		if group == "" {
+			group, _ = otherMap["group"].(string)
+		}
+		if ratio_setting.ContainsGroupRatio(group) {
+			display.value = ratio_setting.GetGroupRatio(group)
+			display.visible = true
+		}
+	case common.UserLogGroupRatioDisplayModeManual:
+		display.value = common.UserLogGroupRatioManualValue
+		display.visible = true
+	default:
+		display.mode = common.UserLogGroupRatioDisplayModeSystem
+		if hasUserGroupRatio && isFiniteLogRatio(userGroupRatio) && userGroupRatio != -1 {
+			display.value = userGroupRatio
+			display.visible = true
+		} else if hasGroupRatio && isFiniteLogRatio(groupRatio) && groupRatio != 1 {
+			display.value = groupRatio
+			display.visible = true
+		}
+	}
+	return display
+}
+
+func formatAdminLogGroupRatioDisplay(logs []*Log) {
+	for i := range logs {
+		otherMap, _ := common.StrToMap(logs[i].Other)
+		if otherMap == nil {
+			continue
+		}
+
+		delete(otherMap, "user_group_ratio_display_enabled")
+		delete(otherMap, "user_group_ratio_display_mode")
+		delete(otherMap, "user_group_ratio_display_value")
+		display := resolveUserLogGroupRatioDisplay(logs[i], otherMap)
+		if display.applicable {
+			otherMap["user_group_ratio_display_enabled"] = display.enabled
+			otherMap["user_group_ratio_display_mode"] = display.mode
+			if display.visible {
+				otherMap["user_group_ratio_display_value"] = display.value
+			}
+		}
+		logs[i].Other = common.MapToJsonStr(otherMap)
+	}
+}
+
 func formatUserLogs(logs []*Log, startIdx int) {
 	for i := range logs {
 		logs[i].ChannelName = ""
@@ -131,6 +210,30 @@ func formatUserLogs(logs []*Log, startIdx int) {
 			delete(otherMap, "admin_info")
 			// Remove operation-audit details (operator/route info), admin-only.
 			delete(otherMap, "audit_info")
+			delete(otherMap, "group_ratio_display_mode")
+			delete(otherMap, "user_group_ratio_display_enabled")
+			delete(otherMap, "user_group_ratio_display_mode")
+			delete(otherMap, "user_group_ratio_display_value")
+			display := resolveUserLogGroupRatioDisplay(logs[i], otherMap)
+			if display.applicable && !display.enabled {
+				delete(otherMap, "group_ratio")
+				delete(otherMap, "user_group_ratio")
+			} else if display.applicable {
+				switch display.mode {
+				case common.UserLogGroupRatioDisplayModePricingGroup:
+					if display.visible {
+						otherMap["group_ratio"] = display.value
+						otherMap["group_ratio_display_mode"] = common.UserLogGroupRatioDisplayModePricingGroup
+					} else {
+						delete(otherMap, "group_ratio")
+					}
+					delete(otherMap, "user_group_ratio")
+				case common.UserLogGroupRatioDisplayModeManual:
+					otherMap["group_ratio"] = display.value
+					otherMap["group_ratio_display_mode"] = common.UserLogGroupRatioDisplayModeManual
+					delete(otherMap, "user_group_ratio")
+				}
+			}
 			// delete(otherMap, "reject_reason")
 			delete(otherMap, "stream_status")
 		}
@@ -608,6 +711,7 @@ func GetAllLogs(logType int, startTimestamp int64, endTimestamp int64, modelName
 			logs[i].ChannelName = channelMap[logs[i].ChannelId]
 		}
 	}
+	formatAdminLogGroupRatioDisplay(logs)
 
 	return logs, total, err
 }

@@ -180,6 +180,10 @@ export interface LogOtherData {
   model_price?: number
   group_ratio?: number
   user_group_ratio?: number
+  group_ratio_display_mode?: 'pricing_group' | 'manual'
+  user_group_ratio_display_enabled?: boolean
+  user_group_ratio_display_mode?: 'system' | 'pricing_group' | 'manual'
+  user_group_ratio_display_value?: number
   cache_ratio?: number
   cache_creation_ratio?: number
   cache_creation_ratio_5m?: number

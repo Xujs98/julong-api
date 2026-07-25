@@ -90,7 +90,22 @@ var EmailLoginAuthServerList = []string{
 var DebugEnabled bool
 var MemoryCacheEnabled bool
 
+const (
+	UserLogGroupRatioDisplayModeSystem           = "system"
+	UserLogGroupRatioDisplayModePricingGroup     = "pricing_group"
+	UserLogGroupRatioDisplayModeManual           = "manual"
+	ModelSquareGroupRatioDisplayModeActual       = "actual"
+	ModelSquareGroupRatioDisplayModePricingGroup = "pricing_group"
+	TokenGroupRatioDisplayModeActual             = "actual"
+	TokenGroupRatioDisplayModePricingGroup       = "pricing_group"
+)
+
 var LogConsumeEnabled = true
+var UserLogGroupRatioDisplayEnabled = true
+var UserLogGroupRatioDisplayMode = UserLogGroupRatioDisplayModeSystem
+var UserLogGroupRatioManualValue = 1.0
+var ModelSquareGroupRatioDisplayMode = ModelSquareGroupRatioDisplayModeActual
+var TokenGroupRatioDisplayMode = TokenGroupRatioDisplayModeActual
 var ImageGenerationLogEnabled = false
 var ImageGenerationLogRetentionDays = 30
 var ImageGenerationLogPollingIntervalSeconds = 15

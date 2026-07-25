@@ -43,6 +43,14 @@ import {
   FormMessage,
 } from '@/components/ui/form'
 import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
   Sheet,
   SheetContent,
   SheetDescription,
@@ -69,6 +77,8 @@ type GroupFormValues = {
   GroupGroupRatio: string
   AutoGroups: string
   DefaultUseAutoGroup: boolean
+  ModelSquareGroupRatioDisplayMode: 'actual' | 'pricing_group'
+  TokenGroupRatioDisplayMode: 'actual' | 'pricing_group'
   GroupSpecialUsableGroup: string
 }
 
@@ -161,6 +171,102 @@ export const GroupRatioForm = memo(function GroupRatioForm({
             {isSaving ? t('Saving...') : t('Save group ratios')}
           </Button>
         </SettingsPageActionsPortal>
+        <div className='grid gap-4 lg:grid-cols-2'>
+          <FormField
+            control={form.control}
+            name='ModelSquareGroupRatioDisplayMode'
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>{t('Model Square ratio display mode')}</FormLabel>
+                <FormControl>
+                  <Select
+                    items={[
+                      {
+                        value: 'actual',
+                        label: t('Actual ratio (including special rules)'),
+                      },
+                      {
+                        value: 'pricing_group',
+                        label: t('Always follow pricing group ratio'),
+                      },
+                    ]}
+                    value={field.value}
+                    onValueChange={(value) => {
+                      if (value !== null) field.onChange(value)
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent alignItemWithTrigger={false}>
+                      <SelectGroup>
+                        <SelectItem value='actual'>
+                          {t('Actual ratio (including special rules)')}
+                        </SelectItem>
+                        <SelectItem value='pricing_group'>
+                          {t('Always follow pricing group ratio')}
+                        </SelectItem>
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                </FormControl>
+                <FormDescription>
+                  {t(
+                    'This only changes Model Square display. Actual billing is unchanged.'
+                  )}
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name='TokenGroupRatioDisplayMode'
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>{t('API key group ratio display mode')}</FormLabel>
+                <FormControl>
+                  <Select
+                    items={[
+                      {
+                        value: 'actual',
+                        label: t('Actual ratio (including special rules)'),
+                      },
+                      {
+                        value: 'pricing_group',
+                        label: t('Always follow pricing group ratio'),
+                      },
+                    ]}
+                    value={field.value}
+                    onValueChange={(value) => {
+                      if (value !== null) field.onChange(value)
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent alignItemWithTrigger={false}>
+                      <SelectGroup>
+                        <SelectItem value='actual'>
+                          {t('Actual ratio (including special rules)')}
+                        </SelectItem>
+                        <SelectItem value='pricing_group'>
+                          {t('Always follow pricing group ratio')}
+                        </SelectItem>
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                </FormControl>
+                <FormDescription>
+                  {t(
+                    'This only changes ratios shown in API key group selectors. Actual billing is unchanged.'
+                  )}
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
         {editMode === 'visual' ? (
           <div className='space-y-6'>
             <GroupRatioVisualEditor

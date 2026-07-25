@@ -49,6 +49,9 @@ const getGroupDefaults = (settings: BillingSettings) => ({
   GroupGroupRatio: settings.GroupGroupRatio,
   AutoGroups: settings.AutoGroups,
   DefaultUseAutoGroup: settings.DefaultUseAutoGroup,
+  ModelSquareGroupRatioDisplayMode:
+    settings.ModelSquareGroupRatioDisplayMode ?? 'actual',
+  TokenGroupRatioDisplayMode: settings.TokenGroupRatioDisplayMode ?? 'actual',
   GroupSpecialUsableGroup:
     settings['group_ratio_setting.group_special_usable_group'],
 })

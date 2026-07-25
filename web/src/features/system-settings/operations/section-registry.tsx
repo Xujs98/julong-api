@@ -98,6 +98,15 @@ const OPERATIONS_SECTIONS = [
     build: (settings: OperationsSettings) => (
       <LogSettingsSection
         defaultEnabled={Boolean(settings.LogConsumeEnabled)}
+        defaultUserLogGroupRatioDisplayEnabled={Boolean(
+          settings.UserLogGroupRatioDisplayEnabled
+        )}
+        defaultUserLogGroupRatioDisplayMode={
+          settings.UserLogGroupRatioDisplayMode ?? 'system'
+        }
+        defaultUserLogGroupRatioManualValue={Number(
+          settings.UserLogGroupRatioManualValue ?? 1
+        )}
         defaultImageLogEnabled={Boolean(settings.ImageGenerationLogEnabled)}
         defaultImageLogRetentionDays={Number(
           settings.ImageGenerationLogRetentionDays ?? 30
