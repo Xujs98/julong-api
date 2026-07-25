@@ -179,6 +179,34 @@ export interface UserLoginIP {
   shared_user_count: number
 }
 
+export type UserRequestContentStatus = 'pending' | 'success' | 'error'
+
+export interface UserRequestContentLog {
+  id: number
+  user_id: number
+  request_id: string
+  created_at: number
+  model_name: string
+  token_name: string
+  request_path: string
+  status: UserRequestContentStatus
+  error_message?: string
+  original_size: number
+  captured_size: number
+  truncated: boolean
+}
+
+export interface UserRequestContentLogList {
+  enabled: boolean
+  items: UserRequestContentLog[]
+  max_items: number
+}
+
+export interface UserRequestContentLogDetail {
+  log: UserRequestContentLog
+  content: unknown
+}
+
 export type UsersDialogType =
   | 'create'
   | 'update'

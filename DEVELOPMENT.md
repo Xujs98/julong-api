@@ -25,7 +25,7 @@
 | Docker 部署 | 进行中 | `docker-compose.yml` 使用 `qq1371446705/julong-api:latest`，包含 Postgres、Redis，宿主端口 `3388`。 |
 | 代理功能 | 已实现，仍需持续 QA | 代理折扣、代理生成兑换码、代理所属用户、代理充值链接、退款日志等。 |
 | 错误反馈工单 | 已实现 | 500 页面跳转 `/error-report`，管理员/root 在 `/error-reports` 查看。 |
-| 用户详情与 IP 管理 | 已实现 | 后台用户详情显示登录 IP 历史并支持多选封禁/解封；用户列表标记共享 IP 和已封 IP。 |
+| 用户详情、IP 与请求内容审计 | 已实现 | 后台用户详情显示登录 IP 历史并支持多选封禁/解封；用户列表标记共享 IP 和已封 IP；管理员/root 可按用户开启新请求的上下文与提示词记录。 |
 | 兑换码搜索 | 已实现 | 后台兑换码支持按兑换码 key、生成者用户名/显示名、名称、ID、状态搜索。 |
 | 签到额度预览 | 已实现 | 计费与支付中的签到奖励输入框显示格式化额度预览。 |
 | 生图日志与异步生图 | 已实现 | 开启生图日志后，`async: true` 立即创建 `pending` 日志并返回任务 ID，支持 API Key 轮询、状态更新、图片读取和后台 JSON 详情；关闭日志时退回同步且不存图。 |
@@ -316,6 +316,10 @@ curl http://localhost:3000/api/error-reports \
 | GET | `/api/user/:id/usage-summary` | `controller.AdminGetUserUsageSummary` | 用户详情弹窗总 token 消耗 | path `id` | `{total_tokens:number}` | 完成 |
 | GET | `/api/user/:id/login-ips` | `controller.AdminGetUserLoginIPs` | 用户历史登录 IP、登录次数、最后使用时间、封禁和共享状态 | path `id` | `UserLoginIPStat[]` | 完成；管理员仅可查看低权限用户，root 可查看全部 |
 | PUT | `/api/user/:id/login-ips` | `controller.AdminUpdateUserLoginIPs` | 批量封禁或解封登录 IP | path `id`；`{ips:string[],blocked:boolean}`，1-100 个标准 IPv4/IPv6 | success | 完成；管理员仅可操作低权限用户，root 可操作全部；非法 IP 返回参数错误 |
+| GET | `/api/user/:id/request-content` | `controller.AdminListUserRequestContentLogs` | 读取指定用户的请求内容记录开关和最近记录摘要 | path `id` | `{enabled:boolean,items:UserRequestContentLog[],max_items:50}`；列表不返回压缩正文 | 完成；管理员仅可查看低权限用户，root 可查看全部 |
+| PUT | `/api/user/:id/request-content` | `controller.AdminUpdateUserRequestContentLogging` | 按用户开启或关闭后续请求内容记录 | path `id`；JSON `{enabled:boolean}` | `{enabled:boolean}` | 完成；仅影响新请求，写管理审计日志 |
+| GET | `/api/user/:id/request-content/:log_id` | `controller.AdminGetUserRequestContentLog` | 读取并解压单条已脱敏请求 JSON | path `id/log_id` | `{log:UserRequestContentLog,content:any}` | 完成；校验记录所属用户，查看动作写管理审计日志 |
+| DELETE | `/api/user/:id/request-content` | `controller.AdminDeleteUserRequestContentLogs` | 清空指定用户全部请求内容记录 | path `id` | `data:null` | 完成；写管理审计日志 |
 | GET | `/api/user/topup` | `controller.GetAllTopUps` | 管理员充值列表 | `p`, `page_size` | top-up page | 完成 |
 | POST | `/api/user/topup/complete` | `controller.AdminCompleteTopUp` | 手动完成充值订单 | `{trade_no}` | success | 完成 |
 | GET | `/api/user/:id/oauth/bindings` | `controller.GetUserOAuthBindingsByAdmin` | OAuth 绑定列表 | path `id` | binding list | 完成 |
@@ -338,6 +342,26 @@ curl -X PUT 'http://localhost:3000/api/user/12/login-ips' \
 ```
 
 错误处理：空列表、超过 100 个 IP 或任一非法 IP 返回参数错误且不写入；目标用户不存在返回查询错误；管理员操作同级/更高角色返回权限错误；主库或日志库异常返回数据库错误。写接口经过管理员审计中间件，并由 `recordManageAuditFor` 记录目标用户、操作数量和封禁状态。
+
+请求内容审计错误处理：非法用户 ID、非法记录 ID 或记录不属于目标用户时返回标准参数/查询错误；管理员访问同级或更高角色用户返回权限错误；JSON 解码、数据库读写或 gzip 解压失败返回标准 `{success:false,message:string}`。记录开关默认关闭，每用户最多保留最近 50 条，单条脱敏 JSON 最大 4 MiB；`api_key/access_token/authorization/client_secret/password/secret` 和内嵌 Base64 媒体会在入库前移除。该功能只观察 Relay DTO，不修改上游请求、计费、额度或订阅结算。
+
+请求内容审计调用示例：
+
+```bash
+curl -X PUT 'http://localhost:3000/api/user/12/request-content' \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer <dashboard-access-token>' \
+  -d '{"enabled":true}'
+
+curl 'http://localhost:3000/api/user/12/request-content' \
+  -H 'Authorization: Bearer <dashboard-access-token>'
+
+curl 'http://localhost:3000/api/user/12/request-content/34' \
+  -H 'Authorization: Bearer <dashboard-access-token>'
+
+curl -X DELETE 'http://localhost:3000/api/user/12/request-content' \
+  -H 'Authorization: Bearer <dashboard-access-token>'
+```
 
 调用示例：
 
@@ -744,7 +768,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 
 | 模型 | 文件 | 表用途 | 关键字段和约束 | 关系/说明 | 状态 |
 | --- | --- | --- | --- | --- | --- |
-| `User` | `model/user.go` | Dashboard 用户 | `id`、唯一索引 `username`、`password`、`display_name`、`role`、`status`、`email`、`quota`、`used_quota`、`request_count`、`group`、唯一 `aff_code`、`inviter_id`、`is_agent`、`agent_discount`、`agent_topup_link`、`stripe_customer`、`last_login_at`、IPv4/IPv6 `last_login_ip`、`auth_version bigint default 1`、时间戳 | 列表/详情必须隐藏 password/access token。登录成功统一在 `setupLogin` 更新时间/IP；密码、角色和状态等敏感变更提升 `auth_version` 并撤销旧会话；`shared_ip_user_count`、`last_login_ip_blocked`、`AdminPermissions` 均为 transient 字段。 | 活跃 |
+| `User` | `model/user.go` | Dashboard 用户 | `id`、唯一索引 `username`、`password`、`display_name`、`role`、`status`、`email`、`quota`、`used_quota`、`request_count`、`group`、唯一 `aff_code`、`inviter_id`、`is_agent`、`agent_discount`、`agent_topup_link`、`stripe_customer`、`last_login_at`、IPv4/IPv6 `last_login_ip`、`request_content_logging_enabled bool`、`auth_version bigint default 1`、时间戳 | 请求内容开关零值/默认值为关闭并同步至 Redis 用户鉴权缓存；列表/详情必须隐藏 password/access token 和该内部开关。登录成功统一在 `setupLogin` 更新时间/IP；密码、角色和状态等敏感变更提升 `auth_version` 并撤销旧会话；`shared_ip_user_count`、`last_login_ip_blocked`、`AdminPermissions` 均为 transient 字段。 | 活跃 |
 | `UserSession` | `model/user_session.go` | Dashboard 服务端登录会话 | 主键 `sid varchar(64)`；索引 `user_id/status/expires_at`；`version`、`user_auth_version`、状态、refresh HMAC、登录方式、IP、User-Agent、创建/活跃/过期/撤销时间 | 不保存 refresh 明文；短期 access token 必须同时通过会话版本和用户认证版本校验。支持 Redis 缓存、令牌轮换重用检测和批量撤销。 | 上游同步，活跃 |
 | `AuthFlow` | `model/auth_flow.go` | OAuth、2FA、Passkey、Telegram 等一次性认证流程 | `id`；唯一 `token_hash`；索引 `purpose/expires_at`；`provider`、`intent`、`user_id`、`session_id`、内部 payload、`consumed_at` | 只保存不透明 flow token 的 HMAC；消费操作防重放并带过期校验。 | 上游同步，活跃 |
 | `ExternalIdentityClaim` | `model/external_identity_claim.go` | 外部身份唯一归属 | `provider+subject` 和 `provider+user_id` 两组唯一索引；`created_at` | 当前用于 Telegram 等外部身份原子占用，避免同一身份绑定多个用户；迁移时回填已有 Telegram 绑定。 | 上游同步，活跃 |
@@ -754,6 +778,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 | `Ability` | `model/ability.go` | 渠道/模型能力映射 | channel/model/group enabled 字段 | 用于模型可用性和路由。 | 活跃 |
 | `Log` | `model/log.go` | 使用日志和审计日志 | `id`、`user_id`、`created_at`、`type`、`content`、`username`、`token_name`、`model_name`、`quota`、`prompt_tokens`、`completion_tokens`、`channel_id`、`ip`、`request_id`、`upstream_request_id`、可空 `user_display_group_ratio`、`other` | 可位于独立日志库/ClickHouse。`user_display_group_ratio` 是日志创建时面向用户的展示倍率快照，只供响应格式化和 UI 展示使用；实际扣费仍由 `quota` 及计费服务完成。`GetUserLoginIPStats` 聚合登录 IP、次数和最后时间；`SumUserUsedToken` 提供总 token 消耗。 | 活跃 |
 | `ImageGenerationLog` / `ImageGenerationImage` | `model/image_generation_log.go` | 同步生图日志与本地异步任务 | 日志含 `id`；索引 `task_id/status/user_id/username/token_id/channel_id/model_name/request_id/created_at/updated_at`；`prompt/size/quality/image_count/quota/use_time`；内部 `images/response` JSON。`ImageGenerationImage` JSON 字段为 `type/value/bucket/mime_type/sha256/size/revised_prompt`，`type` 支持 `local/remote/minio`。 | 任务属于一个 User/Token；MinIO 元数据写入现有 `images` 文本 JSON，不新增数据库列或表。旧 local/remote JSON 继续兼容；AutoMigrate 无额外迁移。 | 活跃 |
+| `UserRequestContentLog` | `model/user_request_content_log.go` | 按用户留存 Relay 请求上下文与提示词 | `id int` 主键；`user_id int` 与 `created_at int64` 组成排序索引；唯一 `request_id varchar(64)`；`model_name/token_name varchar(191)`、`request_path varchar(255)`、索引 `status varchar(16)`、`error_message text`、`original_size/captured_size int`、`truncated bool`、`compressed_json []byte` | 逻辑上属于 `User`，硬删除用户时同步删除；不建立数据库外键以兼容现有删除流程。正文先脱敏、限制为 4 MiB，再 gzip 存主库；创建和清理旧记录位于同一事务，每用户只保留最近 50 条。 | 活跃 |
 | `Redemption` | `model/redemption.go` | 兑换码 | 唯一 `key`、`user_id` 生成者、`status`、`name`、`quota`、`created_time`、`redeemed_time`、`used_user_id`、`expired_time`、`agent_charge`、软删除 | 生成者显示字段是 transient。搜索支持 code、生成者、ID、名称。代理退款使用 `agent_charge`。 | 活跃 |
 | `TopUp` | `model/topup.go` | 在线支付/充值订单 | trade no、user、amount/money、provider、status | 支付回调结算。 | 活跃 |
 | `Checkin` / `CheckinRecord` | `model/checkin.go` | 每日签到奖励记录 | user/date/quota/time 字段 | 设置位于 `checkin_setting.*`。 | 活跃 |
@@ -787,6 +812,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 ### 迁移注意事项
 
 - 新增持久化模型时，必须同时加入 `model/main.go` 的 `migrateDB()` 和 `migrateDBFast()`。
+- 请求内容审计升级由 `AutoMigrate` 新增 `users.request_content_logging_enabled` 和 `user_request_content_logs`；三种数据库均由 GORM 映射 `[]byte`（SQLite/MySQL 为二进制列、PostgreSQL 为 `bytea`），无需手写方言 SQL。旧用户字段零值为关闭，部署后不会自动记录历史或新请求；Redis 用户缓存 schema 已由 2 升至 3，旧缓存会自动失效并从主库重建。
 - 日志表结构变化可能还需要更新 `migrateLOGDB()`。
 - `Log.user_display_group_ratio` 由 `migrateLOGDB()` 自动迁移：SQLite/MySQL/PostgreSQL 使用 GORM `AutoMigrate` 补充可空浮点列，ClickHouse 使用 `ALTER TABLE logs ADD COLUMN IF NOT EXISTS user_display_group_ratio Nullable(Float64)`；旧记录保持 `NULL` 并仅回退到该记录自身 `other` 中保存的真实倍率，不读取当前展示配置。
 - `QuotaData.user_display_quota/user_display_token_used` 由主库 GORM `AutoMigrate` 补充可空整型列；启动迁移随后执行 `backfillQuotaDataUserDisplayMetrics`，只把旧记录的 `NULL` 展示值回填为该聚合记录原有真实值。新请求同时累加真实列和展示列，不改写真实看板数据。
@@ -856,7 +882,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 | `usage-logs` | `usage-logs-table.tsx`、普通/绘图/生图/任务 columns、`lib/group-ratio.ts`、`image-generation-task-dialog.tsx`、图片预览和筛选组件 | 普通消费日志、Midjourney 绘图日志、同步/异步生图日志、媒体任务日志；普通用户令牌下方倍率支持关闭、跟随实际倍率、跟随定价分组基础倍率或统一手动展示，管理员/root 同时看到请求真实倍率和当前用户展示倍率；未完成生图按 root 配置频率刷新（默认 15 秒），任务 ID 弹窗由页面级状态持有并按需请求 JSON，不受表格轮询重建影响 | `/api/log*`、`/api/mj`、`/api/image-generation-logs*`、`/api/task` | 完成 |
 | `wallet` | recharge cards、subscription cards、affiliate rewards、redemption hook | 钱包充值、兑换码、订阅 | `/api/user/topup*`、`/api/subscription*`、支付 API | 完成 |
 | `redemption-codes` | `redemptions-table.tsx`、`redemptions-columns.tsx`、mutate/delete dialogs | 管理员/代理兑换码管理 | `/api/redemption*`、`/api/user/agent/topup-link` | 完成 |
-| `users` | `users-table.tsx`、`users-columns.tsx`、`users-mutate-drawer.tsx`、`agent-detail-dialog.tsx`、`user-detail-dialog.tsx` | 后台用户管理、代理详情、用户详情；详情弹窗包含头像身份摘要、关键指标带、订阅摘要、紧凑信息网格、响应式数据表和加载骨架 | `/api/user*`、`/api/log`、`/api/subscription/admin/*` | 完成 |
+| `users` | `users-table.tsx`、`users-columns.tsx`、`users-mutate-drawer.tsx`、`agent-detail-dialog.tsx`、`user-detail-dialog.tsx`、`user-request-content-panel.tsx:UserRequestContentPanel/RequestContentDetailDialog`、`lib/request-content.ts:extractRequestConversation` | 后台用户管理、代理详情、用户详情；详情弹窗包含头像身份摘要、关键指标带、订阅摘要、IP 管理及按用户开启的上下文与提示词审计。审计面板负责开关、最近 50 条摘要、清空、结构化对话、原始 JSON 复制/下载和移动端布局；解析工具兼容 Chat Completions、Responses 与 legacy prompt | `/api/user*`、`/api/log`、`/api/subscription/admin/*`、`/api/user/:id/request-content*`；依赖 React Query、Dialog/Tabs/ScrollArea/Switch、i18n | 完成 |
 | `models` | metadata/deployment tables and drawers | 模型元数据和部署管理 | `/api/models*`、`/api/vendors*`、`/api/deployments*` | 完成 |
 | `subscriptions` | subscription table/drawers | 后台订阅计划/用户绑定 | `/api/subscription/admin*` | 完成 |
 | `system-settings` | `auth`、`billing`、`content`、`models`、`request-limits`、`maintenance`、`integrations`、`general` 下的 section registries；`maintenance/log-settings-section.tsx:LogSettingsSection`、`models/group-ratio-form.tsx:GroupRatioForm`、内部 `ImageStorageSettings` | 管理员/root 运行时设置；`LogSettingsSection` 负责消费/生图日志、普通用户日志倍率展示、轮询频率和图片读取白名单；`GroupRatioForm` 独立配置模型广场和令牌分组倍率展示模式；`ImageStorageSettings` 负责 MinIO 凭据、保留天数、对象数/容量/过期数/最近清理统计、立即清理过期图片，以及带二次确认和 10 秒倒计时的全量清空；初始化请求并行，活动清理任务每 5 秒查询一次 | `/api/option*`、`/api/performance/image-storage*`、`/api/system-task/*` | 完成 |
@@ -930,6 +956,8 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 - 禁用用户会在同一个主库事务中禁用账号并封禁该用户全部登录审计 IP 及最近 IP。重新启用账号不会自动解封 IP，必须在登录 IP 页签手动选择解封。
 - 用户列表执行禁用前显示破坏性确认弹窗，明确提示 IP 联动封禁及重新启用不会自动解封。
 - 黑名单阻止普通用户注册、登录、已有 Dashboard 会话和 API Token 请求；管理员/root 的 Dashboard 登录豁免，避免共享办公出口 IP 导致后台锁死。
+- “上下文与提示词”页签可为单个用户开启后续 Relay 请求记录；列表展示模型、路径、状态、请求 ID、时间和捕获大小，详情提供结构化对话及 JSON 复制/下载。关闭开关不会清空已有记录，清空操作需要二次确认。
+- 请求在参数校验及 RelayInfo 创建成功后、发往上游前写入 `pending`，完成后更新为 `success/error`，所以上游 `500 do request failed` 也可保留对应请求内容。历史请求无法追溯，必须先开启再观察。
 
 ### 兑换码搜索增强
 
@@ -992,6 +1020,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 | 未启用 Redis 的多实例部署中，IP 黑名单负缓存最多延迟 60 秒同步 | 另一实例可能短暂继续放行刚封禁的 IP | 单实例立即失效；Redis 部署使用共享缓存并立即失效 | 生产多实例必须启用 Redis，或增加数据库通知机制。 |
 | 上游 `web/` 当前全量 lint 基线为 364 个错误、73 个警告 | `bun run lint` 不能作为本仓库合并后的全量绿色门禁 | 本次与上游差异的 Julong 文件单独执行 oxlint，结果为 0 错误、1 个已知警告；typecheck、format 和 build 仍作为硬性检查 | 分批修复上游存量 lint，或在 CI 中先按变更文件执行并逐步扩大覆盖范围。 |
 | 自定义 Footer HTML 使用 `dangerouslySetInnerHTML` | root 配置恶意 HTML 时可能形成持久型 XSS | 仅允许可信 root 配置，并在 Julong 差异 lint 中保留 `react/no-danger` 警告 | 引入可靠 HTML sanitizer 和允许标签/属性白名单后再渲染。 |
+| 请求内容审计会保存用户提示词和上下文 | 主数据库容量增加，并涉及用户隐私、商业代码或个人信息 | 默认按用户关闭；只保留最近 50 条；4 MiB 上限；gzip；已知凭据和 Base64 媒体入库前脱敏；仅管理员/root 且受目标角色约束可访问；查看、开关和清空均写审计日志 | 生产环境制定告知/授权、最短保留期和访问审计制度；后续可增加全局总容量/时间保留策略。 |
 
 ## 技术债
 
@@ -1002,6 +1031,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 - 为所有 controller 请求/响应增加明确 DTO，减少直接暴露 model JSON。
 - 对高风险 schema 变更引入迁移文件，而不是只依赖 AutoMigrate。
 - 对关键后台页面增加前端视觉回归检查。
+- 为请求内容审计增加全局按天保留、总容量上限和定时清理；当前只按用户条数清理。
 - 继续优化所有后台表格移动端布局，而不只限兑换码。
 
 ## 进度
@@ -1018,6 +1048,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 - 从 500 页面提交/后台查看错误反馈。
 - 后台用户列表点击用户名查看用户详情。
 - 管理员/root 可查看、批量封禁/解封用户历史登录 IP；禁用用户自动封禁其已有 IP，用户列表标记共享和已封 IP。
+- 管理员/root 可在用户详情中按用户开启上下文与提示词记录，查看失败/成功请求的结构化对话和脱敏 JSON，并清空记录。
 - 禁用用户提升认证版本并撤销全部活跃 Dashboard 会话，避免旧 access/refresh token 继续使用。
 - 兑换码支持按生成者、兑换码、名称、ID 搜索。
 - 签到奖励额度预览。
@@ -1046,6 +1077,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 
 | 日期 | 变更 | 更新文件/API/模型 | 验证 |
 | --- | --- | --- | --- |
+| 2026-07-25 | 后台用户详情新增“上下文与提示词”审计。管理员/root 可按用户开启，仅记录开启后的 Relay DTO；请求发送上游前创建 `pending`，完成后标记 `success/error`，支持结构化对话、脱敏 JSON 查看/复制/下载和二次确认清空。每用户事务保留最近 50 条，单条脱敏正文严格限制 4 MiB 并 gzip 存主库；已知凭据和内嵌 Base64 媒体不入库。新增用户字段、记录表、Redis cache schema 3 和硬删除级联清理，不接触计费及上游请求。 | `User.request_content_logging_enabled`、`UserRequestContentLog`、`service.CaptureUserRequestContent/FinishUserRequestContent`、`GET/PUT/DELETE /api/user/:id/request-content`、`GET /api/user/:id/request-content/:log_id`、`UserRequestContentPanel`、`extractRequestConversation`、locale files、`DEVELOPMENT.md` | `go test ./...`、`go test ./model ./service ./controller ./middleware`、`bun run typecheck`、Bun 前端单元测试、目标文件 `oxlint/oxfmt`、`bun run i18n:sync`、`bun run format:check`、`bun run build`、`git diff --check` 均通过；本地 SQLite AutoMigrate 表/字段及 `3000/5173` HTTP 200 已验证。 |
 | 2026-07-25 | 使用日志新增持久化的用户展示倍率快照。每条新日志在写入时按 `system/pricing_group/manual` 保存 `user_display_group_ratio`，后续修改展示配置只影响新日志，历史日志不再被重新计算；旧日志回退到自身保存的真实倍率。普通用户单条日志响应中的费用、输入/输出 Tokens 和缓存 Tokens 按“展示倍率 / 真实倍率”换算；日志页顶部“用量”保持真实扣费、RPM 保持真实请求数，TPM 按最近 60 秒各日志快照换算。普通用户数据看板的额度、Token、TPM 和消费/分流图表读取新增的展示聚合列，调用次数/RPM 保持真实；管理员/root 的日志和看板保留真实数据。所有展示字段均在计费完成后写入，未接入预扣费、结算、退款、余额或订阅链路，数据库原 `quota/token` 和真实倍率字段保持不变。 | `Log.UserDisplayGroupRatio`、`QuotaData.{UserDisplayQuota,UserDisplayTokenUsed}`、`model.{createLog,snapshotUserDisplayGroupRatio,applyUserLogDisplayMetrics,userVisibleLogDataMetrics,formatUserLogs,SumUserVisibleUsedQuota,formatAdminLogGroupRatioDisplay,GetQuotaDataByUserId,getSelfFlowQuotaData}`、`controller.GetLogsSelfStat`、`migrateLOGDB`、ClickHouse `logs.user_display_group_ratio`、usage logs schema/columns/tests、locale files、`DEVELOPMENT.md` | `go test ./...`、`go test ./model`、`go test ./controller`、`bun run typecheck`、目标文件 oxlint、倍率前端单元测试、`bun run build`、`bun run i18n:sync`、`bun run format:check`、`git diff --check` 均通过。 |
 | 2026-07-25 | 新增倍率展示控制：日志维护可完全隐藏普通用户日志倍率、跟随真实倍率、跟随计费分组基础倍率或统一手动展示；管理员日志同时显示请求真实倍率和当前用户展示倍率。分组定价新增模型广场和令牌分组两个独立展示模式，均可选择包含特殊倍率规则的真实倍率，或始终使用基础定价分组倍率。初版在读取日志时实时转换展示倍率，不影响实际扣费。 | `UserLogGroupRatioDisplayEnabled`、`UserLogGroupRatioDisplayMode`、`UserLogGroupRatioManualValue`、`ModelSquareGroupRatioDisplayMode`、`TokenGroupRatioDisplayMode`、`controller.{GetPricing,GetUserGroups}`、`model.{formatUserLogs,formatAdminLogGroupRatioDisplay}`、`GroupRatioForm`、`LogSettingsSection`、`usage-logs/lib/group-ratio.ts`、locale files、`DEVELOPMENT.md` | `go test ./...`、`bun run typecheck`、目标文件 oxlint、`bun run build`、`bun run i18n:sync`、`bun run format:check`、倍率前端单元测试、`git diff --check` 均通过。 |
 | 2026-07-25 | 合并上游 `QuantumNous/new-api@84a79b68`。默认前端从 `web/default` 迁移为单一 `web/`，删除 Classic；接入新的 Dashboard access/refresh token 与 `UserSession`/`AuthFlow`/`ExternalIdentityClaim` 架构、模型未定价视图、用户排序/额度溢出保护、渠道模型发现以及计费、缓存写入、图片流和任务退款修复。Julong 的代理、兑换码退款、订阅抵扣、IP 管理、错误工单、客服/公告/自定义端点、系统设置权限、生图日志/轮询/白名单/MinIO 和品牌资源全部迁移保留；修复禁用用户未撤销活跃会话、新认证测试未迁移 `BlockedIP` 的合并回归，并将后端开发命令更新为可包含全部主包文件的 `go run .`。 | `upstream/main@84a79b68`、`controller/{user,model_list_test,auth_session_test,theme_compat_test}.go`、`middleware/{auth,auth_test}.go`、`model/{user,user_session,auth_flow,external_identity_claim,blocked_ip}.go`、`relay/channel/openai/relay_image.go`、`router/api-router.go`、`web/`、`README.md`、`electron/README.md`、`DEVELOPMENT.md` | `go test ./...`、`bun run typecheck`、`bun run i18n:sync`、`bun run format:check`、`bun run build`、Julong 差异文件 oxlint（0 错误、1 个已知 `react/no-danger` 警告）、`git diff --check` 均通过；全量 `bun run lint` 仍有上游基线 364 错误/73 警告，已列入已知问题。 |

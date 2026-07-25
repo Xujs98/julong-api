@@ -122,6 +122,15 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		newAPIError = types.NewError(err, types.ErrorCodeGenRelayInfoFailed)
 		return
 	}
+	if service.CaptureUserRequestContent(c, relayInfo, request) {
+		defer func() {
+			if newAPIError != nil {
+				service.FinishUserRequestContent(requestId, newAPIError)
+				return
+			}
+			service.FinishUserRequestContent(requestId, c.Request.Context().Err())
+		}()
+	}
 
 	needSensitiveCheck := setting.ShouldCheckPromptSensitive()
 	needCountToken := constant.CountToken

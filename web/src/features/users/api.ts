@@ -31,6 +31,8 @@ import type {
   AgentDetailData,
   UserUsageSummary,
   UserLoginIP,
+  UserRequestContentLogList,
+  UserRequestContentLogDetail,
 } from './types'
 
 // ============================================================================
@@ -207,6 +209,38 @@ export async function updateUserLoginIPs(
     ips,
     blocked,
   })
+  return res.data
+}
+
+export async function getUserRequestContentLogs(
+  userId: number
+): Promise<ApiResponse<UserRequestContentLogList>> {
+  const res = await api.get(`/api/user/${userId}/request-content`)
+  return res.data
+}
+
+export async function updateUserRequestContentLogging(
+  userId: number,
+  enabled: boolean
+): Promise<ApiResponse<{ enabled: boolean }>> {
+  const res = await api.put(`/api/user/${userId}/request-content`, {
+    enabled,
+  })
+  return res.data
+}
+
+export async function getUserRequestContentLog(
+  userId: number,
+  logId: number
+): Promise<ApiResponse<UserRequestContentLogDetail>> {
+  const res = await api.get(`/api/user/${userId}/request-content/${logId}`)
+  return res.data
+}
+
+export async function deleteUserRequestContentLogs(
+  userId: number
+): Promise<ApiResponse> {
+  const res = await api.delete(`/api/user/${userId}/request-content`)
   return res.data
 }
 

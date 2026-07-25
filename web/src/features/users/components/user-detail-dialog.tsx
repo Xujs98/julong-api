@@ -1,3 +1,21 @@
+/*
+Copyright (C) 2023-2026 QuantumNous
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as
+published by the Free Software Foundation, either version 3 of the
+License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+For commercial licensing, please contact support@quantumnous.com
+*/
 import { useQuery } from '@tanstack/react-query'
 import { Ban, Loader2, ShieldCheck } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
@@ -53,6 +71,7 @@ import {
   isUserDeleted,
 } from '../constants'
 import type { User, UserLoginIP } from '../types'
+import { UserRequestContentPanel } from './user-request-content-panel'
 import { useUsers } from './users-provider'
 
 const RECENT_LOG_LIMIT = 20
@@ -451,6 +470,9 @@ export function UserDetailDialog() {
             <TabsTrigger value='info'>{t('Basic Information')}</TabsTrigger>
             <TabsTrigger value='logs'>{t('Usage Logs')}</TabsTrigger>
             <TabsTrigger value='login-ips'>{t('Login IPs')}</TabsTrigger>
+            <TabsTrigger value='request-content'>
+              {t('Context and Prompts')}
+            </TabsTrigger>
           </TabsList>
 
           <ScrollArea className='max-h-[calc(100dvh-19rem)]'>
@@ -536,6 +558,10 @@ export function UserDetailDialog() {
                 userId={user?.id}
                 onUpdated={triggerRefresh}
               />
+            </TabsContent>
+
+            <TabsContent value='request-content' className='p-4 sm:p-6'>
+              <UserRequestContentPanel userId={user?.id} />
             </TabsContent>
           </ScrollArea>
         </Tabs>

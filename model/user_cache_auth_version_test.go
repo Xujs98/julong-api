@@ -32,6 +32,27 @@ func useUserCacheMiniRedis(t *testing.T) *miniredis.Miniredis {
 	return server
 }
 
+func TestUserRequestContentLoggingCacheRoundTrip(t *testing.T) {
+	truncateTables(t)
+	useUserCacheMiniRedis(t)
+	user := User{
+		Username: "request-content-cache", Password: "password", Group: "default",
+		Status: common.UserStatusEnabled, AuthVersion: 1,
+	}
+	require.NoError(t, DB.Create(&user).Error)
+	require.NoError(t, populateUserCache(user))
+
+	require.NoError(t, SetUserRequestContentLogging(user.Id, true))
+	cached, err := cacheGetUserBase(user.Id)
+	require.NoError(t, err)
+	assert.True(t, cached.RequestContentLoggingEnabled)
+
+	require.NoError(t, SetUserRequestContentLogging(user.Id, false))
+	cached, err = cacheGetUserBase(user.Id)
+	require.NoError(t, err)
+	assert.False(t, cached.RequestContentLoggingEnabled)
+}
+
 func TestUserAuthFenceRollbackExpiresAndRecovers(t *testing.T) {
 	truncateTables(t)
 	server := useUserCacheMiniRedis(t)
