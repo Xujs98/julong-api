@@ -27,7 +27,6 @@ import type { OperationsSettings } from '../types'
 import { createSectionRegistry } from '../utils/section-registry'
 import { EmailCampaignsSection } from './email-campaigns-section'
 import { EmailTemplateSettingsSection } from './email-template-settings-section'
-import { SubscriptionExpiryReminderSection } from './subscription-expiry-reminder-section'
 
 const OPERATIONS_SECTIONS = [
   {
@@ -82,17 +81,8 @@ const OPERATIONS_SECTIONS = [
     ),
   },
   {
-    id: 'email-reminders',
-    titleKey: 'Subscription expiry reminders',
-    build: (settings: OperationsSettings) => (
-      <SubscriptionExpiryReminderSection
-        defaultEnabled={settings.SubscriptionExpiryReminderEnabled}
-      />
-    ),
-  },
-  {
     id: 'email-templates',
-    titleKey: 'Email templates',
+    titleKey: 'Email settings',
     build: () => <EmailTemplateSettingsSection />,
   },
   {

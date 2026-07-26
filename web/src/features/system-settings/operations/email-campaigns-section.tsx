@@ -34,6 +34,7 @@ import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { Dialog } from '@/components/dialog'
+import { HtmlContent } from '@/components/html-content'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -69,6 +70,12 @@ import {
   type EmailCampaignStatus,
   type EmailCampaignTarget,
 } from './email-campaigns-api'
+import {
+  listEmailTemplates,
+  previewEmailTemplate,
+  type EmailTemplate,
+  type EmailTemplatePreview,
+} from './email-templates-api'
 
 const PAGE_SIZE = 20
 const DELIVERY_PAGE_SIZE = 50
@@ -153,6 +160,10 @@ export function EmailCampaignsSection() {
   const [saving, setSaving] = useState(false)
   const [previewing, setPreviewing] = useState(false)
   const [previewCount, setPreviewCount] = useState<number | null>(null)
+  const [templateKey, setTemplateKey] = useState('')
+  const [templatePreview, setTemplatePreview] =
+    useState<EmailTemplatePreview | null>(null)
+  const [templatePreviewing, setTemplatePreviewing] = useState(false)
   const [selected, setSelected] = useState<EmailCampaign | null>(null)
   const [deliveryPage, setDeliveryPage] = useState(1)
   const [deleting, setDeleting] = useState<EmailCampaign | null>(null)
@@ -207,6 +218,25 @@ export function EmailCampaignsSection() {
     },
   })
 
+  const templatesQuery = useQuery({
+    queryKey: ['email-templates', 'campaign-picker'],
+    enabled: formOpen,
+    queryFn: async () => {
+      const response = await listEmailTemplates()
+      if (!response.success) {
+        throw new Error(response.message || t('Failed to load email templates'))
+      }
+      return (response.data || []).filter(
+        (template) => template.campaign_compatible
+      )
+    },
+  })
+
+  const campaignTemplates = templatesQuery.data || []
+  const selectedCampaignTemplate = campaignTemplates.find(
+    (template) => `${template.event}::${template.locale}` === templateKey
+  )
+
   const totalPages = Math.max(
     1,
     Math.ceil((campaignsQuery.data?.total || 0) / PAGE_SIZE)
@@ -249,6 +279,8 @@ export function EmailCampaignsSection() {
     setEditing(null)
     setForm(emptyForm())
     setPreviewCount(null)
+    setTemplateKey('')
+    setTemplatePreview(null)
     setFormOpen(true)
   }
 
@@ -256,7 +288,42 @@ export function EmailCampaignsSection() {
     setEditing(campaign)
     setForm(campaignToForm(campaign))
     setPreviewCount(null)
+    setTemplateKey('')
+    setTemplatePreview(null)
     setFormOpen(true)
+  }
+
+  const applySelectedTemplate = () => {
+    if (!selectedCampaignTemplate) return
+    setForm((current) => ({
+      ...current,
+      subject: selectedCampaignTemplate.subject,
+      content: selectedCampaignTemplate.content,
+    }))
+    toast.success(t('Email template applied'))
+  }
+
+  const previewSelectedTemplate = async () => {
+    if (!selectedCampaignTemplate) return
+    setTemplatePreviewing(true)
+    try {
+      const response = await previewEmailTemplate(
+        selectedCampaignTemplate.event,
+        selectedCampaignTemplate.locale,
+        selectedCampaignTemplate.subject,
+        selectedCampaignTemplate.content
+      )
+      if (!response.success || !response.data) throw new Error(response.message)
+      setTemplatePreview(response.data)
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : t('Failed to preview email template')
+      )
+    } finally {
+      setTemplatePreviewing(false)
+    }
   }
 
   const validateForm = () => {
@@ -711,6 +778,73 @@ export function EmailCampaignsSection() {
             </div>
           </div>
 
+          <div className='space-y-2 rounded-lg border p-3'>
+            <div className='flex flex-col gap-2 sm:flex-row sm:items-end'>
+              <div className='min-w-0 flex-1 space-y-1.5'>
+                <Label htmlFor='campaign-template'>{t('Email template')}</Label>
+                <NativeSelect
+                  id='campaign-template'
+                  className='w-full'
+                  value={templateKey}
+                  onChange={(event) => {
+                    setTemplateKey(event.target.value)
+                    setTemplatePreview(null)
+                  }}
+                >
+                  <NativeSelectOption value=''>
+                    {t('Do not use a template')}
+                  </NativeSelectOption>
+                  {campaignTemplates.map((template: EmailTemplate) => (
+                    <NativeSelectOption
+                      key={`${template.event}::${template.locale}`}
+                      value={`${template.event}::${template.locale}`}
+                    >
+                      {t(template.label)} ·{' '}
+                      {template.locale === 'zh' ? t('Chinese') : t('English')}
+                    </NativeSelectOption>
+                  ))}
+                </NativeSelect>
+              </div>
+              <div className='flex shrink-0 gap-2'>
+                <Button
+                  type='button'
+                  variant='outline'
+                  disabled={!selectedCampaignTemplate || templatePreviewing}
+                  onClick={previewSelectedTemplate}
+                >
+                  <Eye className='size-4' />
+                  {t('Preview template')}
+                </Button>
+                <Button
+                  type='button'
+                  variant='secondary'
+                  disabled={!selectedCampaignTemplate}
+                  onClick={applySelectedTemplate}
+                >
+                  {t('Apply template')}
+                </Button>
+              </div>
+            </div>
+            <p className='text-muted-foreground text-xs'>
+              {t(
+                'Applying a template replaces the current subject and HTML content.'
+              )}
+            </p>
+            {templatePreview && (
+              <div className='overflow-hidden rounded-md border'>
+                <div className='bg-muted/30 border-b px-3 py-2 text-xs font-medium'>
+                  {templatePreview.subject}
+                </div>
+                <div className='max-h-72 overflow-auto bg-white p-2 text-black'>
+                  <HtmlContent
+                    content={templatePreview.content}
+                    variant='isolated'
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+
           {form.mode === 'scheduled' && (
             <div className='space-y-1.5'>
               <Label htmlFor='campaign-scheduled-at'>
@@ -833,6 +967,9 @@ export function EmailCampaignsSection() {
                 </NativeSelectOption>
                 <NativeSelectOption value='{{display_name}}'>
                   {t('Display name')}
+                </NativeSelectOption>
+                <NativeSelectOption value='{{email}}'>
+                  {t('User email')}
                 </NativeSelectOption>
                 <NativeSelectOption value='{{system_name}}'>
                   {t('System name')}

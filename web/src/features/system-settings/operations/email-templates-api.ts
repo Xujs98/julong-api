@@ -20,12 +20,43 @@ import { api } from '@/lib/api'
 
 export type EmailTemplate = {
   event: string
+  locale: EmailTemplateLocale
   label: string
   description: string
+  category: string
+  campaign_compatible: boolean
   placeholders: string[]
   subject: string
   content: string
   is_custom: boolean
+}
+
+export type EmailTemplateLocale = 'zh' | 'en'
+
+export type EmailSettingsConfig = {
+  subscription_expiry_reminder_enabled: boolean
+  low_balance_email_enabled: boolean
+  low_balance_email_threshold: number
+  low_balance_email_recharge_url: string
+  account_quota_email_enabled: boolean
+  account_quota_email_threshold: number
+  account_quota_email_recipient_user_ids: number[]
+  channel_anomaly_email_enabled: boolean
+  channel_anomaly_email_recipient_user_ids: number[]
+}
+
+export type EmailRecipientOption = {
+  id: number
+  username: string
+  display_name: string
+  email: string
+}
+
+export type PageData<T> = {
+  page: number
+  page_size: number
+  total: number
+  items: T[]
 }
 
 export type EmailTemplatePreview = {
@@ -48,31 +79,72 @@ export async function listEmailTemplates() {
 
 export async function updateEmailTemplate(
   event: string,
+  locale: EmailTemplateLocale,
   subject: string,
   content: string
 ) {
   const response = await api.put<ApiResponse<EmailTemplate>>(
     `/api/email-settings/templates/${encodeURIComponent(event)}`,
-    { subject, content }
+    { locale, subject, content }
   )
   return response.data
 }
 
 export async function previewEmailTemplate(
   event: string,
+  locale: EmailTemplateLocale,
   subject: string,
   content: string
 ) {
   const response = await api.post<ApiResponse<EmailTemplatePreview>>(
     `/api/email-settings/templates/${encodeURIComponent(event)}/preview`,
-    { subject, content }
+    { locale, subject, content }
   )
   return response.data
 }
 
-export async function resetEmailTemplate(event: string) {
+export async function resetEmailTemplate(
+  event: string,
+  locale: EmailTemplateLocale
+) {
   const response = await api.post<ApiResponse<EmailTemplate>>(
-    `/api/email-settings/templates/${encodeURIComponent(event)}/reset`
+    `/api/email-settings/templates/${encodeURIComponent(event)}/reset`,
+    { locale }
+  )
+  return response.data
+}
+
+export async function getEmailSettingsConfig() {
+  const response = await api.get<ApiResponse<EmailSettingsConfig>>(
+    '/api/email-settings/config'
+  )
+  return response.data
+}
+
+export async function updateEmailSettingsConfig(config: EmailSettingsConfig) {
+  const response = await api.put<ApiResponse<EmailSettingsConfig>>(
+    '/api/email-settings/config',
+    config
+  )
+  return response.data
+}
+
+export async function searchEmailSettingsRecipients(
+  keyword: string,
+  page: number,
+  pageSize: number
+) {
+  const response = await api.get<ApiResponse<PageData<EmailRecipientOption>>>(
+    '/api/email-settings/recipients',
+    { params: { keyword, p: page, page_size: pageSize } }
+  )
+  return response.data
+}
+
+export async function resolveEmailSettingsRecipients(userIds: number[]) {
+  const response = await api.post<ApiResponse<EmailRecipientOption[]>>(
+    '/api/email-settings/recipients/resolve',
+    { user_ids: userIds }
   )
   return response.data
 }

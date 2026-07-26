@@ -204,9 +204,20 @@ func GetEmailCampaignStats() (EmailCampaignStats, error) {
 }
 
 func SearchEmailCampaignUserOptions(keyword string, startIdx, pageSize int) ([]EmailCampaignUserOption, int64, error) {
+	return searchEmailUserOptions(keyword, startIdx, pageSize, false)
+}
+
+func SearchOperationalEmailRecipientOptions(keyword string, startIdx, pageSize int) ([]EmailCampaignUserOption, int64, error) {
+	return searchEmailUserOptions(keyword, startIdx, pageSize, true)
+}
+
+func searchEmailUserOptions(keyword string, startIdx, pageSize int, adminOnly bool) ([]EmailCampaignUserOption, int64, error) {
 	query := DB.Model(&User{}).
 		Select("id, username, display_name, email").
 		Where("status = ? AND email <> '' AND deleted_at IS NULL", common.UserStatusEnabled)
+	if adminOnly {
+		query = query.Where("role >= ?", common.RoleAdminUser)
+	}
 	if keyword = strings.TrimSpace(keyword); keyword != "" {
 		idTextExpression := "CAST(id AS TEXT)"
 		if common.UsingMainDatabase(common.DatabaseTypeMySQL) {
@@ -232,15 +243,38 @@ func SearchEmailCampaignUserOptions(keyword string, startIdx, pageSize int) ([]E
 }
 
 func GetEmailCampaignUserOptionsByIds(userIDs []int) ([]EmailCampaignUserOption, error) {
+	return getEmailUserOptionsByIDs(userIDs, false)
+}
+
+func GetOperationalEmailRecipientOptionsByIDs(userIDs []int) ([]EmailCampaignUserOption, error) {
+	return getEmailUserOptionsByIDs(userIDs, true)
+}
+
+func getEmailUserOptionsByIDs(userIDs []int, adminOnly bool) ([]EmailCampaignUserOption, error) {
 	if len(userIDs) == 0 {
 		return []EmailCampaignUserOption{}, nil
 	}
-	var users []EmailCampaignUserOption
-	err := DB.Model(&User{}).
+	query := DB.Model(&User{}).
 		Select("id, username, display_name, email").
-		Where("id IN ? AND status = ? AND email <> '' AND deleted_at IS NULL", userIDs, common.UserStatusEnabled).
-		Order("id DESC").
-		Scan(&users).Error
+		Where("id IN ? AND status = ? AND email <> '' AND deleted_at IS NULL", userIDs, common.UserStatusEnabled)
+	if adminOnly {
+		query = query.Where("role >= ?", common.RoleAdminUser)
+	}
+	var users []EmailCampaignUserOption
+	err := query.Order("id DESC").Scan(&users).Error
+	return users, err
+}
+
+func GetOperationalEmailRecipientUsers(userIDs []int) ([]User, error) {
+	query := DB.Select("id", "username", "display_name", "email", "role", "status", "setting").
+		Where("status = ? AND role >= ? AND email <> '' AND deleted_at IS NULL", common.UserStatusEnabled, common.RoleAdminUser)
+	if len(userIDs) > 0 {
+		query = query.Where("id IN ?", userIDs)
+	} else {
+		query = query.Where("role >= ?", common.RoleRootUser)
+	}
+	var users []User
+	err := query.Order("id ASC").Find(&users).Error
 	return users, err
 }
 

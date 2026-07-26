@@ -1,0 +1,303 @@
+package service
+
+import (
+	"errors"
+	"fmt"
+	"math"
+	"net/url"
+	"sort"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/types"
+
+	"github.com/bytedance/gopkg/util/gopool"
+)
+
+const maxOperationalEmailRecipients = 100
+
+type EmailSettingsConfig struct {
+	SubscriptionExpiryReminderEnabled bool    `json:"subscription_expiry_reminder_enabled"`
+	LowBalanceEmailEnabled            bool    `json:"low_balance_email_enabled"`
+	LowBalanceEmailThreshold          int     `json:"low_balance_email_threshold"`
+	LowBalanceEmailRechargeURL        string  `json:"low_balance_email_recharge_url"`
+	AccountQuotaEmailEnabled          bool    `json:"account_quota_email_enabled"`
+	AccountQuotaEmailThreshold        float64 `json:"account_quota_email_threshold"`
+	AccountQuotaEmailRecipientUserIDs []int   `json:"account_quota_email_recipient_user_ids"`
+	ChannelAnomalyEmailEnabled        bool    `json:"channel_anomaly_email_enabled"`
+	ChannelAnomalyEmailRecipientIDs   []int   `json:"channel_anomaly_email_recipient_user_ids"`
+}
+
+func GetEmailSettingsConfig() (EmailSettingsConfig, error) {
+	config := EmailSettingsConfig{
+		SubscriptionExpiryReminderEnabled: emailOptionBool(common.SubscriptionExpiryReminderEnabledOptionKey, false),
+		LowBalanceEmailEnabled:            emailOptionBool(common.LowBalanceEmailEnabledOptionKey, false),
+		LowBalanceEmailThreshold:          emailOptionInt(common.LowBalanceEmailThresholdOptionKey, common.QuotaRemindThreshold),
+		LowBalanceEmailRechargeURL:        emailOptionString(common.LowBalanceEmailRechargeURLOptionKey),
+		AccountQuotaEmailEnabled:          emailOptionBool(common.AccountQuotaEmailEnabledOptionKey, false),
+		AccountQuotaEmailThreshold:        emailOptionFloat(common.AccountQuotaEmailThresholdOptionKey, 5),
+		ChannelAnomalyEmailEnabled:        emailOptionBool(common.ChannelAnomalyEmailEnabledOptionKey, false),
+	}
+	if err := decodeEmailRecipientIDs(common.AccountQuotaEmailRecipientUserIDsOptionKey, &config.AccountQuotaEmailRecipientUserIDs); err != nil {
+		return EmailSettingsConfig{}, err
+	}
+	if err := decodeEmailRecipientIDs(common.ChannelAnomalyEmailRecipientUserIDsOptionKey, &config.ChannelAnomalyEmailRecipientIDs); err != nil {
+		return EmailSettingsConfig{}, err
+	}
+	if len(config.AccountQuotaEmailRecipientUserIDs) == 0 || len(config.ChannelAnomalyEmailRecipientIDs) == 0 {
+		rootRecipients, err := model.GetOperationalEmailRecipientUsers(nil)
+		if err != nil {
+			return EmailSettingsConfig{}, err
+		}
+		rootIDs := make([]int, 0, len(rootRecipients))
+		for _, recipient := range rootRecipients {
+			rootIDs = append(rootIDs, recipient.Id)
+		}
+		if len(config.AccountQuotaEmailRecipientUserIDs) == 0 {
+			config.AccountQuotaEmailRecipientUserIDs = append([]int(nil), rootIDs...)
+		}
+		if len(config.ChannelAnomalyEmailRecipientIDs) == 0 {
+			config.ChannelAnomalyEmailRecipientIDs = append([]int(nil), rootIDs...)
+		}
+	}
+	return config, nil
+}
+
+func UpdateEmailSettingsConfig(config EmailSettingsConfig) (EmailSettingsConfig, error) {
+	config.LowBalanceEmailRechargeURL = strings.TrimSpace(config.LowBalanceEmailRechargeURL)
+	config.AccountQuotaEmailRecipientUserIDs = normalizeEmailRecipientIDs(config.AccountQuotaEmailRecipientUserIDs)
+	config.ChannelAnomalyEmailRecipientIDs = normalizeEmailRecipientIDs(config.ChannelAnomalyEmailRecipientIDs)
+	if config.LowBalanceEmailThreshold < 0 {
+		return EmailSettingsConfig{}, errors.New("low balance threshold cannot be negative")
+	}
+	if math.IsNaN(config.AccountQuotaEmailThreshold) || math.IsInf(config.AccountQuotaEmailThreshold, 0) || config.AccountQuotaEmailThreshold < 0 {
+		return EmailSettingsConfig{}, errors.New("account quota threshold must be a non-negative number")
+	}
+	if config.LowBalanceEmailRechargeURL != "" {
+		parsed, err := url.ParseRequestURI(config.LowBalanceEmailRechargeURL)
+		if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
+			return EmailSettingsConfig{}, errors.New("recharge URL must be a valid HTTP or HTTPS URL")
+		}
+	}
+	if len(config.AccountQuotaEmailRecipientUserIDs) > maxOperationalEmailRecipients || len(config.ChannelAnomalyEmailRecipientIDs) > maxOperationalEmailRecipients {
+		return EmailSettingsConfig{}, fmt.Errorf("recipient count cannot exceed %d", maxOperationalEmailRecipients)
+	}
+	if err := validateOperationalEmailRecipientIDs(config.AccountQuotaEmailRecipientUserIDs); err != nil {
+		return EmailSettingsConfig{}, err
+	}
+	if err := validateOperationalEmailRecipientIDs(config.ChannelAnomalyEmailRecipientIDs); err != nil {
+		return EmailSettingsConfig{}, err
+	}
+
+	accountRecipientJSON, err := common.Marshal(config.AccountQuotaEmailRecipientUserIDs)
+	if err != nil {
+		return EmailSettingsConfig{}, err
+	}
+	channelRecipientJSON, err := common.Marshal(config.ChannelAnomalyEmailRecipientIDs)
+	if err != nil {
+		return EmailSettingsConfig{}, err
+	}
+	values := map[string]string{
+		common.SubscriptionExpiryReminderEnabledOptionKey:   strconv.FormatBool(config.SubscriptionExpiryReminderEnabled),
+		common.LowBalanceEmailEnabledOptionKey:              strconv.FormatBool(config.LowBalanceEmailEnabled),
+		common.LowBalanceEmailThresholdOptionKey:            strconv.Itoa(config.LowBalanceEmailThreshold),
+		common.LowBalanceEmailRechargeURLOptionKey:          config.LowBalanceEmailRechargeURL,
+		common.AccountQuotaEmailEnabledOptionKey:            strconv.FormatBool(config.AccountQuotaEmailEnabled),
+		common.AccountQuotaEmailThresholdOptionKey:          strconv.FormatFloat(config.AccountQuotaEmailThreshold, 'f', -1, 64),
+		common.AccountQuotaEmailRecipientUserIDsOptionKey:   string(accountRecipientJSON),
+		common.ChannelAnomalyEmailEnabledOptionKey:          strconv.FormatBool(config.ChannelAnomalyEmailEnabled),
+		common.ChannelAnomalyEmailRecipientUserIDsOptionKey: string(channelRecipientJSON),
+	}
+	if err := model.UpdateOptionsBulk(values); err != nil {
+		return EmailSettingsConfig{}, err
+	}
+	return GetEmailSettingsConfig()
+}
+
+func IsLowBalanceEmailEnabled() bool {
+	return emailOptionBool(common.LowBalanceEmailEnabledOptionKey, false)
+}
+
+func LowBalanceEmailThreshold() int {
+	return emailOptionInt(common.LowBalanceEmailThresholdOptionKey, common.QuotaRemindThreshold)
+}
+
+func LowBalanceEmailRechargeURL() string {
+	configured := emailOptionString(common.LowBalanceEmailRechargeURLOptionKey)
+	if configured != "" {
+		return configured
+	}
+	return PaymentReturnURL("/wallet")
+}
+
+func NotifyAccountQuotaEmail(channel *model.Channel, previousBalance float64, previousUpdatedAt int64, currentBalance float64) {
+	if channel == nil {
+		return
+	}
+	config, err := GetEmailSettingsConfig()
+	if err != nil || !config.AccountQuotaEmailEnabled {
+		return
+	}
+	threshold := config.AccountQuotaEmailThreshold
+	if !shouldSendAccountQuotaEmail(previousBalance, previousUpdatedAt, currentBalance, threshold) {
+		return
+	}
+	recipients, err := model.GetOperationalEmailRecipientUsers(config.AccountQuotaEmailRecipientUserIDs)
+	if err != nil || len(recipients) == 0 {
+		if err != nil {
+			common.SysError("failed to load account quota email recipients: " + err.Error())
+		}
+		return
+	}
+	values := map[string]string{
+		"channel_id":        strconv.Itoa(channel.Id),
+		"channel_name":      channel.Name,
+		"channel_type":      constant.GetChannelTypeName(channel.Type),
+		"current_balance":   fmt.Sprintf("$%.4f", currentBalance),
+		"warning_threshold": fmt.Sprintf("$%.4f", threshold),
+		"checked_at":        time.Now().Format("2006-01-02 15:04:05"),
+	}
+	gopool.Go(func() {
+		sendOperationalTemplateEmails(EmailTemplateEventAccountQuotaAlert, recipients, values)
+	})
+}
+
+func shouldSendAccountQuotaEmail(previousBalance float64, previousUpdatedAt int64, currentBalance, threshold float64) bool {
+	if currentBalance > threshold {
+		return false
+	}
+	return previousUpdatedAt == 0 || previousBalance > threshold
+}
+
+func NotifyChannelAnomalyEmail(channelError types.ChannelError, reason string) bool {
+	config, err := GetEmailSettingsConfig()
+	if err != nil || !config.ChannelAnomalyEmailEnabled {
+		return false
+	}
+	recipients, err := model.GetOperationalEmailRecipientUsers(config.ChannelAnomalyEmailRecipientIDs)
+	if err != nil || len(recipients) == 0 {
+		if err != nil {
+			common.SysError("failed to load channel anomaly email recipients: " + err.Error())
+		}
+		return false
+	}
+	baseURL := ""
+	if channel, getErr := model.GetChannelById(channelError.ChannelId, false); getErr == nil {
+		baseURL = channel.GetBaseURL()
+	}
+	values := map[string]string{
+		"channel_id":       strconv.Itoa(channelError.ChannelId),
+		"channel_name":     channelError.ChannelName,
+		"channel_type":     constant.GetChannelTypeName(channelError.ChannelType),
+		"channel_base_url": baseURL,
+		"failure_reason":   reason,
+		"disabled_at":      time.Now().Format("2006-01-02 15:04:05"),
+	}
+	gopool.Go(func() {
+		sendOperationalTemplateEmails(EmailTemplateEventChannelAnomalyDisabled, recipients, values)
+	})
+	return true
+}
+
+func sendOperationalTemplateEmails(event string, recipients []model.User, values map[string]string) {
+	for _, recipient := range recipients {
+		displayName := strings.TrimSpace(recipient.DisplayName)
+		if displayName == "" {
+			displayName = recipient.Username
+		}
+		recipientValues := make(map[string]string, len(values)+4)
+		for key, value := range values {
+			recipientValues[key] = value
+		}
+		recipientValues["username"] = recipient.Username
+		recipientValues["display_name"] = displayName
+		recipientValues["email"] = recipient.Email
+		rendered, err := RenderEmailTemplateForLocale(event, recipient.GetSetting().Language, recipientValues)
+		if err != nil {
+			common.SysError(fmt.Sprintf("failed to render operational email event %s for user %d: %v", event, recipient.Id, err))
+			continue
+		}
+		if err := common.SendEmail(rendered.Subject, recipient.Email, rendered.Content); err != nil {
+			common.SysError(fmt.Sprintf("failed to send operational email event %s to user %d: %v", event, recipient.Id, err))
+		}
+	}
+}
+
+func emailOptionString(key string) string {
+	common.OptionMapRWMutex.RLock()
+	value := common.OptionMap[key]
+	common.OptionMapRWMutex.RUnlock()
+	return strings.TrimSpace(value)
+}
+
+func emailOptionBool(key string, fallback bool) bool {
+	value, err := strconv.ParseBool(emailOptionString(key))
+	if err != nil {
+		return fallback
+	}
+	return value
+}
+
+func emailOptionInt(key string, fallback int) int {
+	value, err := strconv.Atoi(emailOptionString(key))
+	if err != nil {
+		return fallback
+	}
+	return value
+}
+
+func emailOptionFloat(key string, fallback float64) float64 {
+	value, err := strconv.ParseFloat(emailOptionString(key), 64)
+	if err != nil || math.IsNaN(value) || math.IsInf(value, 0) {
+		return fallback
+	}
+	return value
+}
+
+func decodeEmailRecipientIDs(key string, target *[]int) error {
+	raw := emailOptionString(key)
+	if raw == "" {
+		*target = []int{}
+		return nil
+	}
+	if err := common.UnmarshalJsonStr(raw, target); err != nil {
+		return fmt.Errorf("invalid email recipient setting %s: %w", key, err)
+	}
+	*target = normalizeEmailRecipientIDs(*target)
+	return nil
+}
+
+func normalizeEmailRecipientIDs(userIDs []int) []int {
+	seen := make(map[int]struct{}, len(userIDs))
+	result := make([]int, 0, len(userIDs))
+	for _, userID := range userIDs {
+		if userID <= 0 {
+			continue
+		}
+		if _, exists := seen[userID]; exists {
+			continue
+		}
+		seen[userID] = struct{}{}
+		result = append(result, userID)
+	}
+	sort.Ints(result)
+	return result
+}
+
+func validateOperationalEmailRecipientIDs(userIDs []int) error {
+	if len(userIDs) == 0 {
+		return nil
+	}
+	users, err := model.GetOperationalEmailRecipientOptionsByIDs(userIDs)
+	if err != nil {
+		return err
+	}
+	if len(users) != len(userIDs) {
+		return errors.New("all operational email recipients must be active administrators with an email address")
+	}
+	return nil
+}

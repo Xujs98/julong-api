@@ -323,7 +323,7 @@ func SendPasswordResetEmail(c *gin.Context) {
 		if displayName == "" {
 			displayName = user.Username
 		}
-		rendered, renderErr := service.RenderEmailTemplate(service.EmailTemplateEventPasswordReset, map[string]string{
+		rendered, renderErr := service.RenderEmailTemplateForLocale(service.EmailTemplateEventPasswordReset, user.GetSetting().Language, map[string]string{
 			"username":           user.Username,
 			"display_name":       displayName,
 			"email":              email,

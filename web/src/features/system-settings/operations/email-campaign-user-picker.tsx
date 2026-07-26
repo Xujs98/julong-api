@@ -59,6 +59,11 @@ const EMPTY_USERS: EmailCampaignUserOption[] = []
 type EmailCampaignUserPickerProps = {
   selectedUserIds: number[]
   onChange: (userIds: number[]) => void
+  id?: string
+  labelKey?: string
+  queryKeyPrefix?: string
+  searchUsers?: typeof searchEmailCampaignUsers
+  resolveUsers?: typeof resolveEmailCampaignUsers
 }
 
 function userLabel(user: EmailCampaignUserOption) {
@@ -71,16 +76,20 @@ export function EmailCampaignUserPicker(props: EmailCampaignUserPickerProps) {
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
   const debouncedSearch = useDebounce(search.trim(), 300)
+  const queryKeyPrefix = props.queryKeyPrefix ?? 'email-campaign'
+  const searchUsersFn = props.searchUsers ?? searchEmailCampaignUsers
+  const resolveUsersFn = props.resolveUsers ?? resolveEmailCampaignUsers
+  const label = t(props.labelKey ?? 'Selected users')
   const selectedSet = useMemo(
     () => new Set(props.selectedUserIds),
     [props.selectedUserIds]
   )
 
   const searchQuery = useQuery({
-    queryKey: ['email-campaign-user-search', debouncedSearch, page],
+    queryKey: [`${queryKeyPrefix}-user-search`, debouncedSearch, page],
     enabled: open,
     queryFn: async () => {
-      const response = await searchEmailCampaignUsers(
+      const response = await searchUsersFn(
         debouncedSearch,
         page,
         USER_PAGE_SIZE
@@ -102,10 +111,10 @@ export function EmailCampaignUserPicker(props: EmailCampaignUserPickerProps) {
 
   const searchUsers = searchQuery.data?.items ?? EMPTY_USERS
   const selectedUsersQuery = useQuery({
-    queryKey: ['email-campaign-selected-users', props.selectedUserIds],
+    queryKey: [`${queryKeyPrefix}-selected-users`, props.selectedUserIds],
     enabled: props.selectedUserIds.length > 0,
     queryFn: async () => {
-      const response = await resolveEmailCampaignUsers(props.selectedUserIds)
+      const response = await resolveUsersFn(props.selectedUserIds)
       if (!response.success) {
         throw new Error(response.message || t('Failed to load users'))
       }
@@ -145,21 +154,19 @@ export function EmailCampaignUserPicker(props: EmailCampaignUserPickerProps) {
         <PopoverTrigger
           render={
             <Button
-              id='campaign-user-picker'
+              id={props.id ?? 'campaign-user-picker'}
               type='button'
               variant='outline'
               role='combobox'
               aria-expanded={open}
-              aria-label={t('Selected users')}
+              aria-label={label}
               className='h-10 w-full justify-between px-3 font-normal'
             />
           }
         >
           <span className='flex min-w-0 items-center gap-2'>
             <span className='truncate'>
-              {props.selectedUserIds.length > 0
-                ? t('Selected users')
-                : t('Select')}
+              {props.selectedUserIds.length > 0 ? label : t('Select')}
             </span>
             {props.selectedUserIds.length > 0 && (
               <Badge variant='secondary' className='rounded-sm px-1.5'>
@@ -178,7 +185,7 @@ export function EmailCampaignUserPicker(props: EmailCampaignUserPickerProps) {
         >
           <PopoverHeader className='border-b px-3 py-2.5'>
             <PopoverTitle className='flex items-center justify-between gap-3'>
-              <span>{t('Selected users')}</span>
+              <span>{label}</span>
               <Badge variant='outline' className='rounded-sm'>
                 {props.selectedUserIds.length}
               </Badge>

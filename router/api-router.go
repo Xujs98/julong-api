@@ -289,8 +289,15 @@ func SetApiRouter(router *gin.Engine) {
 			emailCampaignRoute.GET("/:id/deliveries", controller.ListEmailCampaignDeliveries)
 		}
 
-		emailTemplateRoute := apiRouter.Group("/email-settings/templates")
-		emailTemplateRoute.Use(middleware.AdminAuth(), middleware.RequirePermission(authz.SystemSettingsPermission("operations.email-templates")))
+		emailSettingsRoute := apiRouter.Group("/email-settings")
+		emailSettingsRoute.Use(middleware.AdminAuth(), middleware.RequirePermission(authz.SystemSettingsPermission("operations.email-templates")))
+		{
+			emailSettingsRoute.GET("/config", controller.GetEmailSettingsConfig)
+			emailSettingsRoute.PUT("/config", controller.UpdateEmailSettingsConfig)
+			emailSettingsRoute.GET("/recipients", controller.SearchEmailSettingsRecipients)
+			emailSettingsRoute.POST("/recipients/resolve", controller.ResolveEmailSettingsRecipients)
+		}
+		emailTemplateRoute := emailSettingsRoute.Group("/templates")
 		{
 			emailTemplateRoute.GET("", controller.ListEmailTemplates)
 			emailTemplateRoute.PUT("/:event", controller.UpdateEmailTemplate)

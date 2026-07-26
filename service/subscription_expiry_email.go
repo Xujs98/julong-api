@@ -130,7 +130,11 @@ func DispatchSubscriptionExpiryReminders(ctx context.Context, sender EmailCampai
 			if seconds := delivery.SubscriptionEndTime - now; seconds > 0 {
 				daysRemaining = (seconds + 24*60*60 - 1) / (24 * 60 * 60)
 			}
-			rendered, err := RenderEmailTemplate(EmailTemplateEventSubscriptionExpiryReminder, map[string]string{
+			locale := EmailTemplateLocaleChinese
+			if user, userErr := model.GetUserById(delivery.UserId, false); userErr == nil {
+				locale = NormalizeEmailTemplateLocale(user.GetSetting().Language)
+			}
+			rendered, err := RenderEmailTemplateForLocale(EmailTemplateEventSubscriptionExpiryReminder, locale, map[string]string{
 				"username":              delivery.Username,
 				"display_name":          displayName,
 				"email":                 delivery.Email,

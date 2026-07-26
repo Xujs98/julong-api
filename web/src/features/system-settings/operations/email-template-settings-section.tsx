@@ -18,25 +18,26 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useQuery } from '@tanstack/react-query'
 import { Eye, RotateCcw, Save } from 'lucide-react'
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
-import { Dialog } from '@/components/dialog'
 import { HtmlContent } from '@/components/html-content'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 import { Textarea } from '@/components/ui/textarea'
-import { cn } from '@/lib/utils'
 
 import { SettingsSection } from '../components/settings-section'
+import { EmailAlertSettings } from './email-alert-settings'
 import {
   listEmailTemplates,
   previewEmailTemplate,
   resetEmailTemplate,
   updateEmailTemplate,
+  type EmailTemplateLocale,
   type EmailTemplatePreview,
 } from './email-templates-api'
 
@@ -53,9 +54,77 @@ const PLACEHOLDER_LABELS: Record<string, string> = {
   subscription_name: 'Subscription plan',
   subscription_end_time: 'Expiry time',
   days_remaining: 'Days remaining',
+  balance_type: 'Balance type',
+  current_balance: 'Current balance',
+  warning_threshold: 'Warning threshold',
+  recharge_url: 'Recharge page URL',
+  channel_id: 'Channel ID',
+  channel_name: 'Channel name',
+  channel_type: 'Channel type',
+  channel_base_url: 'Channel base URL',
+  checked_at: 'Balance check time',
+  disabled_at: 'Automatic shutdown time',
+  failure_reason: 'Failure reason',
+}
+
+const SAMPLE_VALUES: Record<EmailTemplateLocale, Record<string, string>> = {
+  zh: {
+    system_name: '矩龙-API',
+    username: 'demo_user',
+    display_name: '示例用户',
+    email: 'user@example.com',
+    verification_code: '123456',
+    expires_in_minutes: '15',
+    reset_url: 'https://example.com/user/reset?token=preview',
+    subscription_name: 'Pro',
+    subscription_end_time: '2026-08-01 12:00:00',
+    days_remaining: '3',
+    balance_type: '钱包余额',
+    current_balance: '$2.50',
+    warning_threshold: '$5.00',
+    recharge_url: 'https://example.com/wallet',
+    channel_id: '18',
+    channel_name: 'OpenAI Production',
+    channel_type: 'OpenAI',
+    channel_base_url: 'https://api.openai.com',
+    checked_at: '2026-08-01 12:00:00',
+    disabled_at: '2026-08-01 12:00:00',
+    failure_reason: '上游连续返回 HTTP 401，系统已执行自动封禁。',
+  },
+  en: {
+    system_name: 'Julong API',
+    username: 'demo_user',
+    display_name: 'Demo User',
+    email: 'user@example.com',
+    verification_code: '123456',
+    expires_in_minutes: '15',
+    reset_url: 'https://example.com/user/reset?token=preview',
+    subscription_name: 'Pro',
+    subscription_end_time: '2026-08-01 12:00:00',
+    days_remaining: '3',
+    balance_type: 'wallet balance',
+    current_balance: '$2.50',
+    warning_threshold: '$5.00',
+    recharge_url: 'https://example.com/wallet',
+    channel_id: '18',
+    channel_name: 'OpenAI Production',
+    channel_type: 'OpenAI',
+    channel_base_url: 'https://api.openai.com',
+    checked_at: '2026-08-01 12:00:00',
+    disabled_at: '2026-08-01 12:00:00',
+    failure_reason: 'The upstream returned HTTP 401 repeatedly.',
+  },
 }
 
 type ActiveField = 'subject' | 'content'
+
+function renderSample(source: string, locale: EmailTemplateLocale) {
+  let result = source
+  for (const [key, value] of Object.entries(SAMPLE_VALUES[locale])) {
+    result = result.replaceAll(`{{${key}}}`, value)
+  }
+  return result
+}
 
 export function EmailTemplateSettingsSection() {
   const { t } = useTranslation()
@@ -66,26 +135,44 @@ export function EmailTemplateSettingsSection() {
   const [selectedEvent, setSelectedEvent] = useState(
     DEFAULT_EMAIL_TEMPLATE_EVENT
   )
+  const [selectedLocale, setSelectedLocale] =
+    useState<EmailTemplateLocale>('zh')
   const [subject, setSubject] = useState('')
   const [content, setContent] = useState('')
   const [saving, setSaving] = useState(false)
   const [resetting, setResetting] = useState(false)
   const [previewing, setPreviewing] = useState(false)
-  const [preview, setPreview] = useState<EmailTemplatePreview | null>(null)
+  const [serverPreview, setServerPreview] =
+    useState<EmailTemplatePreview | null>(null)
   const activeField = useRef<ActiveField>('content')
   const subjectRef = useRef<HTMLInputElement>(null)
   const contentRef = useRef<HTMLTextAreaElement>(null)
 
-  const templates = templatesQuery.data?.data ?? []
-  const selectedTemplate = templates.find(
-    (template) => template.event === selectedEvent
+  const templates = useMemo(
+    () => templatesQuery.data?.data ?? [],
+    [templatesQuery.data?.data]
   )
+  const events = useMemo(
+    () => templates.filter((template) => template.locale === 'zh'),
+    [templates]
+  )
+  const selectedTemplate = templates.find(
+    (template) =>
+      template.event === selectedEvent && template.locale === selectedLocale
+  )
+  const preview = serverPreview ?? {
+    subject: renderSample(subject, selectedLocale),
+    content: renderSample(content, selectedLocale),
+  }
 
   useEffect(() => {
     if (!selectedTemplate) return
     setSubject(selectedTemplate.subject)
     setContent(selectedTemplate.content)
+    setServerPreview(null)
   }, [selectedTemplate])
+
+  useEffect(() => setServerPreview(null), [subject, content])
 
   const recordActiveField = (field: ActiveField) => () => {
     activeField.current = field
@@ -112,6 +199,7 @@ export function EmailTemplateSettingsSection() {
     try {
       const response = await updateEmailTemplate(
         selectedTemplate.event,
+        selectedLocale,
         subject,
         content
       )
@@ -129,17 +217,18 @@ export function EmailTemplateSettingsSection() {
     }
   }
 
-  const showPreview = async () => {
+  const refreshPreview = async () => {
     if (!selectedTemplate) return
     setPreviewing(true)
     try {
       const response = await previewEmailTemplate(
         selectedTemplate.event,
+        selectedLocale,
         subject,
         content
       )
       if (!response.success || !response.data) throw new Error(response.message)
-      setPreview(response.data)
+      setServerPreview(response.data)
     } catch (error) {
       toast.error(
         error instanceof Error
@@ -155,7 +244,10 @@ export function EmailTemplateSettingsSection() {
     if (!selectedTemplate) return
     setResetting(true)
     try {
-      const response = await resetEmailTemplate(selectedTemplate.event)
+      const response = await resetEmailTemplate(
+        selectedTemplate.event,
+        selectedLocale
+      )
       if (!response.success) throw new Error(response.message)
       toast.success(t('Default email template restored'))
       await templatesQuery.refetch()
@@ -170,163 +262,186 @@ export function EmailTemplateSettingsSection() {
     }
   }
 
-  let editorContent: ReactNode
-  if (templatesQuery.isLoading) {
-    editorContent = (
-      <div className='text-muted-foreground flex min-h-80 items-center justify-center text-sm'>
-        {t('Loading...')}
-      </div>
-    )
-  } else if (!selectedTemplate) {
-    editorContent = (
-      <div className='text-muted-foreground flex min-h-80 items-center justify-center text-sm'>
-        {t('No email templates available')}
-      </div>
-    )
-  } else {
-    editorContent = (
-      <div className='space-y-6'>
-        <div className='flex flex-col gap-3 border-b pb-5 sm:flex-row sm:items-start sm:justify-between'>
-          <div className='min-w-0'>
-            <h3 className='text-base font-semibold'>
-              {t(selectedTemplate.label)}
-            </h3>
+  return (
+    <SettingsSection title={t('Email settings')}>
+      <EmailAlertSettings />
+
+      <div className='space-y-5 border-t pt-6'>
+        <div className='flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between'>
+          <div>
+            <h3 className='text-base font-semibold'>{t('Email templates')}</h3>
             <p className='text-muted-foreground mt-1 text-sm'>
-              {t(selectedTemplate.description)}
+              {t(
+                'Customize notification subjects and HTML by event and language.'
+              )}
             </p>
           </div>
-          <div className='flex shrink-0 flex-wrap gap-2'>
+          <div className='flex flex-wrap gap-2'>
             <Button
               type='button'
               variant='outline'
-              disabled={previewing}
-              onClick={showPreview}
+              disabled={previewing || !selectedTemplate}
+              onClick={refreshPreview}
             >
               <Eye className='size-4' />
-              {t('Preview')}
+              {t('Preview / Refresh')}
             </Button>
             <Button
               type='button'
               variant='outline'
-              disabled={resetting || !selectedTemplate.is_custom}
+              disabled={resetting || !selectedTemplate?.is_custom}
               onClick={restoreDefault}
             >
               <RotateCcw className='size-4' />
-              {t('Restore defaults')}
+              {t('Restore official template')}
             </Button>
-            <Button type='button' disabled={saving} onClick={saveTemplate}>
+            <Button
+              type='button'
+              disabled={saving || !selectedTemplate}
+              onClick={saveTemplate}
+            >
               <Save className='size-4' />
-              {t('Save')}
+              {t('Save template')}
             </Button>
           </div>
         </div>
 
-        <div className='space-y-2'>
-          <Label htmlFor='email-template-subject'>{t('Email subject')}</Label>
-          <Input
-            ref={subjectRef}
-            id='email-template-subject'
-            maxLength={255}
-            value={subject}
-            onFocus={recordActiveField('subject')}
-            onChange={(event) => setSubject(event.target.value)}
-          />
-        </div>
-
-        <div className='space-y-2'>
-          <Label htmlFor='email-template-content'>{t('HTML content')}</Label>
-          <Textarea
-            ref={contentRef}
-            id='email-template-content'
-            className='min-h-80 resize-y font-mono text-xs leading-5'
-            value={content}
-            onFocus={recordActiveField('content')}
-            onChange={(event) => setContent(event.target.value)}
-          />
-        </div>
-
-        <div className='space-y-3 border-t pt-5'>
-          <div>
-            <h4 className='text-sm font-medium'>{t('Available variables')}</h4>
-            <p className='text-muted-foreground mt-1 text-xs'>
-              {t('Click a variable to insert it at the current cursor.')}
-            </p>
+        <div className='grid gap-4 lg:grid-cols-2'>
+          <div className='space-y-1.5'>
+            <Label htmlFor='email-template-event'>{t('Event')}</Label>
+            <NativeSelect
+              id='email-template-event'
+              className='w-full'
+              value={selectedEvent}
+              onChange={(event) => setSelectedEvent(event.target.value)}
+            >
+              {events.map((template) => (
+                <NativeSelectOption key={template.event} value={template.event}>
+                  {t(template.label)}
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
           </div>
-          <div className='grid gap-2 sm:grid-cols-2 xl:grid-cols-3'>
-            {selectedTemplate.placeholders.map((placeholder) => (
-              <Button
-                key={placeholder}
-                type='button'
-                variant='outline'
-                className='h-auto min-w-0 justify-start px-3 py-2 text-left'
-                onClick={() => insertPlaceholder(placeholder)}
-              >
-                <span className='min-w-0'>
-                  <span className='block truncate text-xs font-medium'>
-                    {t(PLACEHOLDER_LABELS[placeholder] ?? placeholder)}
-                  </span>
-                  <code className='text-muted-foreground block truncate text-[11px]'>
-                    {`{{${placeholder}}}`}
-                  </code>
-                </span>
-              </Button>
-            ))}
+          <div className='space-y-1.5'>
+            <Label htmlFor='email-template-locale'>{t('Language')}</Label>
+            <NativeSelect
+              id='email-template-locale'
+              className='w-full'
+              value={selectedLocale}
+              onChange={(event) =>
+                setSelectedLocale(event.target.value as EmailTemplateLocale)
+              }
+            >
+              <NativeSelectOption value='zh'>{t('Chinese')}</NativeSelectOption>
+              <NativeSelectOption value='en'>{t('English')}</NativeSelectOption>
+            </NativeSelect>
           </div>
         </div>
-      </div>
-    )
-  }
 
-  return (
-    <SettingsSection title={t('Email templates')}>
-      <div className='grid min-h-[620px] overflow-hidden rounded-lg border lg:grid-cols-[250px_minmax(0,1fr)]'>
-        <div className='bg-muted/20 border-b p-2 lg:border-r lg:border-b-0'>
-          <div className='grid gap-1 sm:grid-cols-3 lg:grid-cols-1'>
-            {templates.map((template) => (
-              <button
-                key={template.event}
-                type='button'
-                className={cn(
-                  'hover:bg-muted flex min-w-0 items-start justify-between gap-2 rounded-md px-3 py-2.5 text-left transition-colors',
-                  template.event === selectedEvent &&
-                    'bg-background text-foreground shadow-sm'
+        {selectedTemplate ? (
+          <>
+            <div className='border-primary/20 bg-primary/5 rounded-lg border px-4 py-4'>
+              <div className='flex flex-wrap items-center gap-2'>
+                <h4 className='text-sm font-semibold'>
+                  {t(selectedTemplate.label)}
+                </h4>
+                <Badge variant='outline'>{t(selectedTemplate.category)}</Badge>
+                <Badge variant='secondary'>{t('Transactional email')}</Badge>
+                {selectedTemplate.is_custom && (
+                  <Badge variant='outline'>{t('Custom')}</Badge>
                 )}
-                onClick={() => setSelectedEvent(template.event)}
-              >
-                <span className='min-w-0'>
-                  <span className='block truncate text-sm font-medium'>
-                    {t(template.label)}
-                  </span>
-                  <span className='text-muted-foreground mt-0.5 block truncate text-xs'>
-                    {template.event}
-                  </span>
-                </span>
-                {template.is_custom && (
-                  <Badge variant='outline' className='shrink-0'>
-                    {t('Custom')}
-                  </Badge>
-                )}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className='min-w-0 p-4 sm:p-6'>{editorContent}</div>
-      </div>
+              </div>
+              <p className='text-muted-foreground mt-2 text-sm'>
+                {t(selectedTemplate.description)}
+              </p>
+            </div>
 
-      <Dialog
-        open={preview !== null}
-        onOpenChange={(open) => !open && setPreview(null)}
-        title={t('Email template preview')}
-        description={preview?.subject}
-        contentClassName='sm:max-w-3xl'
-        contentHeight='min(72vh, 760px)'
-      >
-        {preview && (
-          <div className='overflow-hidden rounded-lg border bg-white p-3 text-black'>
-            <HtmlContent content={preview.content} variant='isolated' />
+            <div className='grid min-h-[560px] gap-5 xl:grid-cols-2'>
+              <div className='grid min-w-0 content-start gap-4'>
+                <div className='space-y-1.5'>
+                  <Label htmlFor='email-template-subject'>
+                    {t('Email subject')}
+                  </Label>
+                  <Input
+                    ref={subjectRef}
+                    id='email-template-subject'
+                    maxLength={255}
+                    value={subject}
+                    onFocus={recordActiveField('subject')}
+                    onChange={(event) => setSubject(event.target.value)}
+                  />
+                </div>
+                <div className='space-y-1.5'>
+                  <Label htmlFor='email-template-content'>
+                    {t('HTML template')}
+                  </Label>
+                  <Textarea
+                    ref={contentRef}
+                    id='email-template-content'
+                    className='min-h-[390px] resize-y font-mono text-xs leading-5'
+                    value={content}
+                    onFocus={recordActiveField('content')}
+                    onChange={(event) => setContent(event.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className='min-w-0 overflow-hidden rounded-lg border'>
+                <div className='border-b px-4 py-3'>
+                  <div className='text-sm font-semibold'>
+                    {t('Live preview')}
+                  </div>
+                  <div className='text-muted-foreground mt-1 truncate text-xs'>
+                    {preview.subject}
+                  </div>
+                </div>
+                <div className='bg-muted/25 min-h-[500px] p-3'>
+                  <div className='overflow-hidden rounded-md border bg-white text-black'>
+                    <HtmlContent content={preview.content} variant='isolated' />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className='space-y-3 border-t pt-5'>
+              <div>
+                <h4 className='text-sm font-medium'>
+                  {t('Available variables')}
+                </h4>
+                <p className='text-muted-foreground mt-1 text-xs'>
+                  {t('Click a variable to insert it at the current cursor.')}
+                </p>
+              </div>
+              <div className='grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'>
+                {selectedTemplate.placeholders.map((placeholder) => (
+                  <Button
+                    key={placeholder}
+                    type='button'
+                    variant='outline'
+                    className='h-auto min-w-0 justify-start px-3 py-2 text-left'
+                    onClick={() => insertPlaceholder(placeholder)}
+                  >
+                    <span className='min-w-0'>
+                      <span className='block truncate text-xs font-medium'>
+                        {t(PLACEHOLDER_LABELS[placeholder] ?? placeholder)}
+                      </span>
+                      <code className='text-muted-foreground block truncate text-[11px]'>
+                        {`{{${placeholder}}}`}
+                      </code>
+                    </span>
+                  </Button>
+                ))}
+              </div>
+            </div>
+          </>
+        ) : (
+          <div className='text-muted-foreground flex min-h-80 items-center justify-center rounded-lg border text-sm'>
+            {templatesQuery.isLoading
+              ? t('Loading...')
+              : t('No email templates available')}
           </div>
         )}
-      </Dialog>
+      </div>
     </SettingsSection>
   )
 }

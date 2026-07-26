@@ -80,6 +80,14 @@ func InitOptionMap() {
 	common.OptionMap["SMTPForceAuthLogin"] = strconv.FormatBool(common.SMTPForceAuthLogin)
 	common.OptionMap[common.EmailTemplatesOptionKey] = "{}"
 	common.OptionMap[common.SubscriptionExpiryReminderEnabledOptionKey] = "false"
+	common.OptionMap[common.LowBalanceEmailEnabledOptionKey] = "false"
+	common.OptionMap[common.LowBalanceEmailThresholdOptionKey] = strconv.Itoa(common.QuotaRemindThreshold)
+	common.OptionMap[common.LowBalanceEmailRechargeURLOptionKey] = ""
+	common.OptionMap[common.AccountQuotaEmailEnabledOptionKey] = "false"
+	common.OptionMap[common.AccountQuotaEmailThresholdOptionKey] = "5"
+	common.OptionMap[common.AccountQuotaEmailRecipientUserIDsOptionKey] = "[]"
+	common.OptionMap[common.ChannelAnomalyEmailEnabledOptionKey] = "false"
+	common.OptionMap[common.ChannelAnomalyEmailRecipientUserIDsOptionKey] = "[]"
 	common.OptionMap["Notice"] = ""
 	common.OptionMap["About"] = ""
 	common.OptionMap["HomePageContent"] = ""

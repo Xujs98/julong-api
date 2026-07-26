@@ -421,6 +421,20 @@ func updateChannelBalance(channel *model.Channel) (float64, error) {
 	return balance, nil
 }
 
+func updateChannelBalanceAndNotify(channel *model.Channel) (float64, error) {
+	previousBalance, previousUpdatedAt, err := model.GetChannelBalanceState(channel.Id)
+	if err != nil {
+		previousBalance = channel.Balance
+		previousUpdatedAt = channel.BalanceUpdatedTime
+	}
+	balance, err := updateChannelBalance(channel)
+	if err != nil {
+		return 0, err
+	}
+	service.NotifyAccountQuotaEmail(channel, previousBalance, previousUpdatedAt, balance)
+	return balance, nil
+}
+
 func UpdateChannelBalance(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
@@ -439,7 +453,7 @@ func UpdateChannelBalance(c *gin.Context) {
 		})
 		return
 	}
-	balance, err := updateChannelBalance(channel)
+	balance, err := updateChannelBalanceAndNotify(channel)
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -467,7 +481,7 @@ func updateAllChannelsBalance() error {
 		//if channel.Type != common.ChannelTypeOpenAI && channel.Type != common.ChannelTypeCustom {
 		//	continue
 		//}
-		balance, err := updateChannelBalance(channel)
+		balance, err := updateChannelBalanceAndNotify(channel)
 		if err != nil {
 			continue
 		} else {

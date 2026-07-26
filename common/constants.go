@@ -128,7 +128,17 @@ var SMTPToken = ""
 
 const EmailTemplatesOptionKey = "EmailTemplates"
 
-const SubscriptionExpiryReminderEnabledOptionKey = "SubscriptionExpiryReminderEnabled"
+const (
+	SubscriptionExpiryReminderEnabledOptionKey   = "SubscriptionExpiryReminderEnabled"
+	LowBalanceEmailEnabledOptionKey              = "LowBalanceEmailEnabled"
+	LowBalanceEmailThresholdOptionKey            = "LowBalanceEmailThreshold"
+	LowBalanceEmailRechargeURLOptionKey          = "LowBalanceEmailRechargeURL"
+	AccountQuotaEmailEnabledOptionKey            = "AccountQuotaEmailEnabled"
+	AccountQuotaEmailThresholdOptionKey          = "AccountQuotaEmailThreshold"
+	AccountQuotaEmailRecipientUserIDsOptionKey   = "AccountQuotaEmailRecipientUserIDs"
+	ChannelAnomalyEmailEnabledOptionKey          = "ChannelAnomalyEmailEnabled"
+	ChannelAnomalyEmailRecipientUserIDsOptionKey = "ChannelAnomalyEmailRecipientUserIDs"
+)
 
 var GitHubClientId = ""
 var GitHubClientSecret = ""

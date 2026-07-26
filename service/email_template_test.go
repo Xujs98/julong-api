@@ -73,3 +73,62 @@ func TestEmailTemplateRejectsUnavailablePlaceholder(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "{{verification_code}}")
 }
+
+func TestEmailTemplateLocalesPersistIndependently(t *testing.T) {
+	setupEmailTemplateTest(t)
+	english, err := UpdateEmailTemplateForLocale(
+		EmailTemplateEventLowBalance,
+		EmailTemplateLocaleEnglish,
+		"Low {{balance_type}}",
+		"<p>{{current_balance}}</p>",
+	)
+	require.NoError(t, err)
+	assert.Equal(t, EmailTemplateLocaleEnglish, english.Locale)
+	assert.True(t, english.IsCustom)
+
+	chinese, err := GetEmailTemplateForLocale(EmailTemplateEventLowBalance, EmailTemplateLocaleChinese)
+	require.NoError(t, err)
+	assert.False(t, chinese.IsCustom)
+	assert.NotEqual(t, english.Subject, chinese.Subject)
+
+	stored := loadCustomEmailTemplates()
+	assert.Contains(t, stored, EmailTemplateEventLowBalance+emailTemplateLocalizedStorageKeySeparator+EmailTemplateLocaleEnglish)
+	assert.NotContains(t, stored, EmailTemplateEventLowBalance)
+}
+
+func TestEmailTemplateCatalogContainsEveryEventAndLocale(t *testing.T) {
+	setupEmailTemplateTest(t)
+	templates := ListEmailTemplates()
+	require.Len(t, templates, len(emailTemplateOrder)*len(emailTemplateLocales))
+
+	seen := make(map[string]bool, len(templates))
+	for _, template := range templates {
+		seen[template.Event+":"+template.Locale] = true
+	}
+	for _, event := range emailTemplateOrder {
+		for _, locale := range emailTemplateLocales {
+			assert.True(t, seen[event+":"+locale], "missing %s/%s", event, locale)
+		}
+	}
+}
+
+func TestShouldSendAccountQuotaEmailOnlyOnFirstLowBalanceOrDownwardCrossing(t *testing.T) {
+	tests := []struct {
+		name              string
+		previousBalance   float64
+		previousUpdatedAt int64
+		currentBalance    float64
+		threshold         float64
+		expected          bool
+	}{
+		{name: "first balance check already low", previousUpdatedAt: 0, currentBalance: 2, threshold: 5, expected: true},
+		{name: "crosses downward", previousBalance: 8, previousUpdatedAt: 1, currentBalance: 4, threshold: 5, expected: true},
+		{name: "remains low", previousBalance: 4, previousUpdatedAt: 1, currentBalance: 3, threshold: 5, expected: false},
+		{name: "remains above", previousBalance: 8, previousUpdatedAt: 1, currentBalance: 7, threshold: 5, expected: false},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			assert.Equal(t, test.expected, shouldSendAccountQuotaEmail(test.previousBalance, test.previousUpdatedAt, test.currentBalance, test.threshold))
+		})
+	}
+}

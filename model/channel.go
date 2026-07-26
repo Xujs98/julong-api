@@ -598,6 +598,18 @@ func (channel *Channel) UpdateBalance(balance float64) {
 	}
 }
 
+func GetChannelBalanceState(channelID int) (float64, int64, error) {
+	var state struct {
+		Balance            float64
+		BalanceUpdatedTime int64
+	}
+	err := DB.Model(&Channel{}).
+		Select("balance", "balance_updated_time").
+		Where("id = ?", channelID).
+		Take(&state).Error
+	return state.Balance, state.BalanceUpdatedTime, err
+}
+
 func (channel *Channel) Delete() error {
 	var err error
 	err = DB.Delete(channel).Error

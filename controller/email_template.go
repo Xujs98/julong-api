@@ -10,6 +10,7 @@ import (
 )
 
 type emailTemplateRequest struct {
+	Locale  string `json:"locale"`
 	Subject string `json:"subject"`
 	Content string `json:"content"`
 }
@@ -24,7 +25,7 @@ func UpdateEmailTemplate(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "无效的参数"})
 		return
 	}
-	template, err := service.UpdateEmailTemplate(c.Param("event"), req.Subject, req.Content)
+	template, err := service.UpdateEmailTemplateForLocale(c.Param("event"), req.Locale, req.Subject, req.Content)
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -38,7 +39,7 @@ func PreviewEmailTemplate(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "无效的参数"})
 		return
 	}
-	preview, err := service.PreviewEmailTemplate(c.Param("event"), req.Subject, req.Content)
+	preview, err := service.PreviewEmailTemplateForLocale(c.Param("event"), req.Locale, req.Subject, req.Content)
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -47,7 +48,17 @@ func PreviewEmailTemplate(c *gin.Context) {
 }
 
 func ResetEmailTemplate(c *gin.Context) {
-	template, err := service.ResetEmailTemplate(c.Param("event"))
+	locale := c.Query("locale")
+	if locale == "" {
+		var req struct {
+			Locale string `json:"locale"`
+		}
+		if c.Request.Body != nil {
+			_ = common.DecodeJson(c.Request.Body, &req)
+			locale = req.Locale
+		}
+	}
+	template, err := service.ResetEmailTemplateForLocale(c.Param("event"), locale)
 	if err != nil {
 		common.ApiError(c, err)
 		return
