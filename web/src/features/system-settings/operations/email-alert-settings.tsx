@@ -16,7 +16,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useQuery } from '@tanstack/react-query'
 import {
   CalendarClock,
   CircleGauge,
@@ -27,7 +26,7 @@ import {
   WalletCards,
   type LucideIcon,
 } from 'lucide-react'
-import { useEffect, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
@@ -90,24 +89,36 @@ function AlertPanel(props: AlertPanelProps) {
 
 export function EmailAlertSettings() {
   const { t } = useTranslation()
-  const configQuery = useQuery({
-    queryKey: ['email-settings-config', 'v2'],
-    queryFn: async () => {
+  const [config, setConfig] = useState<EmailSettingsConfig | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [testingChannelAnomaly, setTestingChannelAnomaly] = useState(false)
+
+  const loadConfig = useCallback(async () => {
+    setLoading(true)
+    setLoadError(null)
+    try {
       const response = await getEmailSettingsConfig()
       if (!response.success || !response.data) {
         throw new Error(response.message || t('Failed to load email settings'))
       }
-      return response.data
-    },
-    refetchOnMount: 'always',
-  })
-  const [config, setConfig] = useState<EmailSettingsConfig | null>(null)
-  const [saving, setSaving] = useState(false)
-  const [testingChannelAnomaly, setTestingChannelAnomaly] = useState(false)
+      setConfig(response.data)
+    } catch (error) {
+      setConfig(null)
+      setLoadError(
+        error instanceof Error
+          ? error.message
+          : t('Failed to load email settings')
+      )
+    } finally {
+      setLoading(false)
+    }
+  }, [t])
 
   useEffect(() => {
-    if (configQuery.data) setConfig(configQuery.data)
-  }, [configQuery.data])
+    void loadConfig()
+  }, [loadConfig])
 
   const patchConfig = (patch: Partial<EmailSettingsConfig>) => {
     setConfig((current) => (current ? { ...current, ...patch } : current))
@@ -164,19 +175,15 @@ export function EmailAlertSettings() {
     }
   }
 
-  if (configQuery.isError) {
+  if (loadError) {
     return (
       <div className='flex min-h-32 flex-col items-center justify-center gap-3 rounded-lg border p-5 text-center'>
-        <p className='text-destructive text-sm'>
-          {configQuery.error instanceof Error
-            ? configQuery.error.message
-            : t('Failed to load email settings')}
-        </p>
+        <p className='text-destructive text-sm'>{loadError}</p>
         <Button
           type='button'
           variant='outline'
           size='sm'
-          onClick={() => configQuery.refetch()}
+          onClick={() => void loadConfig()}
         >
           <RefreshCw className='size-4' />
           {t('Retry')}
@@ -185,7 +192,7 @@ export function EmailAlertSettings() {
     )
   }
 
-  if (configQuery.isLoading || !config) {
+  if (loading || !config) {
     return (
       <div className='text-muted-foreground flex min-h-28 items-center justify-center rounded-lg border text-sm'>
         {t('Loading...')}
