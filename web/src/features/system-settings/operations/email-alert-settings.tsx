@@ -20,7 +20,9 @@ import { useQuery } from '@tanstack/react-query'
 import {
   CalendarClock,
   CircleGauge,
+  RefreshCw,
   Save,
+  Send,
   ShieldAlert,
   WalletCards,
   type LucideIcon,
@@ -39,6 +41,7 @@ import {
   getEmailSettingsConfig,
   resolveEmailSettingsRecipients,
   searchEmailSettingsRecipients,
+  sendChannelAnomalyTestEmail,
   updateEmailSettingsConfig,
   type EmailSettingsConfig,
 } from './email-templates-api'
@@ -47,6 +50,7 @@ type AlertPanelProps = {
   icon: LucideIcon
   title: string
   description: string
+  toggleLabel: string
   checked: boolean
   onCheckedChange: (checked: boolean) => void
   children?: ReactNode
@@ -55,30 +59,31 @@ type AlertPanelProps = {
 function AlertPanel(props: AlertPanelProps) {
   const Icon = props.icon
   return (
-    <div className='overflow-hidden rounded-lg border'>
-      <div className='flex items-start justify-between gap-4 px-4 py-4 sm:px-5'>
-        <div className='flex min-w-0 items-start gap-3'>
-          <span className='bg-muted text-muted-foreground flex size-9 shrink-0 items-center justify-center rounded-md'>
-            <Icon className='size-4.5' aria-hidden='true' />
+    <div className='bg-card overflow-hidden rounded-lg border'>
+      <div className='flex items-start gap-3 border-b px-4 py-4 sm:px-5'>
+        <span className='bg-muted text-muted-foreground flex size-9 shrink-0 items-center justify-center rounded-md'>
+          <Icon className='size-4.5' aria-hidden='true' />
+        </span>
+        <span className='min-w-0'>
+          <span className='block text-base font-semibold'>{props.title}</span>
+          <span className='text-muted-foreground mt-1 block text-sm leading-5'>
+            {props.description}
           </span>
-          <span className='min-w-0'>
-            <span className='block text-sm font-semibold'>{props.title}</span>
-            <span className='text-muted-foreground mt-1 block text-sm leading-5'>
-              {props.description}
-            </span>
-          </span>
-        </div>
-        <Switch
-          checked={props.checked}
-          aria-label={props.title}
-          onCheckedChange={props.onCheckedChange}
-        />
+        </span>
       </div>
-      {props.children && (
-        <div className='bg-muted/15 grid gap-4 border-t px-4 py-4 sm:px-5'>
-          {props.children}
+      <div className='px-4 py-4 sm:px-5'>
+        <div className='flex min-h-9 items-center justify-between gap-4'>
+          <span className='text-sm font-medium'>{props.toggleLabel}</span>
+          <Switch
+            checked={props.checked}
+            aria-label={props.toggleLabel}
+            onCheckedChange={props.onCheckedChange}
+          />
         </div>
-      )}
+        {props.children && (
+          <div className='mt-4 grid gap-4 border-t pt-4'>{props.children}</div>
+        )}
+      </div>
     </div>
   )
 }
@@ -97,6 +102,7 @@ export function EmailAlertSettings() {
   })
   const [config, setConfig] = useState<EmailSettingsConfig | null>(null)
   const [saving, setSaving] = useState(false)
+  const [testingChannelAnomaly, setTestingChannelAnomaly] = useState(false)
 
   useEffect(() => {
     if (configQuery.data) setConfig(configQuery.data)
@@ -133,6 +139,51 @@ export function EmailAlertSettings() {
     }
   }
 
+  const testChannelAnomaly = async () => {
+    if (!config) return
+    setTestingChannelAnomaly(true)
+    try {
+      const response = await sendChannelAnomalyTestEmail(
+        config.channel_anomaly_email_recipient_user_ids
+      )
+      if (!response.success || !response.data) throw new Error(response.message)
+      toast.success(
+        t('Channel anomaly test email sent to {{count}} recipient(s)', {
+          count: response.data.recipient_count,
+        })
+      )
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : t('Failed to send channel anomaly test email')
+      )
+    } finally {
+      setTestingChannelAnomaly(false)
+    }
+  }
+
+  if (configQuery.isError) {
+    return (
+      <div className='flex min-h-32 flex-col items-center justify-center gap-3 rounded-lg border p-5 text-center'>
+        <p className='text-destructive text-sm'>
+          {configQuery.error instanceof Error
+            ? configQuery.error.message
+            : t('Failed to load email settings')}
+        </p>
+        <Button
+          type='button'
+          variant='outline'
+          size='sm'
+          onClick={() => configQuery.refetch()}
+        >
+          <RefreshCw className='size-4' />
+          {t('Retry')}
+        </Button>
+      </div>
+    )
+  }
+
   if (configQuery.isLoading || !config) {
     return (
       <div className='text-muted-foreground flex min-h-28 items-center justify-center rounded-lg border text-sm'>
@@ -158,13 +209,14 @@ export function EmailAlertSettings() {
         </Button>
       </div>
 
-      <div className='grid gap-3'>
+      <div className='grid gap-5'>
         <AlertPanel
           icon={CalendarClock}
           title={t('Subscription expiry reminders')}
           description={t(
             'When enabled, reminders are sent 7, 3, and 1 days before expiry.'
           )}
+          toggleLabel={t('Enable subscription expiry reminders')}
           checked={config.subscription_expiry_reminder_enabled}
           onCheckedChange={(checked) =>
             patchConfig({ subscription_expiry_reminder_enabled: checked })
@@ -177,6 +229,7 @@ export function EmailAlertSettings() {
           description={t(
             "Send an email when a user's wallet or subscription quota falls below the warning threshold."
           )}
+          toggleLabel={t('Enable low balance reminder')}
           checked={config.low_balance_email_enabled}
           onCheckedChange={(checked) =>
             patchConfig({ low_balance_email_enabled: checked })
@@ -236,6 +289,7 @@ export function EmailAlertSettings() {
           description={t(
             'Notify selected administrators when a channel account balance falls below the threshold.'
           )}
+          toggleLabel={t('Enable account quota alert')}
           checked={config.account_quota_email_enabled}
           onCheckedChange={(checked) =>
             patchConfig({ account_quota_email_enabled: checked })
@@ -296,6 +350,7 @@ export function EmailAlertSettings() {
           description={t(
             'Send email only after an anomaly automatically disables a channel.'
           )}
+          toggleLabel={t('Enable channel anomaly alert')}
           checked={config.channel_anomaly_email_enabled}
           onCheckedChange={(checked) =>
             patchConfig({ channel_anomaly_email_enabled: checked })
@@ -319,6 +374,17 @@ export function EmailAlertSettings() {
             <p className='text-muted-foreground text-xs'>
               {t('Manual channel shutdowns never send this alert.')}
             </p>
+            <div className='flex justify-end'>
+              <Button
+                type='button'
+                variant='outline'
+                disabled={testingChannelAnomaly}
+                onClick={testChannelAnomaly}
+              >
+                <Send className='size-4' />
+                {testingChannelAnomaly ? t('Sending...') : t('Send test email')}
+              </Button>
+            </div>
           </div>
         </AlertPanel>
       </div>

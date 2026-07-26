@@ -148,3 +148,11 @@ export async function resolveEmailSettingsRecipients(userIds: number[]) {
   )
   return response.data
 }
+
+export async function sendChannelAnomalyTestEmail(recipientUserIds: number[]) {
+  const response = await api.post<ApiResponse<{ recipient_count: number }>>(
+    '/api/email-settings/channel-anomaly/test',
+    { recipient_user_ids: recipientUserIds }
+  )
+  return response.data
+}

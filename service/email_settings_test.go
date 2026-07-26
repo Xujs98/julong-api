@@ -124,3 +124,38 @@ func TestOperationalEmailRecipientSearchOnlyReturnsEnabledAdministrators(t *test
 	}
 	assert.ElementsMatch(t, []int{users["admin"].Id, users["root"].Id}, ids)
 }
+
+func TestSendChannelAnomalyTestEmailsUsesSelectedOperationalRecipients(t *testing.T) {
+	_, users := setupEmailSettingsTest(t)
+	receivers := make([]string, 0, 2)
+	sent, err := sendChannelAnomalyTestEmails(
+		[]int{users["root"].Id, users["admin"].Id},
+		func(subject, receiver, content string) error {
+			receivers = append(receivers, receiver)
+			assert.Contains(t, subject, "渠道异常通知测试")
+			assert.Contains(t, content, "用于验证渠道异常通知配置")
+			return nil
+		},
+	)
+	require.NoError(t, err)
+	assert.Equal(t, 2, sent)
+	assert.ElementsMatch(t, []string{users["admin"].Email, users["root"].Email}, receivers)
+}
+
+func TestSendChannelAnomalyTestEmailsFallsBackToRootAndRejectsCommonUser(t *testing.T) {
+	_, users := setupEmailSettingsTest(t)
+	receivers := make([]string, 0, 1)
+	sent, err := sendChannelAnomalyTestEmails(nil, func(_, receiver, _ string) error {
+		receivers = append(receivers, receiver)
+		return nil
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 1, sent)
+	assert.Equal(t, []string{users["root"].Email}, receivers)
+
+	_, err = sendChannelAnomalyTestEmails([]int{users["common"].Id}, func(_, _, _ string) error {
+		return nil
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "active administrators")
+}

@@ -14,6 +14,10 @@ type emailSettingsRecipientResolveRequest struct {
 	UserIDs []int `json:"user_ids"`
 }
 
+type channelAnomalyTestEmailRequest struct {
+	RecipientUserIDs []int `json:"recipient_user_ids"`
+}
+
 func GetEmailSettingsConfig(c *gin.Context) {
 	config, err := service.GetEmailSettingsConfig()
 	if err != nil {
@@ -69,4 +73,18 @@ func ResolveEmailSettingsRecipients(c *gin.Context) {
 		return
 	}
 	common.ApiSuccess(c, users)
+}
+
+func SendChannelAnomalyTestEmail(c *gin.Context) {
+	var req channelAnomalyTestEmailRequest
+	if err := common.DecodeJson(c.Request.Body, &req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "无效的参数"})
+		return
+	}
+	recipientCount, err := service.SendChannelAnomalyTestEmails(req.RecipientUserIDs)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, gin.H{"recipient_count": recipientCount})
 }

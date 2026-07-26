@@ -203,20 +203,58 @@ func NotifyChannelAnomalyEmail(channelError types.ChannelError, reason string) b
 	return true
 }
 
+func SendChannelAnomalyTestEmails(userIDs []int) (int, error) {
+	return sendChannelAnomalyTestEmails(userIDs, common.SendEmail)
+}
+
+func sendChannelAnomalyTestEmails(userIDs []int, sender EmailCampaignSender) (int, error) {
+	if sender == nil {
+		return 0, errors.New("email sender is required")
+	}
+	userIDs = normalizeEmailRecipientIDs(userIDs)
+	if len(userIDs) > maxOperationalEmailRecipients {
+		return 0, fmt.Errorf("recipient count cannot exceed %d", maxOperationalEmailRecipients)
+	}
+	if err := validateOperationalEmailRecipientIDs(userIDs); err != nil {
+		return 0, err
+	}
+	recipients, err := model.GetOperationalEmailRecipientUsers(userIDs)
+	if err != nil {
+		return 0, err
+	}
+	if len(recipients) == 0 {
+		return 0, errors.New("no active administrator or root recipient with an email address")
+	}
+
+	sent := 0
+	for _, recipient := range recipients {
+		values := map[string]string{
+			"channel_id":       "0",
+			"channel_name":     "渠道异常通知测试",
+			"channel_type":     "OpenAI",
+			"channel_base_url": "https://example.com",
+			"failure_reason":   "这是一封测试邮件，用于验证渠道异常通知配置。",
+			"disabled_at":      time.Now().Format("2006-01-02 15:04:05"),
+		}
+		if NormalizeEmailTemplateLocale(recipient.GetSetting().Language) == EmailTemplateLocaleEnglish {
+			values["channel_name"] = "Channel anomaly notification test"
+			values["failure_reason"] = "This is a test email used to verify the channel anomaly notification configuration."
+		}
+		rendered, err := renderOperationalTemplateEmail(EmailTemplateEventChannelAnomalyDisabled, recipient, values)
+		if err != nil {
+			return sent, err
+		}
+		if err := sender(rendered.Subject, recipient.Email, rendered.Content); err != nil {
+			return sent, fmt.Errorf("failed to send channel anomaly test email to user %d: %w", recipient.Id, err)
+		}
+		sent++
+	}
+	return sent, nil
+}
+
 func sendOperationalTemplateEmails(event string, recipients []model.User, values map[string]string) {
 	for _, recipient := range recipients {
-		displayName := strings.TrimSpace(recipient.DisplayName)
-		if displayName == "" {
-			displayName = recipient.Username
-		}
-		recipientValues := make(map[string]string, len(values)+4)
-		for key, value := range values {
-			recipientValues[key] = value
-		}
-		recipientValues["username"] = recipient.Username
-		recipientValues["display_name"] = displayName
-		recipientValues["email"] = recipient.Email
-		rendered, err := RenderEmailTemplateForLocale(event, recipient.GetSetting().Language, recipientValues)
+		rendered, err := renderOperationalTemplateEmail(event, recipient, values)
 		if err != nil {
 			common.SysError(fmt.Sprintf("failed to render operational email event %s for user %d: %v", event, recipient.Id, err))
 			continue
@@ -225,6 +263,21 @@ func sendOperationalTemplateEmails(event string, recipients []model.User, values
 			common.SysError(fmt.Sprintf("failed to send operational email event %s to user %d: %v", event, recipient.Id, err))
 		}
 	}
+}
+
+func renderOperationalTemplateEmail(event string, recipient model.User, values map[string]string) (EmailTemplatePreview, error) {
+	displayName := strings.TrimSpace(recipient.DisplayName)
+	if displayName == "" {
+		displayName = recipient.Username
+	}
+	recipientValues := make(map[string]string, len(values)+4)
+	for key, value := range values {
+		recipientValues[key] = value
+	}
+	recipientValues["username"] = recipient.Username
+	recipientValues["display_name"] = displayName
+	recipientValues["email"] = recipient.Email
+	return RenderEmailTemplateForLocale(event, recipient.GetSetting().Language, recipientValues)
 }
 
 func emailOptionString(key string) string {

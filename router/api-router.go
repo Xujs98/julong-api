@@ -296,6 +296,7 @@ func SetApiRouter(router *gin.Engine) {
 			emailSettingsRoute.PUT("/config", controller.UpdateEmailSettingsConfig)
 			emailSettingsRoute.GET("/recipients", controller.SearchEmailSettingsRecipients)
 			emailSettingsRoute.POST("/recipients/resolve", controller.ResolveEmailSettingsRecipients)
+			emailSettingsRoute.POST("/channel-anomaly/test", controller.SendChannelAnomalyTestEmail)
 		}
 		emailTemplateRoute := emailSettingsRoute.Group("/templates")
 		{
