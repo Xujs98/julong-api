@@ -126,6 +126,10 @@ var SMTPAccount = ""
 var SMTPFrom = ""
 var SMTPToken = ""
 
+const EmailTemplatesOptionKey = "EmailTemplates"
+
+const SubscriptionExpiryReminderEnabledOptionKey = "SubscriptionExpiryReminderEnabled"
+
 var GitHubClientId = ""
 var GitHubClientSecret = ""
 var LinuxDOClientId = ""

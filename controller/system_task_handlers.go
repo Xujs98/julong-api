@@ -24,6 +24,7 @@ func RegisterScheduledSystemTasks() {
 	service.RegisterSystemTaskHandler(asyncTaskPollHandler{})
 	service.RegisterSystemTaskHandler(imageStorageCleanupHandler{})
 	service.RegisterSystemTaskHandler(emailCampaignDispatchHandler{})
+	service.RegisterSystemTaskHandler(subscriptionExpiryEmailHandler{})
 }
 
 // channelTestHandler runs the scheduled "test all channels" job. Enablement and
@@ -176,6 +177,30 @@ func (emailCampaignDispatchHandler) NewPayload() any { return nil }
 
 func (emailCampaignDispatchHandler) Run(ctx context.Context, task *model.SystemTask, runnerID string) {
 	result, err := service.DispatchDueEmailCampaigns(ctx, common.SendEmail)
+	if err != nil {
+		finishSystemTaskHandler(task, runnerID, model.SystemTaskStatusFailed, result, err)
+		return
+	}
+	finishSystemTaskHandler(task, runnerID, model.SystemTaskStatusSucceeded, result, nil)
+}
+
+type subscriptionExpiryEmailHandler struct{}
+
+func (subscriptionExpiryEmailHandler) Type() string {
+	return model.SystemTaskTypeSubscriptionExpiryEmail
+}
+
+func (subscriptionExpiryEmailHandler) Enabled() bool {
+	return service.IsSubscriptionExpiryReminderEnabled() &&
+		common.SMTPServer != "" && (common.SMTPFrom != "" || common.SMTPAccount != "")
+}
+
+func (subscriptionExpiryEmailHandler) Interval() time.Duration { return time.Hour }
+
+func (subscriptionExpiryEmailHandler) NewPayload() any { return nil }
+
+func (subscriptionExpiryEmailHandler) Run(ctx context.Context, task *model.SystemTask, runnerID string) {
+	result, err := service.DispatchSubscriptionExpiryReminders(ctx, common.SendEmail)
 	if err != nil {
 		finishSystemTaskHandler(task, runnerID, model.SystemTaskStatusFailed, result, err)
 		return

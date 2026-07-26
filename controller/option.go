@@ -329,6 +329,14 @@ func UpdateOption(c *gin.Context) {
 			})
 			return
 		}
+	case common.SubscriptionExpiryReminderEnabledOptionKey:
+		if option.Value != "true" && option.Value != "false" {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": "订阅到期提醒开关值无效",
+			})
+			return
+		}
 	case "UserLogGroupRatioDisplayMode":
 		mode := option.Value.(string)
 		if mode != common.UserLogGroupRatioDisplayModeSystem &&

@@ -288,6 +288,15 @@ func SetApiRouter(router *gin.Engine) {
 			emailCampaignRoute.POST("/:id/retry", controller.RetryEmailCampaign)
 			emailCampaignRoute.GET("/:id/deliveries", controller.ListEmailCampaignDeliveries)
 		}
+
+		emailTemplateRoute := apiRouter.Group("/email-settings/templates")
+		emailTemplateRoute.Use(middleware.AdminAuth(), middleware.RequirePermission(authz.SystemSettingsPermission("operations.email-templates")))
+		{
+			emailTemplateRoute.GET("", controller.ListEmailTemplates)
+			emailTemplateRoute.PUT("/:event", controller.UpdateEmailTemplate)
+			emailTemplateRoute.POST("/:event/preview", controller.PreviewEmailTemplate)
+			emailTemplateRoute.POST("/:event/reset", controller.ResetEmailTemplate)
+		}
 		ratioSyncRoute := apiRouter.Group("/ratio_sync")
 		ratioSyncRoute.Use(middleware.AdminAuth(), middleware.RequirePermission(authz.SystemSettingsPermission("billing.model-pricing")))
 		{

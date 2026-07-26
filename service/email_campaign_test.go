@@ -116,6 +116,59 @@ func TestConditionalEmailCampaignDeduplicatesExpiryAndSendsAfterRenewal(t *testi
 	assert.Equal(t, int64(2), deliveries)
 }
 
+func TestSubscriptionExpiryReminderUsesSevenThreeOneDayWindowsAndDeduplicates(t *testing.T) {
+	db := setupEmailCampaignTestDB(t)
+	now := common.GetTimestamp()
+	user := createEmailCampaignTestUser(t, db, "subscriber", "subscriber@example.com")
+	plan := model.SubscriptionPlan{Title: "Pro", PriceAmount: 1, Currency: "USD"}
+	require.NoError(t, db.Create(&plan).Error)
+	for _, remainingHours := range []int64{156, 60, 12, 96} {
+		subscription := model.UserSubscription{
+			UserId:    user.Id,
+			PlanId:    plan.Id,
+			StartTime: now - 3600,
+			EndTime:   now + remainingHours*60*60,
+			Status:    "active",
+		}
+		require.NoError(t, db.Create(&subscription).Error)
+	}
+
+	common.OptionMapRWMutex.Lock()
+	oldOptions := common.OptionMap
+	common.OptionMap = map[string]string{
+		common.SubscriptionExpiryReminderEnabledOptionKey: "true",
+	}
+	common.OptionMapRWMutex.Unlock()
+	t.Cleanup(func() {
+		common.OptionMapRWMutex.Lock()
+		common.OptionMap = oldOptions
+		common.OptionMapRWMutex.Unlock()
+	})
+
+	var subjects []string
+	sender := func(subject, receiver, _ string) error {
+		subjects = append(subjects, subject)
+		assert.Equal(t, user.Email, receiver)
+		return nil
+	}
+	result, err := DispatchSubscriptionExpiryReminders(context.Background(), sender)
+	require.NoError(t, err)
+	assert.Equal(t, int64(3), result.SentCount)
+	assert.Len(t, subjects, 3)
+	assert.Contains(t, subjects[0]+subjects[1]+subjects[2], "7")
+	assert.Contains(t, subjects[0]+subjects[1]+subjects[2], "3")
+	assert.Contains(t, subjects[0]+subjects[1]+subjects[2], "1")
+
+	result, err = DispatchSubscriptionExpiryReminders(context.Background(), sender)
+	require.NoError(t, err)
+	assert.Zero(t, result.SentCount)
+	assert.Len(t, subjects, 3)
+
+	var deliveries int64
+	require.NoError(t, db.Model(&model.EmailDelivery{}).Where("campaign_id = ?", systemSubscriptionExpiryCampaignID).Count(&deliveries).Error)
+	assert.Equal(t, int64(3), deliveries)
+}
+
 func TestOneShotEmailCampaignRetriesOnlyFailedDeliveries(t *testing.T) {
 	db := setupEmailCampaignTestDB(t)
 	user := createEmailCampaignTestUser(t, db, "retry-user", "retry@example.com")

@@ -397,6 +397,39 @@ func ListEmailRecipientCandidates(campaign *EmailCampaign, now int64, offset, li
 	return candidates, err
 }
 
+func ListSubscriptionExpiryReminderCandidates(now int64, reminderDays, offset, limit int) ([]EmailRecipientCandidate, error) {
+	if reminderDays <= 0 {
+		return nil, errors.New("reminder days must be positive")
+	}
+	if limit <= 0 {
+		limit = 500
+	}
+	daySeconds := int64(24 * 60 * 60)
+	lowerBound := now + int64(reminderDays-1)*daySeconds
+	upperBound := now + int64(reminderDays)*daySeconds
+	selectUser := "users.id AS user_id, users.email, users.username, users.display_name"
+	var candidates []EmailRecipientCandidate
+	err := DB.Table("users").
+		Select(selectUser+", user_subscriptions.id AS subscription_id, subscription_plans.title AS subscription_title, user_subscriptions.end_time AS subscription_end_time").
+		Joins("JOIN user_subscriptions ON user_subscriptions.user_id = users.id").
+		Joins("LEFT JOIN subscription_plans ON subscription_plans.id = user_subscriptions.plan_id").
+		Where("users.status = ? AND users.email <> '' AND users.deleted_at IS NULL", common.UserStatusEnabled).
+		Where("user_subscriptions.status = ? AND user_subscriptions.end_time > ? AND user_subscriptions.end_time <= ?", "active", lowerBound, upperBound).
+		Order("users.id ASC, user_subscriptions.id ASC").
+		Offset(offset).
+		Limit(limit).
+		Scan(&candidates).Error
+	return candidates, err
+}
+
+func IsSubscriptionExpiryReminderCurrent(subscriptionId, userId int, endTime, now int64) (bool, error) {
+	var count int64
+	err := DB.Model(&UserSubscription{}).
+		Where("id = ? AND user_id = ? AND status = ? AND end_time = ? AND end_time > ?", subscriptionId, userId, "active", endTime, now).
+		Count(&count).Error
+	return count > 0, err
+}
+
 func CreateEmailDeliveries(deliveries []EmailDelivery) error {
 	if len(deliveries) == 0 {
 		return nil
