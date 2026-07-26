@@ -91,7 +91,7 @@ function AlertPanel(props: AlertPanelProps) {
 export function EmailAlertSettings() {
   const { t } = useTranslation()
   const configQuery = useQuery({
-    queryKey: ['email-settings-config'],
+    queryKey: ['email-settings-config', 'v2'],
     queryFn: async () => {
       const response = await getEmailSettingsConfig()
       if (!response.success || !response.data) {
@@ -99,6 +99,7 @@ export function EmailAlertSettings() {
       }
       return response.data
     },
+    refetchOnMount: 'always',
   })
   const [config, setConfig] = useState<EmailSettingsConfig | null>(null)
   const [saving, setSaving] = useState(false)

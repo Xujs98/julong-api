@@ -292,6 +292,8 @@ func SetApiRouter(router *gin.Engine) {
 		emailSettingsRoute := apiRouter.Group("/email-settings")
 		emailSettingsRoute.Use(middleware.AdminAuth(), middleware.RequirePermission(authz.SystemSettingsPermission("operations.email-templates")))
 		{
+			emailSettingsRoute.GET("", controller.GetEmailSettingsConfig)
+			emailSettingsRoute.PUT("", controller.UpdateEmailSettingsConfig)
 			emailSettingsRoute.GET("/config", controller.GetEmailSettingsConfig)
 			emailSettingsRoute.PUT("/config", controller.UpdateEmailSettingsConfig)
 			emailSettingsRoute.GET("/recipients", controller.SearchEmailSettingsRecipients)
