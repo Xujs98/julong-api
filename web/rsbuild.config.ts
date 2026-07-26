@@ -68,6 +68,10 @@ export default defineConfig(({ envMode }) => {
       host: '0.0.0.0',
       strictPort: false,
       proxy: devProxy,
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate',
+        Expires: '0',
+      },
     },
     output: {
       // Production optimizations
