@@ -17,7 +17,14 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useQuery } from '@tanstack/react-query'
-import { Ban, Loader2, ShieldCheck } from 'lucide-react'
+import type { TFunction } from 'i18next'
+import {
+  Ban,
+  ChevronLeft,
+  ChevronRight,
+  Loader2,
+  ShieldCheck,
+} from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -61,6 +68,7 @@ import { cn } from '@/lib/utils'
 
 import {
   getUserLoginIPs,
+  getUserQuotaIncreaseLogs,
   getUserUsageSummary,
   updateUserLoginIPs,
 } from '../api'
@@ -71,10 +79,12 @@ import {
   isUserDeleted,
 } from '../constants'
 import type { User, UserLoginIP } from '../types'
+import { UserGroupRatiosCard } from './user-group-ratios-card'
 import { UserRequestContentPanel } from './user-request-content-panel'
 import { useUsers } from './users-provider'
 
 const RECENT_LOG_LIMIT = 20
+const QUOTA_DETAIL_PAGE_SIZE = 10
 const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000
 
 function getDaysSinceLastLogin(timestamp?: number) {
@@ -136,6 +146,159 @@ function EmptyRow({ colSpan }: { colSpan: number }) {
         </span>
       </TableCell>
     </TableRow>
+  )
+}
+
+function getQuotaSourceLabel(source: string, t: TFunction) {
+  switch (source) {
+    case 'redemption':
+      return t('Redemption Code')
+    case 'checkin':
+      return t('Daily Check-in')
+    case 'admin_adjustment':
+      return t('Admin adjustment')
+    case 'online_recharge':
+      return t('Recharge')
+    case 'refund':
+      return t('Refund')
+    case 'registration_bonus':
+      return t('Registration bonus')
+    case 'invitation_bonus':
+      return t('Invitation bonus')
+    case 'affiliate_transfer':
+      return t('Affiliate balance transfer')
+    case 'agent_redemption_refund':
+      return t('Agent redemption refund')
+    default:
+      return t('Other')
+  }
+}
+
+function QuotaDetailsPanel(props: { userId?: number }) {
+  const { t } = useTranslation()
+  const [page, setPage] = useState(1)
+  const query = useQuery({
+    queryKey: ['admin-user-quota-increases', props.userId, page],
+    enabled: Boolean(props.userId),
+    queryFn: async () => {
+      if (!props.userId) {
+        return { items: [], total: 0, page, page_size: QUOTA_DETAIL_PAGE_SIZE }
+      }
+      const result = await getUserQuotaIncreaseLogs(
+        props.userId,
+        page,
+        QUOTA_DETAIL_PAGE_SIZE
+      )
+      if (!result.success) throw new Error(result.message || 'Load failed')
+      return (
+        result.data || {
+          items: [],
+          total: 0,
+          page,
+          page_size: QUOTA_DETAIL_PAGE_SIZE,
+        }
+      )
+    },
+    placeholderData: (previousData) => previousData,
+  })
+  const records = query.data?.items || []
+  const totalPages = Math.max(
+    1,
+    Math.ceil((query.data?.total || 0) / QUOTA_DETAIL_PAGE_SIZE)
+  )
+
+  if (query.isLoading) {
+    return (
+      <div className='space-y-2'>
+        <Skeleton className='h-12 w-full' />
+        <Skeleton className='h-12 w-full' />
+        <Skeleton className='h-12 w-full' />
+      </div>
+    )
+  }
+
+  if (query.isError) {
+    return (
+      <div className='flex h-28 flex-col items-center justify-center gap-2 rounded-lg border'>
+        <span className='text-destructive text-sm'>
+          {t('Failed to load quota details')}
+        </span>
+        <Button size='sm' variant='outline' onClick={() => query.refetch()}>
+          {t('Retry')}
+        </Button>
+      </div>
+    )
+  }
+
+  if (records.length === 0) {
+    return (
+      <div className='text-muted-foreground flex h-28 items-center justify-center rounded-lg border text-sm'>
+        {t('No quota increase records')}
+      </div>
+    )
+  }
+
+  return (
+    <div className='space-y-3'>
+      <div className='overflow-x-auto rounded-lg border'>
+        <Table className='min-w-[680px]'>
+          <TableHeader>
+            <TableRow>
+              <TableHead>{t('Time')}</TableHead>
+              <TableHead>{t('Source')}</TableHead>
+              <TableHead>{t('Amount')}</TableHead>
+              <TableHead>{t('Details')}</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {records.map((record) => (
+              <TableRow key={record.request_id || String(record.id)}>
+                <TableCell className='whitespace-nowrap'>
+                  {formatTimestampToDate(record.created_at)}
+                </TableCell>
+                <TableCell>{getQuotaSourceLabel(record.source, t)}</TableCell>
+                <TableCell className='font-medium text-emerald-600 tabular-nums dark:text-emerald-400'>
+                  +{formatQuota(record.quota)}
+                </TableCell>
+                <TableCell className='max-w-[320px] whitespace-normal'>
+                  {record.content || '-'}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+      {totalPages > 1 && (
+        <div className='flex items-center justify-end gap-2'>
+          <span className='text-muted-foreground text-xs tabular-nums'>
+            {t('Page {{current}} of {{total}}', {
+              current: page,
+              total: totalPages,
+            })}
+          </span>
+          <Button
+            size='icon-sm'
+            variant='outline'
+            disabled={page <= 1 || query.isFetching}
+            aria-label={t('Previous')}
+            onClick={() => setPage((current) => Math.max(1, current - 1))}
+          >
+            <ChevronLeft />
+          </Button>
+          <Button
+            size='icon-sm'
+            variant='outline'
+            disabled={page >= totalPages || query.isFetching}
+            aria-label={t('Next')}
+            onClick={() =>
+              setPage((current) => Math.min(totalPages, current + 1))
+            }
+          >
+            <ChevronRight />
+          </Button>
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -382,6 +545,8 @@ export function UserDetailDialog() {
     : null
   const totalTokens = summaryQuery.data?.total_tokens ?? 0
   const todayTokens = summaryQuery.data?.today_tokens ?? 0
+  const todayQuota = summaryQuery.data?.today_quota ?? 0
+  const groupRatios = summaryQuery.data?.group_ratios ?? {}
   const logs = logsQuery.data || []
   const daysSinceLastLogin = getDaysSinceLastLogin(user?.last_login_at)
   let logRows: ReactNode
@@ -446,7 +611,19 @@ export function UserDetailDialog() {
               </div>
             </div>
           </div>
-          <div className='grid grid-cols-2 border-t sm:grid-cols-5'>
+          {summaryQuery.isLoading ? (
+            <div className='bg-muted/30 mb-4 rounded-md border p-3'>
+              <Skeleton className='mb-2 h-4 w-24' />
+              <div className='flex gap-2'>
+                <Skeleton className='h-7 w-20 rounded-md' />
+                <Skeleton className='h-7 w-20 rounded-md' />
+                <Skeleton className='h-7 w-20 rounded-md' />
+              </div>
+            </div>
+          ) : (
+            <UserGroupRatiosCard groupRatios={groupRatios} />
+          )}
+          <div className='grid grid-cols-2 border-t sm:grid-cols-6'>
             <Metric
               label={t('Wallet balance')}
               value={formatQuota(user?.quota ?? 0)}
@@ -454,6 +631,16 @@ export function UserDetailDialog() {
             <Metric
               label={t('Used:')}
               value={formatQuota(user?.used_quota ?? 0)}
+            />
+            <Metric
+              label={t("Today's consumption")}
+              value={
+                summaryQuery.isLoading ? (
+                  <Skeleton className='h-5 w-16' />
+                ) : (
+                  formatQuota(todayQuota)
+                )
+              }
             />
             <Metric
               label={t('Total token consumption')}
@@ -478,7 +665,6 @@ export function UserDetailDialog() {
             <Metric
               label={t('Requests:')}
               value={formatNumber(user?.request_count ?? 0)}
-              className='col-span-2 border-r-0 sm:col-span-1'
             />
           </div>
         </DialogHeader>
@@ -490,6 +676,9 @@ export function UserDetailDialog() {
           >
             <TabsTrigger value='info'>{t('Basic Information')}</TabsTrigger>
             <TabsTrigger value='logs'>{t('Usage Logs')}</TabsTrigger>
+            <TabsTrigger value='quota-details'>
+              {t('Quota details')}
+            </TabsTrigger>
             <TabsTrigger value='login-ips'>{t('Login IPs')}</TabsTrigger>
             <TabsTrigger value='request-content'>
               {t('Context and Prompts')}
@@ -571,6 +760,10 @@ export function UserDetailDialog() {
                   <TableBody>{logRows}</TableBody>
                 </Table>
               </div>
+            </TabsContent>
+
+            <TabsContent value='quota-details' className='p-4 sm:p-6'>
+              <QuotaDetailsPanel key={user?.id} userId={user?.id} />
             </TabsContent>
 
             <TabsContent value='login-ips' className='p-4 sm:p-6'>

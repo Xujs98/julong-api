@@ -58,10 +58,10 @@ func GetEmailSettingsConfig() (EmailSettingsConfig, error) {
 			rootIDs = append(rootIDs, recipient.Id)
 		}
 		if len(config.AccountQuotaEmailRecipientUserIDs) == 0 {
-			config.AccountQuotaEmailRecipientUserIDs = append([]int(nil), rootIDs...)
+			config.AccountQuotaEmailRecipientUserIDs = append([]int{}, rootIDs...)
 		}
 		if len(config.ChannelAnomalyEmailRecipientIDs) == 0 {
-			config.ChannelAnomalyEmailRecipientIDs = append([]int(nil), rootIDs...)
+			config.ChannelAnomalyEmailRecipientIDs = append([]int{}, rootIDs...)
 		}
 	}
 	return config, nil

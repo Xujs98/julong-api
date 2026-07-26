@@ -20,6 +20,7 @@ import (
 	"github.com/QuantumNous/new-api/service/authz"
 	"github.com/QuantumNous/new-api/setting"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
+	"github.com/QuantumNous/new-api/setting/ratio_setting"
 
 	"github.com/QuantumNous/new-api/constant"
 
@@ -443,15 +444,37 @@ func AdminGetUserUsageSummary(c *gin.Context) {
 	}
 	now := time.Now()
 	todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
-	todayTokens, err := model.SumUserUsedTokenBetween(user.Id, todayStart.Unix(), todayStart.AddDate(0, 0, 1).Unix())
+	todayUsage, err := model.GetUserUsageSummaryBetween(user.Id, todayStart.Unix(), todayStart.AddDate(0, 0, 1).Unix())
 	if err != nil {
 		common.ApiError(c, err)
 		return
 	}
+	groupRatios := make(map[string]float64)
+	for groupName := range ratio_setting.GetGroupRatioCopy() {
+		groupRatios[groupName] = service.GetUserGroupRatio(user.Group, groupName)
+	}
 	common.ApiSuccess(c, gin.H{
 		"total_tokens": totalTokens,
-		"today_tokens": todayTokens,
+		"today_tokens": todayUsage.TotalTokens,
+		"today_quota":  todayUsage.TotalQuota,
+		"group_ratios": groupRatios,
 	})
+}
+
+func AdminGetUserQuotaIncreaseLogs(c *gin.Context) {
+	user, ok := getManageableUserFromParam(c)
+	if !ok {
+		return
+	}
+	pageInfo := common.GetPageQuery(c)
+	logs, total, err := model.GetUserQuotaIncreaseLogs(user.Id, pageInfo.GetStartIdx(), pageInfo.GetPageSize())
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	pageInfo.SetTotal(int(total))
+	pageInfo.SetItems(logs)
+	common.ApiSuccess(c, pageInfo)
 }
 
 type UpdateUserLoginIPsRequest struct {
@@ -612,6 +635,7 @@ func TransferAffQuota(c *gin.Context) {
 		common.ApiErrorI18n(c, i18n.MsgUserTransferFailed, map[string]any{"Error": err.Error()})
 		return
 	}
+	model.RecordQuotaIncreaseLog(id, tran.Quota, model.QuotaIncreaseSourceAffiliateTransfer, fmt.Sprintf("转入邀请额度 %s", logger.LogQuota(tran.Quota)))
 	common.ApiSuccessI18n(c, i18n.MsgUserTransferSuccess, nil)
 }
 
@@ -1473,6 +1497,7 @@ func ManageUser(c *gin.Context) {
 			recordManageAuditFor(c, user.Id, "user.quota_add", map[string]interface{}{
 				"quota": logger.LogQuota(req.Value),
 			})
+			model.RecordQuotaIncreaseLog(user.Id, req.Value, model.QuotaIncreaseSourceAdminAdjustment, fmt.Sprintf("管理员 %s 增加额度 %s", c.GetString("username"), logger.LogQuota(req.Value)))
 		case "subtract":
 			if req.Value <= 0 {
 				common.ApiErrorI18n(c, i18n.MsgUserQuotaChangeZero)
@@ -1495,6 +1520,10 @@ func ManageUser(c *gin.Context) {
 				"from": logger.LogQuota(oldQuota),
 				"to":   logger.LogQuota(req.Value),
 			})
+			if req.Value > oldQuota {
+				quotaIncrease := req.Value - oldQuota
+				model.RecordQuotaIncreaseLog(user.Id, quotaIncrease, model.QuotaIncreaseSourceAdminAdjustment, fmt.Sprintf("管理员 %s 将额度从 %s 调整为 %s", c.GetString("username"), logger.LogQuota(oldQuota), logger.LogQuota(req.Value)))
+			}
 		default:
 			common.ApiErrorI18n(c, i18n.MsgInvalidParams)
 			return

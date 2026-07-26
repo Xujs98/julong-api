@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/QuantumNous/new-api/logger"
+	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/types"
 	"github.com/gin-gonic/gin"
@@ -73,6 +74,9 @@ func SettleBilling(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, actualQuo
 
 		if err := relayInfo.Billing.Settle(actualQuota); err != nil {
 			return err
+		}
+		if delta < 0 && relayInfo.BillingSource != BillingSourceSubscription {
+			model.RecordQuotaIncreaseLog(relayInfo.UserId, -delta, model.QuotaIncreaseSourceRefund, fmt.Sprintf("预扣额度返还 %s", logger.LogQuota(-delta)))
 		}
 
 		// 发送额度通知（订阅计费使用订阅剩余额度）

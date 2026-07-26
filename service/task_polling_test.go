@@ -422,7 +422,8 @@ func TestUpdateSunoTasksStalePollsRefundExactlyOnce(t *testing.T) {
 	assert.Zero(t, reloaded.Quota)
 	assert.Equal(t, initialUserQuota+taskQuota, getUserQuota(t, userID))
 	assert.Equal(t, initialTokenQuota+taskQuota, getTokenRemainQuota(t, tokenID))
-	assert.Equal(t, int64(1), countLogs(t))
+	assert.Equal(t, int64(2), countLogs(t))
+	assert.Equal(t, int64(1), countQuotaIncreaseLogs(t, userID))
 }
 
 func TestSweepUnrefundedFailedTasksRefundsModernTaskAndSkipsLegacy(t *testing.T) {
@@ -458,7 +459,8 @@ func TestSweepUnrefundedFailedTasksRefundsModernTaskAndSkipsLegacy(t *testing.T)
 	assert.Zero(t, reloadedModern.Quota)
 	assert.Equal(t, legacyTaskQuota, reloadedLegacy.Quota)
 	assert.Equal(t, initialQuota+modernTaskQuota, getUserQuota(t, userID))
-	assert.Equal(t, int64(1), countLogs(t))
+	assert.Equal(t, int64(2), countLogs(t))
+	assert.Equal(t, int64(1), countQuotaIncreaseLogs(t, userID))
 }
 
 func TestSweepUnrefundedFailedTasksRestoresMarkerAfterFundingFailure(t *testing.T) {

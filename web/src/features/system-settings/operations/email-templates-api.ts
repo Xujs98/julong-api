@@ -116,9 +116,22 @@ export async function resetEmailTemplate(
 
 export async function getEmailSettingsConfig() {
   const response = await api.get<ApiResponse<EmailSettingsConfig>>(
-    '/api/email-settings/config'
+    '/api/email-settings/config',
+    { params: { _: Date.now() } }
   )
-  return response.data
+  const config = response.data.data
+  return {
+    ...response.data,
+    data: config
+      ? {
+          ...config,
+          account_quota_email_recipient_user_ids:
+            config.account_quota_email_recipient_user_ids ?? [],
+          channel_anomaly_email_recipient_user_ids:
+            config.channel_anomaly_email_recipient_user_ids ?? [],
+        }
+      : undefined,
+  }
 }
 
 export async function updateEmailSettingsConfig(config: EmailSettingsConfig) {

@@ -148,6 +148,7 @@ func SetApiRouter(router *gin.Engine) {
 				adminRoute.GET("/search", controller.SearchUsers)
 				adminRoute.GET("/agent-detail/:id", controller.AdminGetAgentDetail)
 				adminRoute.GET("/:id/usage-summary", controller.AdminGetUserUsageSummary)
+				adminRoute.GET("/:id/quota-increases", controller.AdminGetUserQuotaIncreaseLogs)
 				adminRoute.GET("/:id/login-ips", controller.AdminGetUserLoginIPs)
 				adminRoute.PUT("/:id/login-ips", controller.AdminUpdateUserLoginIPs)
 				adminRoute.GET("/:id/request-content", controller.AdminListUserRequestContentLogs)

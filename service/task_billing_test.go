@@ -282,11 +282,20 @@ func getTaskQuota(t *testing.T, id int64) int {
 func getLastLog(t *testing.T) *model.Log {
 	t.Helper()
 	var log model.Log
-	err := model.LOG_DB.Order("id desc").First(&log).Error
+	err := model.LOG_DB.Where("type <> ?", model.LogTypeQuotaIncrease).Order("id desc").First(&log).Error
 	if err != nil {
 		return nil
 	}
 	return &log
+}
+
+func countQuotaIncreaseLogs(t *testing.T, userID int) int64 {
+	t.Helper()
+	var count int64
+	require.NoError(t, model.LOG_DB.Model(&model.Log{}).
+		Where("user_id = ? AND type = ?", userID, model.LogTypeQuotaIncrease).
+		Count(&count).Error)
+	return count
 }
 
 func countLogs(t *testing.T) int64 {
@@ -330,6 +339,7 @@ func TestRefundTaskQuota_Wallet(t *testing.T) {
 	assert.Equal(t, model.LogTypeRefund, log.Type)
 	assert.Equal(t, preConsumed, log.Quota)
 	assert.Equal(t, "test-model", log.ModelName)
+	assert.EqualValues(t, 1, countQuotaIncreaseLogs(t, userID))
 	assert.Zero(t, task.Quota)
 	assert.Zero(t, getTaskQuota(t, task.ID))
 }
@@ -362,6 +372,7 @@ func TestRefundTaskQuota_Subscription(t *testing.T) {
 	log := getLastLog(t)
 	require.NotNil(t, log)
 	assert.Equal(t, model.LogTypeRefund, log.Type)
+	assert.Zero(t, countQuotaIncreaseLogs(t, userID))
 	assert.Zero(t, getTaskQuota(t, task.ID))
 }
 

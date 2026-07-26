@@ -11,6 +11,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service/authz"
+	"github.com/QuantumNous/new-api/setting/ratio_setting"
 
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
@@ -158,4 +159,100 @@ func TestManageUserDeleteReturnsImmediatelyAndUnknownActionFails(t *testing.T) {
 	require.NoError(t, db.First(&unchanged, unchanged.Id).Error)
 	assert.EqualValues(t, 1, unchanged.AuthVersion)
 	assert.Equal(t, common.UserStatusEnabled, unchanged.Status)
+}
+
+func TestManageUserRecordsOnlyPositiveQuotaAdjustments(t *testing.T) {
+	db := setupManageUserTestDB(t)
+	user := model.User{
+		Username: "managed-quota-user", Password: "password", Role: common.RoleCommonUser,
+		Status: common.UserStatusEnabled, Group: "default", Quota: 100,
+	}
+	require.NoError(t, db.Create(&user).Error)
+
+	recorder := performManageUserRequest(t, fmt.Sprintf(`{"id":%d,"action":"add_quota","mode":"add","value":250}`, user.Id))
+	assert.Contains(t, recorder.Body.String(), `"success":true`)
+	recorder = performManageUserRequest(t, fmt.Sprintf(`{"id":%d,"action":"add_quota","mode":"override","value":500}`, user.Id))
+	assert.Contains(t, recorder.Body.String(), `"success":true`)
+	recorder = performManageUserRequest(t, fmt.Sprintf(`{"id":%d,"action":"add_quota","mode":"subtract","value":50}`, user.Id))
+	assert.Contains(t, recorder.Body.String(), `"success":true`)
+
+	logs, total, err := model.GetUserQuotaIncreaseLogs(user.Id, 0, 10)
+	require.NoError(t, err)
+	assert.EqualValues(t, 2, total)
+	require.Len(t, logs, 2)
+	assert.Equal(t, 150, logs[0].Quota)
+	assert.Equal(t, 250, logs[1].Quota)
+	assert.Equal(t, model.QuotaIncreaseSourceAdminAdjustment, logs[0].Source)
+}
+
+func TestAdminGetUserQuotaIncreaseLogsReturnsTargetUserPage(t *testing.T) {
+	db := setupManageUserTestDB(t)
+	user := model.User{
+		Username: "quota-page-user", Password: "password", Role: common.RoleCommonUser,
+		Status: common.UserStatusEnabled, Group: "default",
+	}
+	require.NoError(t, db.Create(&user).Error)
+	model.RecordQuotaIncreaseLog(user.Id, 120, model.QuotaIncreaseSourceCheckin, "check-in reward")
+	model.RecordQuotaIncreaseLog(user.Id, 340, model.QuotaIncreaseSourceRedemption, "redemption reward")
+
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/user/%d/quota-increases?p=1&page_size=1", user.Id), nil)
+	c.Params = gin.Params{{Key: "id", Value: fmt.Sprintf("%d", user.Id)}}
+	c.Set("id", 9999)
+	c.Set("role", common.RoleRootUser)
+	c.Set("username", "root-operator")
+
+	AdminGetUserQuotaIncreaseLogs(c)
+
+	assert.Equal(t, http.StatusOK, recorder.Code)
+	assert.Contains(t, recorder.Body.String(), `"total":2`)
+	assert.Contains(t, recorder.Body.String(), `"page_size":1`)
+	assert.Contains(t, recorder.Body.String(), `"quota":340`)
+	assert.Contains(t, recorder.Body.String(), `"source":"redemption"`)
+	assert.NotContains(t, recorder.Body.String(), `"quota":120`)
+}
+
+func TestAdminGetUserUsageSummaryReturnsActualRatiosForAllGroups(t *testing.T) {
+	db := setupManageUserTestDB(t)
+	previousGroupRatio := ratio_setting.GroupRatio2JSONString()
+	previousGroupGroupRatio := ratio_setting.GroupGroupRatio2JSONString()
+	require.NoError(t, ratio_setting.UpdateGroupRatioByJSONString(`{"default":1,"vip":0.8,"svip":0.6}`))
+	require.NoError(t, ratio_setting.UpdateGroupGroupRatioByJSONString(`{"vip":{"vip":0.35,"svip":0.25}}`))
+	t.Cleanup(func() {
+		require.NoError(t, ratio_setting.UpdateGroupRatioByJSONString(previousGroupRatio))
+		require.NoError(t, ratio_setting.UpdateGroupGroupRatioByJSONString(previousGroupGroupRatio))
+	})
+	user := model.User{
+		Username: "usage-summary-user", Password: "password", Role: common.RoleCommonUser,
+		Status: common.UserStatusEnabled, Group: "vip",
+	}
+	require.NoError(t, db.Create(&user).Error)
+
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/user/%d/usage-summary", user.Id), nil)
+	c.Params = gin.Params{{Key: "id", Value: fmt.Sprintf("%d", user.Id)}}
+	c.Set("id", 9999)
+	c.Set("role", common.RoleRootUser)
+	c.Set("username", "root-operator")
+
+	AdminGetUserUsageSummary(c)
+
+	assert.Equal(t, http.StatusOK, recorder.Code)
+	var response struct {
+		Success bool `json:"success"`
+		Data    struct {
+			GroupRatios map[string]float64 `json:"group_ratios"`
+		} `json:"data"`
+	}
+	require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &response))
+	assert.True(t, response.Success)
+	assert.Equal(t, map[string]float64{
+		"default": 1,
+		"vip":     0.35,
+		"svip":    0.25,
+	}, response.Data.GroupRatios)
 }

@@ -140,12 +140,21 @@ func TestRedeemCreditsQuotaExactlyOnce(t *testing.T) {
 	require.NoError(t, DB.First(&redemption, "name = ?", "redeem-test").Error)
 	assert.Equal(t, common.RedemptionCodeStatusUsed, redemption.Status)
 	assert.Equal(t, userId, redemption.UsedUserId)
+	quotaLogs, total, err := GetUserQuotaIncreaseLogs(userId, 0, 10)
+	require.NoError(t, err)
+	assert.EqualValues(t, 1, total)
+	require.Len(t, quotaLogs, 1)
+	assert.Equal(t, 500, quotaLogs[0].Quota)
+	assert.Equal(t, QuotaIncreaseSourceRedemption, quotaLogs[0].Source)
 
 	// Redeeming the same code again must fail and must not credit quota.
 	_, err = Redeem(key, userId)
 	require.Error(t, err)
 	require.NoError(t, DB.First(&user, "id = ?", userId).Error)
 	assert.Equal(t, 500, user.Quota)
+	_, total, err = GetUserQuotaIncreaseLogs(userId, 0, 10)
+	require.NoError(t, err)
+	assert.EqualValues(t, 1, total)
 }
 
 // Exactly one of several concurrent redeems of the same code may win, and

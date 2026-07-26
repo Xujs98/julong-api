@@ -229,6 +229,7 @@ func runMidjourneyTaskUpdateOnce(ctx context.Context, report func(processed, tot
 						"reason":  "构图失败",
 					},
 				})
+				model.RecordQuotaIncreaseLog(task.UserId, task.Quota, model.QuotaIncreaseSourceRefund, fmt.Sprintf("构图失败，返还额度 %s", logger.LogQuota(task.Quota)))
 			}
 		}
 	}

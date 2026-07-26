@@ -112,6 +112,23 @@ func TestGetEmailSettingsConfigFallsBackToRootRecipients(t *testing.T) {
 	assert.Equal(t, []int{users["root"].Id}, config.ChannelAnomalyEmailRecipientIDs)
 }
 
+func TestGetEmailSettingsConfigReturnsEmptyRecipientArrays(t *testing.T) {
+	db, _ := setupEmailSettingsTest(t)
+	require.NoError(t, db.Model(&model.User{}).Where("role >= ?", common.RoleAdminUser).Update("email", "").Error)
+
+	config, err := GetEmailSettingsConfig()
+	require.NoError(t, err)
+	assert.NotNil(t, config.AccountQuotaEmailRecipientUserIDs)
+	assert.NotNil(t, config.ChannelAnomalyEmailRecipientIDs)
+	assert.Empty(t, config.AccountQuotaEmailRecipientUserIDs)
+	assert.Empty(t, config.ChannelAnomalyEmailRecipientIDs)
+
+	payload, err := common.Marshal(config)
+	require.NoError(t, err)
+	assert.Contains(t, string(payload), `"account_quota_email_recipient_user_ids":[]`)
+	assert.Contains(t, string(payload), `"channel_anomaly_email_recipient_user_ids":[]`)
+}
+
 func TestOperationalEmailRecipientSearchOnlyReturnsEnabledAdministrators(t *testing.T) {
 	_, users := setupEmailSettingsTest(t)
 	options, total, err := model.SearchOperationalEmailRecipientOptions("mail-", 0, 20)

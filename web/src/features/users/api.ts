@@ -29,6 +29,7 @@ import type {
   ManageUserQuotaPayload,
   ApiResponse,
   AgentDetailData,
+  UserQuotaIncreaseLogPage,
   UserUsageSummary,
   UserLoginIP,
   UserRequestContentLogList,
@@ -190,6 +191,17 @@ export async function getUserUsageSummary(
   userId: number
 ): Promise<ApiResponse<UserUsageSummary>> {
   const res = await api.get(`/api/user/${userId}/usage-summary`)
+  return res.data
+}
+
+export async function getUserQuotaIncreaseLogs(
+  userId: number,
+  page: number,
+  pageSize: number
+): Promise<ApiResponse<UserQuotaIncreaseLogPage>> {
+  const res = await api.get(`/api/user/${userId}/quota-increases`, {
+    params: { p: page, page_size: pageSize },
+  })
   return res.data
 }
 

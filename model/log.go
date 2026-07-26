@@ -93,14 +93,27 @@ type UserLoginIPStat struct {
 
 // don't use iota, avoid change log type value
 const (
-	LogTypeUnknown = 0
-	LogTypeTopup   = 1
-	LogTypeConsume = 2
-	LogTypeManage  = 3
-	LogTypeSystem  = 4
-	LogTypeError   = 5
-	LogTypeRefund  = 6
-	LogTypeLogin   = 7
+	LogTypeUnknown       = 0
+	LogTypeTopup         = 1
+	LogTypeConsume       = 2
+	LogTypeManage        = 3
+	LogTypeSystem        = 4
+	LogTypeError         = 5
+	LogTypeRefund        = 6
+	LogTypeLogin         = 7
+	LogTypeQuotaIncrease = 8
+)
+
+const (
+	QuotaIncreaseSourceRedemption            = "redemption"
+	QuotaIncreaseSourceCheckin               = "checkin"
+	QuotaIncreaseSourceAdminAdjustment       = "admin_adjustment"
+	QuotaIncreaseSourceOnlineRecharge        = "online_recharge"
+	QuotaIncreaseSourceRefund                = "refund"
+	QuotaIncreaseSourceRegistrationBonus     = "registration_bonus"
+	QuotaIncreaseSourceInvitationBonus       = "invitation_bonus"
+	QuotaIncreaseSourceAffiliateTransfer     = "affiliate_transfer"
+	QuotaIncreaseSourceAgentRedemptionRefund = "agent_redemption_refund"
 )
 
 func ensureLogRequestId(log *Log) {
@@ -340,6 +353,27 @@ func RecordLog(userId int, logType int, content string) {
 	}
 }
 
+func RecordQuotaIncreaseLog(userId int, quota int, source string, content string) {
+	if userId <= 0 || quota <= 0 {
+		return
+	}
+	username, _ := GetUsernameById(userId, false)
+	log := &Log{
+		UserId:    userId,
+		Username:  username,
+		CreatedAt: common.GetTimestamp(),
+		Type:      LogTypeQuotaIncrease,
+		Content:   content,
+		Quota:     quota,
+		Other: common.MapToJsonStr(map[string]interface{}{
+			"source": source,
+		}),
+	}
+	if err := createLog(log); err != nil {
+		common.SysLog("failed to record quota increase log: " + err.Error())
+	}
+}
+
 func RecordAgentRedemptionRefundLog(userId int, redemption *Redemption, refund int) {
 	if userId <= 0 || redemption == nil || refund <= 0 {
 		return
@@ -369,6 +403,7 @@ func RecordAgentRedemptionRefundLog(userId int, redemption *Redemption, refund i
 	if err := createLog(log); err != nil {
 		common.SysLog("failed to record agent redemption refund log: " + err.Error())
 	}
+	RecordQuotaIncreaseLog(userId, refund, QuotaIncreaseSourceAgentRedemptionRefund, log.Content)
 }
 
 // RecordLogWithAdminInfo 记录操作日志，并将管理员相关信息存入 Other.admin_info，
@@ -446,6 +481,51 @@ func GetUserLoginIPStats(userId int) ([]UserLoginIPStat, error) {
 	return stats, err
 }
 
+type UserQuotaIncreaseLog struct {
+	Id        int    `json:"id"`
+	RequestId string `json:"request_id"`
+	CreatedAt int64  `json:"created_at"`
+	Quota     int    `json:"quota"`
+	Source    string `json:"source"`
+	Content   string `json:"content"`
+}
+
+func GetUserQuotaIncreaseLogs(userId int, startIdx int, num int) ([]UserQuotaIncreaseLog, int64, error) {
+	query := LOG_DB.Model(&Log{}).Where("user_id = ? AND type = ?", userId, LogTypeQuotaIncrease)
+	var total int64
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	order := "id desc"
+	if common.UsingLogDatabase(common.DatabaseTypeClickHouse) {
+		order = clickHouseLogOrder("")
+	}
+	var logs []Log
+	if err := query.Order(order).Offset(startIdx).Limit(num).Find(&logs).Error; err != nil {
+		return nil, 0, err
+	}
+
+	items := make([]UserQuotaIncreaseLog, 0, len(logs))
+	for i := range logs {
+		metadata := struct {
+			Source string `json:"source"`
+		}{}
+		if logs[i].Other != "" {
+			_ = common.UnmarshalJsonStr(logs[i].Other, &metadata)
+		}
+		items = append(items, UserQuotaIncreaseLog{
+			Id:        logs[i].Id,
+			RequestId: logs[i].RequestId,
+			CreatedAt: logs[i].CreatedAt,
+			Quota:     logs[i].Quota,
+			Source:    metadata.Source,
+			Content:   logs[i].Content,
+		})
+	}
+	return items, total, nil
+}
+
 // RecordOperationAuditLog 记录管理/高危操作审计日志（type=LogTypeManage）。
 // logUserId 为日志归属者，管理审计日志应归属实际操作者；目标资源/用户放入
 // action params。username 内部按 logUserId 查询。content 为英文兜底文本（供导出使用）。
@@ -477,7 +557,7 @@ func RecordOperationAuditLog(logUserId int, content string, ip string, action st
 	}
 }
 
-func RecordTopupLog(userId int, content string, callerIp string, paymentMethod string, callbackPaymentMethod string) {
+func RecordTopupLog(userId int, quota int, content string, callerIp string, paymentMethod string, callbackPaymentMethod string) {
 	username, _ := GetUsernameById(userId, false)
 	adminInfo := map[string]interface{}{
 		"server_ip":               common.GetIp(),
@@ -503,6 +583,7 @@ func RecordTopupLog(userId int, content string, callerIp string, paymentMethod s
 	if err != nil {
 		common.SysLog("failed to record topup log: " + err.Error())
 	}
+	RecordQuotaIncreaseLog(userId, quota, QuotaIncreaseSourceOnlineRecharge, content)
 }
 
 func RecordErrorLog(c *gin.Context, userId int, channelId int, modelName string, tokenName string, content string, tokenId int, useTimeSeconds int,
@@ -979,9 +1060,14 @@ func SumUserUsedToken(userId int) (token int64, err error) {
 	return token, err
 }
 
-func SumUserUsedTokenBetween(userId int, startTimestamp int64, endTimestamp int64) (token int64, err error) {
+type UserUsageSummary struct {
+	TotalTokens int64 `gorm:"column:total_tokens"`
+	TotalQuota  int64 `gorm:"column:total_quota"`
+}
+
+func GetUserUsageSummaryBetween(userId int, startTimestamp int64, endTimestamp int64) (summary UserUsageSummary, err error) {
 	err = LOG_DB.Table("logs").
-		Select("COALESCE(sum(prompt_tokens), 0) + COALESCE(sum(completion_tokens), 0)").
+		Select("COALESCE(sum(prompt_tokens), 0) + COALESCE(sum(completion_tokens), 0) AS total_tokens, COALESCE(sum(quota), 0) AS total_quota").
 		Where(
 			"user_id = ? AND type = ? AND created_at >= ? AND created_at < ?",
 			userId,
@@ -989,8 +1075,8 @@ func SumUserUsedTokenBetween(userId int, startTimestamp int64, endTimestamp int6
 			startTimestamp,
 			endTimestamp,
 		).
-		Scan(&token).Error
-	return token, err
+		Scan(&summary).Error
+	return summary, err
 }
 
 func CountOldLog(ctx context.Context, targetTimestamp int64) (int64, error) {

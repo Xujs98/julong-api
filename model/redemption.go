@@ -274,7 +274,9 @@ func Redeem(key string, userId int) (quota int, err error) {
 		common.SysError("redemption failed: " + err.Error())
 		return 0, ErrRedeemFailed
 	}
-	RecordLog(userId, LogTypeTopup, fmt.Sprintf("通过兑换码充值 %s，兑换码ID %d", logger.LogQuota(redemption.Quota), redemption.Id))
+	content := fmt.Sprintf("通过兑换码充值 %s，兑换码ID %d", logger.LogQuota(redemption.Quota), redemption.Id)
+	RecordLog(userId, LogTypeTopup, content)
+	RecordQuotaIncreaseLog(userId, redemption.Quota, QuotaIncreaseSourceRedemption, content)
 	return redemption.Quota, nil
 }
 

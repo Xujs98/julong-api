@@ -432,6 +432,9 @@ func PostConsumeQuota(relayInfo *relaycommon.RelayInfo, quota int, preConsumedQu
 		if err != nil {
 			return err
 		}
+		if quota < 0 {
+			model.RecordQuotaIncreaseLog(relayInfo.UserId, -quota, model.QuotaIncreaseSourceRefund, fmt.Sprintf("消费差额返还 %s", logger.LogQuota(-quota)))
+		}
 	}
 
 	if !relayInfo.IsPlayground {

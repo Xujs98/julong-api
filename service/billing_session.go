@@ -102,12 +102,15 @@ func (s *BillingSession) Refund(c *gin.Context) {
 	tokenConsumed := s.tokenConsumed
 	extraReserved := s.extraReserved
 	subscriptionId := s.relayInfo.SubscriptionId
+	userId := s.relayInfo.UserId
 	funding := s.funding
 
 	gopool.Go(func() {
 		// 1) 退还资金来源
 		if err := funding.Refund(); err != nil {
 			common.SysLog("error refunding billing source: " + err.Error())
+		} else if funding.Source() == BillingSourceWallet && tokenConsumed > 0 {
+			model.RecordQuotaIncreaseLog(userId, tokenConsumed, model.QuotaIncreaseSourceRefund, fmt.Sprintf("请求失败，返还预扣额度 %s", logger.LogQuota(tokenConsumed)))
 		}
 		if extraReserved > 0 && funding.Source() == BillingSourceSubscription && subscriptionId > 0 {
 			if err := model.PostConsumeUserSubscriptionDelta(subscriptionId, -int64(extraReserved)); err != nil {

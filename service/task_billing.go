@@ -193,6 +193,9 @@ func RefundTaskQuota(ctx context.Context, task *model.Task, reason string) bool 
 		Group:     task.Group,
 		Other:     other,
 	})
+	if !taskIsSubscription(task) {
+		model.RecordQuotaIncreaseLog(task.UserId, quota, model.QuotaIncreaseSourceRefund, fmt.Sprintf("任务失败，返还额度 %s", logger.LogQuota(quota)))
+	}
 
 	// 4. 资金退款完成后再清除持久化标记；失败时保留非零 quota，
 	// 由后续对账重试。回写失败必须显式告警，避免漏掉潜在的重复退款风险。
@@ -272,6 +275,9 @@ func RecalculateTaskQuota(ctx context.Context, task *model.Task, actualQuota int
 		Other:     other,
 		NodeName:  task.PrivateData.NodeName,
 	})
+	if quotaDelta < 0 && !taskIsSubscription(task) {
+		model.RecordQuotaIncreaseLog(task.UserId, -quotaDelta, model.QuotaIncreaseSourceRefund, fmt.Sprintf("任务结算返还额度 %s", logger.LogQuota(-quotaDelta)))
+	}
 }
 
 // RecalculateTaskQuotaByTokens 根据实际 token 消耗重新计费（异步差额结算）。

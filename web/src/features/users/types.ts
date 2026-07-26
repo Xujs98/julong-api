@@ -170,6 +170,24 @@ export interface AgentDetailData {
 export interface UserUsageSummary {
   total_tokens: number
   today_tokens: number
+  today_quota: number
+  group_ratios: Record<string, number>
+}
+
+export interface UserQuotaIncreaseLog {
+  id: number
+  request_id: string
+  created_at: number
+  quota: number
+  source: string
+  content: string
+}
+
+export interface UserQuotaIncreaseLogPage {
+  items: UserQuotaIncreaseLog[]
+  total: number
+  page: number
+  page_size: number
 }
 
 export interface UserLoginIP {
