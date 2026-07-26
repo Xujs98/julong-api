@@ -20,6 +20,7 @@ const (
 	EmailTemplateEventLowBalance                 = "balance.low"
 	EmailTemplateEventAccountQuotaAlert          = "account.quota_alert"
 	EmailTemplateEventChannelAnomalyDisabled     = "channel.anomaly_disabled"
+	EmailTemplateEventDashboardReport            = "dashboard.report"
 	EmailTemplateLocaleChinese                   = "zh"
 	EmailTemplateLocaleEnglish                   = "en"
 	maxEmailTemplateSubjectLength                = 255
@@ -66,6 +67,7 @@ var (
 		EmailTemplateEventLowBalance,
 		EmailTemplateEventAccountQuotaAlert,
 		EmailTemplateEventChannelAnomalyDisabled,
+		EmailTemplateEventDashboardReport,
 	}
 	emailTemplateDefinitions = map[string]EmailTemplateDefinition{
 		EmailTemplateEventGeneralNotification: {
@@ -118,6 +120,13 @@ var (
 			Description:  "Sent only when a channel is automatically disabled after an anomaly; manual shutdowns are excluded.",
 			Category:     "Operations",
 			Placeholders: []string{"system_name", "username", "display_name", "email", "channel_id", "channel_name", "channel_type", "channel_base_url", "failure_reason", "disabled_at"},
+		},
+		EmailTemplateEventDashboardReport: {
+			Event:        EmailTemplateEventDashboardReport,
+			Label:        "Data dashboard report",
+			Description:  "Sent to selected administrators with a completed dashboard usage summary.",
+			Category:     "Operations",
+			Placeholders: []string{"system_name", "username", "display_name", "email", "report_type", "report_period", "generated_at", "total_consumption", "total_quota", "total_requests", "total_tokens", "active_users", "active_models", "active_channels", "active_groups", "top_models"},
 		},
 	}
 	emailTemplateDefaults = newEmailTemplateDefaults()
@@ -223,6 +232,31 @@ func newEmailTemplateDefaults() map[string]storedEmailTemplate {
 <p>Channel type: {{channel_type}}<br>Base URL: {{channel_base_url}}<br>Disabled at: {{disabled_at}}</p>
 <p style="padding:12px;border-radius:6px;background:#fef2f2;color:#991b1b;word-break:break-word;">{{failure_reason}}</p>`)
 
+	add(EmailTemplateEventDashboardReport, EmailTemplateLocaleChinese,
+		"[{{system_name}}] {{report_type}}数据报表 {{report_period}}", "数据看板报表", "#2563eb", `
+<p>{{display_name}}，您好：</p>
+<p>以下是 <strong>{{report_period}}</strong> 的数据看板汇总。</p>
+<table role="presentation" style="width:100%;margin:24px 0;border-collapse:separate;border-spacing:8px;table-layout:fixed;">
+  <tr><td style="padding:16px;border-radius:6px;background:#f3f4f6;"><span style="display:block;color:#6b7280;font-size:12px;">总消费</span><strong style="font-size:20px;">{{total_consumption}}</strong></td><td style="padding:16px;border-radius:6px;background:#f3f4f6;"><span style="display:block;color:#6b7280;font-size:12px;">请求数</span><strong style="font-size:20px;">{{total_requests}}</strong></td></tr>
+  <tr><td style="padding:16px;border-radius:6px;background:#f3f4f6;"><span style="display:block;color:#6b7280;font-size:12px;">总 Token</span><strong style="font-size:20px;">{{total_tokens}}</strong></td><td style="padding:16px;border-radius:6px;background:#f3f4f6;"><span style="display:block;color:#6b7280;font-size:12px;">活跃用户</span><strong style="font-size:20px;">{{active_users}}</strong></td></tr>
+</table>
+<p>原始额度：<strong>{{total_quota}}</strong><br>活跃模型：<strong>{{active_models}}</strong>，活跃渠道：<strong>{{active_channels}}</strong>，活跃分组：<strong>{{active_groups}}</strong></p>
+<p style="margin-bottom:8px;font-weight:600;">消费最高的模型</p>
+<pre style="margin:0;padding:14px;border-radius:6px;background:#f8fafc;color:#334155;font-family:inherit;white-space:pre-wrap;word-break:break-word;">{{top_models}}</pre>
+<p style="margin-top:24px;color:#6b7280;font-size:12px;">生成时间：{{generated_at}}</p>`)
+	add(EmailTemplateEventDashboardReport, EmailTemplateLocaleEnglish,
+		"[{{system_name}}] {{report_type}} dashboard report {{report_period}}", "Data dashboard report", "#2563eb", `
+<p>Hello {{display_name}},</p>
+<p>Here is the completed data dashboard summary for <strong>{{report_period}}</strong>.</p>
+<table role="presentation" style="width:100%;margin:24px 0;border-collapse:separate;border-spacing:8px;table-layout:fixed;">
+  <tr><td style="padding:16px;border-radius:6px;background:#f3f4f6;"><span style="display:block;color:#6b7280;font-size:12px;">Consumption</span><strong style="font-size:20px;">{{total_consumption}}</strong></td><td style="padding:16px;border-radius:6px;background:#f3f4f6;"><span style="display:block;color:#6b7280;font-size:12px;">Requests</span><strong style="font-size:20px;">{{total_requests}}</strong></td></tr>
+  <tr><td style="padding:16px;border-radius:6px;background:#f3f4f6;"><span style="display:block;color:#6b7280;font-size:12px;">Total tokens</span><strong style="font-size:20px;">{{total_tokens}}</strong></td><td style="padding:16px;border-radius:6px;background:#f3f4f6;"><span style="display:block;color:#6b7280;font-size:12px;">Active users</span><strong style="font-size:20px;">{{active_users}}</strong></td></tr>
+</table>
+<p>Raw quota: <strong>{{total_quota}}</strong><br>Active models: <strong>{{active_models}}</strong>, active channels: <strong>{{active_channels}}</strong>, active groups: <strong>{{active_groups}}</strong></p>
+<p style="margin-bottom:8px;font-weight:600;">Top models by consumption</p>
+<pre style="margin:0;padding:14px;border-radius:6px;background:#f8fafc;color:#334155;font-family:inherit;white-space:pre-wrap;word-break:break-word;">{{top_models}}</pre>
+<p style="margin-top:24px;color:#6b7280;font-size:12px;">Generated at {{generated_at}}</p>`)
+
 	return defaults
 }
 
@@ -235,13 +269,14 @@ func buildLocalizedEmailTemplateCard(locale, title, accent, body string) string 
 <html lang="%s">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
 <body style="margin:0;padding:24px;background:#f3f4f6;color:#1f2937;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
-  <div style="max-width:620px;margin:0 auto;overflow:hidden;border:1px solid #e5e7eb;border-radius:8px;background:#ffffff;">
-    <div style="height:4px;background:%s;"></div>
-    <div style="padding:28px;line-height:1.7;">
-      <h1 style="margin:0 0 20px;font-size:22px;line-height:1.3;color:#111827;">%s</h1>
+  <div style="max-width:620px;margin:0 auto;overflow:hidden;border-radius:8px;background:#ffffff;box-shadow:0 8px 24px rgba(15,23,42,.08);">
+    <div style="padding:38px 40px;background:%s;">
+      <h1 style="margin:0;font-size:30px;line-height:1.3;color:#ffffff;">%s</h1>
+    </div>
+    <div style="padding:38px 40px;line-height:1.7;">
       %s
     </div>
-    <div style="padding:16px 28px;border-top:1px solid #e5e7eb;color:#9ca3af;font-size:12px;">{{system_name}}</div>
+    <div style="padding:18px 40px;background:#f8fafc;border-top:1px solid #e5e7eb;color:#9ca3af;font-size:12px;">{{system_name}}</div>
   </div>
 </body>
 </html>`, lang, accent, title, strings.TrimSpace(body))
@@ -471,10 +506,23 @@ func emailTemplateSampleValues(locale string) map[string]string {
 		"checked_at":            "2026-08-01 12:00:00",
 		"disabled_at":           "2026-08-01 12:00:00",
 		"failure_reason":        "Upstream returned HTTP 401 repeatedly.",
+		"report_type":           "日报",
+		"report_period":         "2026-07-26 00:00 - 2026-07-27 00:00",
+		"generated_at":          "2026-07-27 08:00:00",
+		"total_consumption":     "$128.50",
+		"total_quota":           "64,250,000",
+		"total_requests":        "12,580",
+		"total_tokens":          "48,320,000",
+		"active_users":          "328",
+		"active_models":         "18",
+		"active_channels":       "12",
+		"active_groups":         "4",
+		"top_models":            "1. gpt-4.1  $52.30\n2. claude-sonnet-4  $41.20\n3. gemini-2.5-pro  $23.80",
 	}
 	if locale == EmailTemplateLocaleEnglish {
 		values["display_name"] = "Demo User"
 		values["balance_type"] = "wallet balance"
+		values["report_type"] = "Daily"
 	}
 	return values
 }

@@ -63,6 +63,24 @@ type GroupQuotaDataAnalytics struct {
 	Totals GroupQuotaDataTotals `json:"totals"`
 }
 
+type DashboardReportModel struct {
+	ModelName string `json:"model_name" gorm:"column:model_name"`
+	Quota     int64  `json:"quota"`
+	Count     int64  `json:"count"`
+	TokenUsed int64  `json:"token_used"`
+}
+
+type DashboardReportData struct {
+	Quota        int64                  `json:"quota"`
+	Count        int64                  `json:"count"`
+	TokenUsed    int64                  `json:"token_used"`
+	UserCount    int64                  `json:"user_count"`
+	ModelCount   int64                  `json:"model_count"`
+	ChannelCount int64                  `json:"channel_count"`
+	GroupCount   int64                  `json:"group_count"`
+	TopModels    []DashboardReportModel `json:"top_models" gorm:"-"`
+}
+
 func UpdateQuotaData() {
 	for {
 		if common.DataExportEnabled {
@@ -249,6 +267,31 @@ func GetQuotaDataGroupByUseGroup(startTime int64, endTime int64, username string
 		Items:  items,
 		Totals: totals,
 	}, nil
+}
+
+func GetDashboardReportData(startTime, endTime int64) (DashboardReportData, error) {
+	var report DashboardReportData
+	baseQuery := DB.Table("quota_data").Where("created_at >= ? AND created_at < ?", startTime, endTime)
+	if err := baseQuery.Select(
+		"COALESCE(SUM(quota), 0) AS quota, COALESCE(SUM(count), 0) AS count, COALESCE(SUM(token_used), 0) AS token_used, " +
+			"COUNT(DISTINCT user_id) AS user_count, COUNT(DISTINCT CASE WHEN model_name <> '' THEN model_name END) AS model_count, " +
+			"COUNT(DISTINCT CASE WHEN channel_id > 0 THEN channel_id END) AS channel_count, " +
+			"COUNT(DISTINCT CASE WHEN use_group <> '' THEN use_group END) AS group_count",
+	).Scan(&report).Error; err != nil {
+		return DashboardReportData{}, err
+	}
+
+	report.TopModels = make([]DashboardReportModel, 0)
+	if err := DB.Table("quota_data").
+		Select("model_name, COALESCE(SUM(quota), 0) AS quota, COALESCE(SUM(count), 0) AS count, COALESCE(SUM(token_used), 0) AS token_used").
+		Where("created_at >= ? AND created_at < ? AND model_name <> ''", startTime, endTime).
+		Group("model_name").
+		Order("quota DESC, model_name ASC").
+		Limit(5).
+		Scan(&report.TopModels).Error; err != nil {
+		return DashboardReportData{}, err
+	}
+	return report, nil
 }
 
 func GetAllQuotaDates(startTime int64, endTime int64, username string) (quotaData []*QuotaData, err error) {

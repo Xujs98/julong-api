@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import {
   CalendarClock,
+  ChartNoAxesCombined,
   CircleGauge,
   RefreshCw,
   Save,
@@ -33,6 +34,7 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 import { Switch } from '@/components/ui/switch'
 
 import { EmailCampaignUserPicker } from './email-campaign-user-picker'
@@ -41,6 +43,7 @@ import {
   resolveEmailSettingsRecipients,
   searchEmailSettingsRecipients,
   sendChannelAnomalyTestEmail,
+  sendDashboardReportTestEmail,
   updateEmailSettingsConfig,
   type EmailSettingsConfig,
 } from './email-templates-api'
@@ -94,6 +97,7 @@ export function EmailAlertSettings() {
   const [loadError, setLoadError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [testingChannelAnomaly, setTestingChannelAnomaly] = useState(false)
+  const [testingDashboardReport, setTestingDashboardReport] = useState(false)
 
   const loadConfig = useCallback(async () => {
     setLoading(true)
@@ -172,6 +176,30 @@ export function EmailAlertSettings() {
       )
     } finally {
       setTestingChannelAnomaly(false)
+    }
+  }
+
+  const testDashboardReport = async () => {
+    if (!config) return
+    setTestingDashboardReport(true)
+    try {
+      const response = await sendDashboardReportTestEmail(
+        config.dashboard_report_email_recipient_user_ids
+      )
+      if (!response.success || !response.data) throw new Error(response.message)
+      toast.success(
+        t('Data dashboard test report sent to {{count}} recipient(s)', {
+          count: response.data.recipient_count,
+        })
+      )
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : t('Failed to send data dashboard test report')
+      )
+    } finally {
+      setTestingDashboardReport(false)
     }
   }
 
@@ -348,6 +376,166 @@ export function EmailAlertSettings() {
                   'Only active administrators and root users with email are available.'
                 )}
               </p>
+            </div>
+          </div>
+        </AlertPanel>
+
+        <AlertPanel
+          icon={ChartNoAxesCombined}
+          title={t('Data dashboard report')}
+          description={t(
+            'Send a completed daily, weekly, or monthly data dashboard report to selected administrators.'
+          )}
+          toggleLabel={t('Enable scheduled data dashboard reports')}
+          checked={config.dashboard_report_email_enabled}
+          onCheckedChange={(checked) =>
+            patchConfig({ dashboard_report_email_enabled: checked })
+          }
+        >
+          <div className='grid gap-4 lg:grid-cols-3'>
+            <div className='space-y-1.5'>
+              <Label htmlFor='dashboard-report-frequency'>
+                {t('Report frequency')}
+              </Label>
+              <NativeSelect
+                id='dashboard-report-frequency'
+                className='w-full'
+                disabled={!config.dashboard_report_email_enabled}
+                value={config.dashboard_report_email_frequency}
+                onChange={(event) =>
+                  patchConfig({
+                    dashboard_report_email_frequency: event.target
+                      .value as EmailSettingsConfig['dashboard_report_email_frequency'],
+                  })
+                }
+              >
+                <NativeSelectOption value='daily'>
+                  {t('Daily')}
+                </NativeSelectOption>
+                <NativeSelectOption value='weekly'>
+                  {t('Weekly')}
+                </NativeSelectOption>
+                <NativeSelectOption value='monthly'>
+                  {t('Monthly')}
+                </NativeSelectOption>
+              </NativeSelect>
+            </div>
+            <div className='space-y-1.5'>
+              <Label htmlFor='dashboard-report-send-time'>
+                {t('Send time')}
+              </Label>
+              <Input
+                id='dashboard-report-send-time'
+                type='time'
+                disabled={!config.dashboard_report_email_enabled}
+                value={config.dashboard_report_email_send_time}
+                onChange={(event) =>
+                  patchConfig({
+                    dashboard_report_email_send_time: event.target.value,
+                  })
+                }
+              />
+            </div>
+            {config.dashboard_report_email_frequency === 'weekly' && (
+              <div className='space-y-1.5'>
+                <Label htmlFor='dashboard-report-weekday'>{t('Weekday')}</Label>
+                <NativeSelect
+                  id='dashboard-report-weekday'
+                  className='w-full'
+                  disabled={!config.dashboard_report_email_enabled}
+                  value={String(config.dashboard_report_email_weekday)}
+                  onChange={(event) =>
+                    patchConfig({
+                      dashboard_report_email_weekday: Number.parseInt(
+                        event.target.value,
+                        10
+                      ),
+                    })
+                  }
+                >
+                  <NativeSelectOption value='1'>
+                    {t('Monday')}
+                  </NativeSelectOption>
+                  <NativeSelectOption value='2'>
+                    {t('Tuesday')}
+                  </NativeSelectOption>
+                  <NativeSelectOption value='3'>
+                    {t('Wednesday')}
+                  </NativeSelectOption>
+                  <NativeSelectOption value='4'>
+                    {t('Thursday')}
+                  </NativeSelectOption>
+                  <NativeSelectOption value='5'>
+                    {t('Friday')}
+                  </NativeSelectOption>
+                  <NativeSelectOption value='6'>
+                    {t('Saturday')}
+                  </NativeSelectOption>
+                  <NativeSelectOption value='7'>
+                    {t('Sunday')}
+                  </NativeSelectOption>
+                </NativeSelect>
+              </div>
+            )}
+            {config.dashboard_report_email_frequency === 'monthly' && (
+              <div className='space-y-1.5'>
+                <Label htmlFor='dashboard-report-month-day'>
+                  {t('Day of month')}
+                </Label>
+                <Input
+                  id='dashboard-report-month-day'
+                  type='number'
+                  min={1}
+                  max={31}
+                  disabled={!config.dashboard_report_email_enabled}
+                  value={config.dashboard_report_email_month_day}
+                  onChange={(event) =>
+                    patchConfig({
+                      dashboard_report_email_month_day: Math.min(
+                        31,
+                        Math.max(
+                          1,
+                          Number.parseInt(event.target.value, 10) || 1
+                        )
+                      ),
+                    })
+                  }
+                />
+              </div>
+            )}
+          </div>
+          <div className='space-y-1.5'>
+            <Label htmlFor='dashboard-report-recipients'>
+              {t('Recipients')}
+            </Label>
+            <EmailCampaignUserPicker
+              id='dashboard-report-recipients'
+              labelKey='Report recipients'
+              queryKeyPrefix='dashboard-report-email'
+              searchUsers={searchEmailSettingsRecipients}
+              resolveUsers={resolveEmailSettingsRecipients}
+              selectedUserIds={config.dashboard_report_email_recipient_user_ids}
+              onChange={(dashboard_report_email_recipient_user_ids) =>
+                patchConfig({ dashboard_report_email_recipient_user_ids })
+              }
+            />
+            <p className='text-muted-foreground text-xs'>
+              {t(
+                'Scheduled reports use completed periods. The test email uses current real dashboard data.'
+              )}
+            </p>
+            <div className='flex justify-end'>
+              <Button
+                type='button'
+                variant='outline'
+                disabled={testingDashboardReport}
+                onClick={testDashboardReport}
+              >
+                <Send className='size-4' />
+                {testingDashboardReport
+                  ? t('Sending...')
+                  : t('Send real data test')}
+              </Button>
             </div>
           </div>
         </AlertPanel>

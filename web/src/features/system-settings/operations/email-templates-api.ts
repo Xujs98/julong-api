@@ -33,6 +33,8 @@ export type EmailTemplate = {
 
 export type EmailTemplateLocale = 'zh' | 'en'
 
+export type DashboardReportEmailFrequency = 'daily' | 'weekly' | 'monthly'
+
 export type EmailSettingsConfig = {
   subscription_expiry_reminder_enabled: boolean
   low_balance_email_enabled: boolean
@@ -43,6 +45,12 @@ export type EmailSettingsConfig = {
   account_quota_email_recipient_user_ids: number[]
   channel_anomaly_email_enabled: boolean
   channel_anomaly_email_recipient_user_ids: number[]
+  dashboard_report_email_enabled: boolean
+  dashboard_report_email_frequency: DashboardReportEmailFrequency
+  dashboard_report_email_send_time: string
+  dashboard_report_email_weekday: number
+  dashboard_report_email_month_day: number
+  dashboard_report_email_recipient_user_ids: number[]
 }
 
 export type EmailRecipientOption = {
@@ -129,6 +137,16 @@ export async function getEmailSettingsConfig() {
             config.account_quota_email_recipient_user_ids ?? [],
           channel_anomaly_email_recipient_user_ids:
             config.channel_anomaly_email_recipient_user_ids ?? [],
+          dashboard_report_email_frequency:
+            config.dashboard_report_email_frequency ?? 'daily',
+          dashboard_report_email_send_time:
+            config.dashboard_report_email_send_time ?? '08:00',
+          dashboard_report_email_weekday:
+            config.dashboard_report_email_weekday ?? 1,
+          dashboard_report_email_month_day:
+            config.dashboard_report_email_month_day ?? 1,
+          dashboard_report_email_recipient_user_ids:
+            config.dashboard_report_email_recipient_user_ids ?? [],
         }
       : undefined,
   }
@@ -167,5 +185,14 @@ export async function sendChannelAnomalyTestEmail(recipientUserIds: number[]) {
     '/api/email-settings/channel-anomaly/test',
     { recipient_user_ids: recipientUserIds }
   )
+  return response.data
+}
+
+export async function sendDashboardReportTestEmail(recipientUserIds: number[]) {
+  const response = await api.post<
+    ApiResponse<{ recipient_count: number; period: string }>
+  >('/api/email-settings/dashboard-report/test', {
+    recipient_user_ids: recipientUserIds,
+  })
   return response.data
 }

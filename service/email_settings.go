@@ -30,6 +30,12 @@ type EmailSettingsConfig struct {
 	AccountQuotaEmailRecipientUserIDs []int   `json:"account_quota_email_recipient_user_ids"`
 	ChannelAnomalyEmailEnabled        bool    `json:"channel_anomaly_email_enabled"`
 	ChannelAnomalyEmailRecipientIDs   []int   `json:"channel_anomaly_email_recipient_user_ids"`
+	DashboardReportEmailEnabled       bool    `json:"dashboard_report_email_enabled"`
+	DashboardReportEmailFrequency     string  `json:"dashboard_report_email_frequency"`
+	DashboardReportEmailSendTime      string  `json:"dashboard_report_email_send_time"`
+	DashboardReportEmailWeekday       int     `json:"dashboard_report_email_weekday"`
+	DashboardReportEmailMonthDay      int     `json:"dashboard_report_email_month_day"`
+	DashboardReportEmailRecipientIDs  []int   `json:"dashboard_report_email_recipient_user_ids"`
 }
 
 func GetEmailSettingsConfig() (EmailSettingsConfig, error) {
@@ -41,6 +47,17 @@ func GetEmailSettingsConfig() (EmailSettingsConfig, error) {
 		AccountQuotaEmailEnabled:          emailOptionBool(common.AccountQuotaEmailEnabledOptionKey, false),
 		AccountQuotaEmailThreshold:        emailOptionFloat(common.AccountQuotaEmailThresholdOptionKey, 5),
 		ChannelAnomalyEmailEnabled:        emailOptionBool(common.ChannelAnomalyEmailEnabledOptionKey, false),
+		DashboardReportEmailEnabled:       emailOptionBool(common.DashboardReportEmailEnabledOptionKey, false),
+		DashboardReportEmailFrequency:     emailOptionString(common.DashboardReportEmailFrequencyOptionKey),
+		DashboardReportEmailSendTime:      emailOptionString(common.DashboardReportEmailSendTimeOptionKey),
+		DashboardReportEmailWeekday:       emailOptionInt(common.DashboardReportEmailWeekdayOptionKey, 1),
+		DashboardReportEmailMonthDay:      emailOptionInt(common.DashboardReportEmailMonthDayOptionKey, 1),
+	}
+	if config.DashboardReportEmailFrequency == "" {
+		config.DashboardReportEmailFrequency = DashboardReportFrequencyDaily
+	}
+	if config.DashboardReportEmailSendTime == "" {
+		config.DashboardReportEmailSendTime = "08:00"
 	}
 	if err := decodeEmailRecipientIDs(common.AccountQuotaEmailRecipientUserIDsOptionKey, &config.AccountQuotaEmailRecipientUserIDs); err != nil {
 		return EmailSettingsConfig{}, err
@@ -48,7 +65,10 @@ func GetEmailSettingsConfig() (EmailSettingsConfig, error) {
 	if err := decodeEmailRecipientIDs(common.ChannelAnomalyEmailRecipientUserIDsOptionKey, &config.ChannelAnomalyEmailRecipientIDs); err != nil {
 		return EmailSettingsConfig{}, err
 	}
-	if len(config.AccountQuotaEmailRecipientUserIDs) == 0 || len(config.ChannelAnomalyEmailRecipientIDs) == 0 {
+	if err := decodeEmailRecipientIDs(common.DashboardReportEmailRecipientUserIDsOptionKey, &config.DashboardReportEmailRecipientIDs); err != nil {
+		return EmailSettingsConfig{}, err
+	}
+	if len(config.AccountQuotaEmailRecipientUserIDs) == 0 || len(config.ChannelAnomalyEmailRecipientIDs) == 0 || len(config.DashboardReportEmailRecipientIDs) == 0 {
 		rootRecipients, err := model.GetOperationalEmailRecipientUsers(nil)
 		if err != nil {
 			return EmailSettingsConfig{}, err
@@ -63,14 +83,32 @@ func GetEmailSettingsConfig() (EmailSettingsConfig, error) {
 		if len(config.ChannelAnomalyEmailRecipientIDs) == 0 {
 			config.ChannelAnomalyEmailRecipientIDs = append([]int{}, rootIDs...)
 		}
+		if len(config.DashboardReportEmailRecipientIDs) == 0 {
+			config.DashboardReportEmailRecipientIDs = append([]int{}, rootIDs...)
+		}
 	}
 	return config, nil
 }
 
 func UpdateEmailSettingsConfig(config EmailSettingsConfig) (EmailSettingsConfig, error) {
 	config.LowBalanceEmailRechargeURL = strings.TrimSpace(config.LowBalanceEmailRechargeURL)
+	config.DashboardReportEmailFrequency = strings.TrimSpace(config.DashboardReportEmailFrequency)
+	config.DashboardReportEmailSendTime = strings.TrimSpace(config.DashboardReportEmailSendTime)
+	if config.DashboardReportEmailFrequency == "" {
+		config.DashboardReportEmailFrequency = DashboardReportFrequencyDaily
+	}
+	if config.DashboardReportEmailSendTime == "" {
+		config.DashboardReportEmailSendTime = "08:00"
+	}
+	if config.DashboardReportEmailWeekday == 0 {
+		config.DashboardReportEmailWeekday = 1
+	}
+	if config.DashboardReportEmailMonthDay == 0 {
+		config.DashboardReportEmailMonthDay = 1
+	}
 	config.AccountQuotaEmailRecipientUserIDs = normalizeEmailRecipientIDs(config.AccountQuotaEmailRecipientUserIDs)
 	config.ChannelAnomalyEmailRecipientIDs = normalizeEmailRecipientIDs(config.ChannelAnomalyEmailRecipientIDs)
+	config.DashboardReportEmailRecipientIDs = normalizeEmailRecipientIDs(config.DashboardReportEmailRecipientIDs)
 	if config.LowBalanceEmailThreshold < 0 {
 		return EmailSettingsConfig{}, errors.New("low balance threshold cannot be negative")
 	}
@@ -83,13 +121,19 @@ func UpdateEmailSettingsConfig(config EmailSettingsConfig) (EmailSettingsConfig,
 			return EmailSettingsConfig{}, errors.New("recharge URL must be a valid HTTP or HTTPS URL")
 		}
 	}
-	if len(config.AccountQuotaEmailRecipientUserIDs) > maxOperationalEmailRecipients || len(config.ChannelAnomalyEmailRecipientIDs) > maxOperationalEmailRecipients {
+	if err := validateDashboardReportEmailSchedule(config); err != nil {
+		return EmailSettingsConfig{}, err
+	}
+	if len(config.AccountQuotaEmailRecipientUserIDs) > maxOperationalEmailRecipients || len(config.ChannelAnomalyEmailRecipientIDs) > maxOperationalEmailRecipients || len(config.DashboardReportEmailRecipientIDs) > maxOperationalEmailRecipients {
 		return EmailSettingsConfig{}, fmt.Errorf("recipient count cannot exceed %d", maxOperationalEmailRecipients)
 	}
 	if err := validateOperationalEmailRecipientIDs(config.AccountQuotaEmailRecipientUserIDs); err != nil {
 		return EmailSettingsConfig{}, err
 	}
 	if err := validateOperationalEmailRecipientIDs(config.ChannelAnomalyEmailRecipientIDs); err != nil {
+		return EmailSettingsConfig{}, err
+	}
+	if err := validateOperationalEmailRecipientIDs(config.DashboardReportEmailRecipientIDs); err != nil {
 		return EmailSettingsConfig{}, err
 	}
 
@@ -101,16 +145,26 @@ func UpdateEmailSettingsConfig(config EmailSettingsConfig) (EmailSettingsConfig,
 	if err != nil {
 		return EmailSettingsConfig{}, err
 	}
+	dashboardReportRecipientJSON, err := common.Marshal(config.DashboardReportEmailRecipientIDs)
+	if err != nil {
+		return EmailSettingsConfig{}, err
+	}
 	values := map[string]string{
-		common.SubscriptionExpiryReminderEnabledOptionKey:   strconv.FormatBool(config.SubscriptionExpiryReminderEnabled),
-		common.LowBalanceEmailEnabledOptionKey:              strconv.FormatBool(config.LowBalanceEmailEnabled),
-		common.LowBalanceEmailThresholdOptionKey:            strconv.Itoa(config.LowBalanceEmailThreshold),
-		common.LowBalanceEmailRechargeURLOptionKey:          config.LowBalanceEmailRechargeURL,
-		common.AccountQuotaEmailEnabledOptionKey:            strconv.FormatBool(config.AccountQuotaEmailEnabled),
-		common.AccountQuotaEmailThresholdOptionKey:          strconv.FormatFloat(config.AccountQuotaEmailThreshold, 'f', -1, 64),
-		common.AccountQuotaEmailRecipientUserIDsOptionKey:   string(accountRecipientJSON),
-		common.ChannelAnomalyEmailEnabledOptionKey:          strconv.FormatBool(config.ChannelAnomalyEmailEnabled),
-		common.ChannelAnomalyEmailRecipientUserIDsOptionKey: string(channelRecipientJSON),
+		common.SubscriptionExpiryReminderEnabledOptionKey:    strconv.FormatBool(config.SubscriptionExpiryReminderEnabled),
+		common.LowBalanceEmailEnabledOptionKey:               strconv.FormatBool(config.LowBalanceEmailEnabled),
+		common.LowBalanceEmailThresholdOptionKey:             strconv.Itoa(config.LowBalanceEmailThreshold),
+		common.LowBalanceEmailRechargeURLOptionKey:           config.LowBalanceEmailRechargeURL,
+		common.AccountQuotaEmailEnabledOptionKey:             strconv.FormatBool(config.AccountQuotaEmailEnabled),
+		common.AccountQuotaEmailThresholdOptionKey:           strconv.FormatFloat(config.AccountQuotaEmailThreshold, 'f', -1, 64),
+		common.AccountQuotaEmailRecipientUserIDsOptionKey:    string(accountRecipientJSON),
+		common.ChannelAnomalyEmailEnabledOptionKey:           strconv.FormatBool(config.ChannelAnomalyEmailEnabled),
+		common.ChannelAnomalyEmailRecipientUserIDsOptionKey:  string(channelRecipientJSON),
+		common.DashboardReportEmailEnabledOptionKey:          strconv.FormatBool(config.DashboardReportEmailEnabled),
+		common.DashboardReportEmailFrequencyOptionKey:        config.DashboardReportEmailFrequency,
+		common.DashboardReportEmailSendTimeOptionKey:         config.DashboardReportEmailSendTime,
+		common.DashboardReportEmailWeekdayOptionKey:          strconv.Itoa(config.DashboardReportEmailWeekday),
+		common.DashboardReportEmailMonthDayOptionKey:         strconv.Itoa(config.DashboardReportEmailMonthDay),
+		common.DashboardReportEmailRecipientUserIDsOptionKey: string(dashboardReportRecipientJSON),
 	}
 	if err := model.UpdateOptionsBulk(values); err != nil {
 		return EmailSettingsConfig{}, err

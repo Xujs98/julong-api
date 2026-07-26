@@ -18,6 +18,10 @@ type channelAnomalyTestEmailRequest struct {
 	RecipientUserIDs []int `json:"recipient_user_ids"`
 }
 
+type dashboardReportTestEmailRequest struct {
+	RecipientUserIDs []int `json:"recipient_user_ids"`
+}
+
 func GetEmailSettingsConfig(c *gin.Context) {
 	config, err := service.GetEmailSettingsConfig()
 	if err != nil {
@@ -87,4 +91,18 @@ func SendChannelAnomalyTestEmail(c *gin.Context) {
 		return
 	}
 	common.ApiSuccess(c, gin.H{"recipient_count": recipientCount})
+}
+
+func SendDashboardReportTestEmail(c *gin.Context) {
+	var req dashboardReportTestEmailRequest
+	if err := common.DecodeJson(c.Request.Body, &req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "无效的参数"})
+		return
+	}
+	result, err := service.SendDashboardReportTestEmails(req.RecipientUserIDs)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, result)
 }

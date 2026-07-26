@@ -65,6 +65,18 @@ const PLACEHOLDER_LABELS: Record<string, string> = {
   checked_at: 'Balance check time',
   disabled_at: 'Automatic shutdown time',
   failure_reason: 'Failure reason',
+  report_type: 'Report type',
+  report_period: 'Report period',
+  generated_at: 'Generated at',
+  total_consumption: 'Total consumption',
+  total_quota: 'Total quota',
+  total_requests: 'Total requests',
+  total_tokens: 'Total tokens',
+  active_users: 'Active users',
+  active_models: 'Active models',
+  active_channels: 'Active channels',
+  active_groups: 'Active groups',
+  top_models: 'Top models',
 }
 
 const SAMPLE_VALUES: Record<EmailTemplateLocale, Record<string, string>> = {
@@ -90,6 +102,19 @@ const SAMPLE_VALUES: Record<EmailTemplateLocale, Record<string, string>> = {
     checked_at: '2026-08-01 12:00:00',
     disabled_at: '2026-08-01 12:00:00',
     failure_reason: '上游连续返回 HTTP 401，系统已执行自动封禁。',
+    report_type: '日报',
+    report_period: '2026-07-26 00:00 - 2026-07-27 00:00',
+    generated_at: '2026-07-27 08:00:00',
+    total_consumption: '$128.50',
+    total_quota: '64,250,000',
+    total_requests: '12,580',
+    total_tokens: '48,320,000',
+    active_users: '328',
+    active_models: '18',
+    active_channels: '12',
+    active_groups: '4',
+    top_models:
+      '1. gpt-4.1  $52.30\n2. claude-sonnet-4  $41.20\n3. gemini-2.5-pro  $23.80',
   },
   en: {
     system_name: 'Julong API',
@@ -113,6 +138,19 @@ const SAMPLE_VALUES: Record<EmailTemplateLocale, Record<string, string>> = {
     checked_at: '2026-08-01 12:00:00',
     disabled_at: '2026-08-01 12:00:00',
     failure_reason: 'The upstream returned HTTP 401 repeatedly.',
+    report_type: 'Daily',
+    report_period: '2026-07-26 00:00 - 2026-07-27 00:00',
+    generated_at: '2026-07-27 08:00:00',
+    total_consumption: '$128.50',
+    total_quota: '64,250,000',
+    total_requests: '12,580',
+    total_tokens: '48,320,000',
+    active_users: '328',
+    active_models: '18',
+    active_channels: '12',
+    active_groups: '4',
+    top_models:
+      '1. gpt-4.1  $52.30\n2. claude-sonnet-4  $41.20\n3. gemini-2.5-pro  $23.80',
   },
 }
 

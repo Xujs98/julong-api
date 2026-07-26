@@ -112,6 +112,28 @@ func TestEmailTemplateCatalogContainsEveryEventAndLocale(t *testing.T) {
 	}
 }
 
+func TestDefaultEmailTemplatesUseColoredHeaderCardStyle(t *testing.T) {
+	setupEmailTemplateTest(t)
+	for _, event := range emailTemplateOrder {
+		for _, locale := range emailTemplateLocales {
+			template, err := GetEmailTemplateForLocale(event, locale)
+			require.NoError(t, err)
+			assert.Contains(t, template.Content, "padding:38px 40px;background:")
+			assert.Contains(t, template.Content, "color:#ffffff;")
+		}
+	}
+}
+
+func TestDashboardReportTemplateExposesReportMetrics(t *testing.T) {
+	setupEmailTemplateTest(t)
+	template, err := GetEmailTemplateForLocale(EmailTemplateEventDashboardReport, EmailTemplateLocaleChinese)
+	require.NoError(t, err)
+	assert.Contains(t, template.Placeholders, "report_period")
+	assert.Contains(t, template.Placeholders, "total_consumption")
+	assert.Contains(t, template.Placeholders, "top_models")
+	assert.Contains(t, template.Content, "{{active_users}}")
+}
+
 func TestShouldSendAccountQuotaEmailOnlyOnFirstLowBalanceOrDownwardCrossing(t *testing.T) {
 	tests := []struct {
 		name              string

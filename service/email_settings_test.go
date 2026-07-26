@@ -2,6 +2,7 @@ package service
 
 import (
 	"testing"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
@@ -16,7 +17,7 @@ func setupEmailSettingsTest(t *testing.T) (*gorm.DB, map[string]model.User) {
 	t.Helper()
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&model.Option{}, &model.User{}))
+	require.NoError(t, db.AutoMigrate(&model.Option{}, &model.User{}, &model.QuotaData{}))
 
 	users := map[string]model.User{
 		"common": {
@@ -71,18 +72,28 @@ func TestUpdateEmailSettingsConfigPersistsCompleteConfiguration(t *testing.T) {
 		AccountQuotaEmailRecipientUserIDs: []int{users["root"].Id, users["admin"].Id, users["admin"].Id},
 		ChannelAnomalyEmailEnabled:        true,
 		ChannelAnomalyEmailRecipientIDs:   []int{users["root"].Id},
+		DashboardReportEmailEnabled:       true,
+		DashboardReportEmailFrequency:     DashboardReportFrequencyWeekly,
+		DashboardReportEmailSendTime:      "09:30",
+		DashboardReportEmailWeekday:       5,
+		DashboardReportEmailMonthDay:      15,
+		DashboardReportEmailRecipientIDs:  []int{users["admin"].Id, users["root"].Id},
 	}
 
 	updated, err := UpdateEmailSettingsConfig(input)
 	require.NoError(t, err)
-	assert.Equal(t, []int{users["admin"].Id, users["root"].Id}, updated.AccountQuotaEmailRecipientUserIDs)
+	expectedRecipients := normalizeEmailRecipientIDs([]int{users["admin"].Id, users["root"].Id})
+	assert.Equal(t, expectedRecipients, updated.AccountQuotaEmailRecipientUserIDs)
 	assert.Equal(t, []int{users["root"].Id}, updated.ChannelAnomalyEmailRecipientIDs)
+	assert.Equal(t, expectedRecipients, updated.DashboardReportEmailRecipientIDs)
+	assert.Equal(t, DashboardReportFrequencyWeekly, updated.DashboardReportEmailFrequency)
+	assert.Equal(t, "09:30", updated.DashboardReportEmailSendTime)
 	assert.Equal(t, input.LowBalanceEmailThreshold, updated.LowBalanceEmailThreshold)
 	assert.Equal(t, input.AccountQuotaEmailThreshold, updated.AccountQuotaEmailThreshold)
 
 	var optionCount int64
 	require.NoError(t, db.Model(&model.Option{}).Count(&optionCount).Error)
-	assert.EqualValues(t, 9, optionCount)
+	assert.EqualValues(t, 15, optionCount)
 	assert.Equal(t, "true", common.OptionMap[common.LowBalanceEmailEnabledOptionKey])
 	expectedChannelRecipients, err := common.Marshal([]int{users["root"].Id})
 	require.NoError(t, err)
@@ -110,6 +121,7 @@ func TestGetEmailSettingsConfigFallsBackToRootRecipients(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []int{users["root"].Id}, config.AccountQuotaEmailRecipientUserIDs)
 	assert.Equal(t, []int{users["root"].Id}, config.ChannelAnomalyEmailRecipientIDs)
+	assert.Equal(t, []int{users["root"].Id}, config.DashboardReportEmailRecipientIDs)
 }
 
 func TestGetEmailSettingsConfigReturnsEmptyRecipientArrays(t *testing.T) {
@@ -120,13 +132,16 @@ func TestGetEmailSettingsConfigReturnsEmptyRecipientArrays(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotNil(t, config.AccountQuotaEmailRecipientUserIDs)
 	assert.NotNil(t, config.ChannelAnomalyEmailRecipientIDs)
+	assert.NotNil(t, config.DashboardReportEmailRecipientIDs)
 	assert.Empty(t, config.AccountQuotaEmailRecipientUserIDs)
 	assert.Empty(t, config.ChannelAnomalyEmailRecipientIDs)
+	assert.Empty(t, config.DashboardReportEmailRecipientIDs)
 
 	payload, err := common.Marshal(config)
 	require.NoError(t, err)
 	assert.Contains(t, string(payload), `"account_quota_email_recipient_user_ids":[]`)
 	assert.Contains(t, string(payload), `"channel_anomaly_email_recipient_user_ids":[]`)
+	assert.Contains(t, string(payload), `"dashboard_report_email_recipient_user_ids":[]`)
 }
 
 func TestOperationalEmailRecipientSearchOnlyReturnsEnabledAdministrators(t *testing.T) {
@@ -175,4 +190,65 @@ func TestSendChannelAnomalyTestEmailsFallsBackToRootAndRejectsCommonUser(t *test
 	})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "active administrators")
+}
+
+func TestSendDashboardReportTestEmailsUsesCurrentDashboardData(t *testing.T) {
+	db, users := setupEmailSettingsTest(t)
+	now := time.Date(2026, time.July, 27, 10, 30, 0, 0, time.Local)
+	require.NoError(t, db.Create(&model.QuotaData{
+		UserID: users["admin"].Id, Username: users["admin"].Username, ModelName: "codex-v1",
+		CreatedAt: now.Add(-time.Hour).Unix(), UseGroup: "default", ChannelID: 9,
+		TokenUsed: 250000, Count: 12, Quota: 500000,
+	}).Error)
+	require.NoError(t, db.Create(&model.QuotaData{
+		UserID: users["root"].Id, Username: users["root"].Username, ModelName: "gpt-4.1",
+		CreatedAt: now.Add(-2 * time.Hour).Unix(), UseGroup: "vip", ChannelID: 10,
+		TokenUsed: 750000, Count: 8, Quota: 1000000,
+	}).Error)
+
+	var subject, content string
+	result, err := sendDashboardReportTestEmailsAt(
+		now,
+		[]int{users["root"].Id},
+		func(sentSubject, _ string, sentContent string) error {
+			subject, content = sentSubject, sentContent
+			return nil
+		},
+	)
+	require.NoError(t, err)
+	assert.Equal(t, 1, result.RecipientCount)
+	assert.Contains(t, subject, "实时数据报表")
+	assert.Contains(t, content, "$3.00")
+	assert.Contains(t, content, "1,000,000")
+	assert.Contains(t, content, "codex-v1")
+	assert.Contains(t, content, "gpt-4.1")
+}
+
+func TestDashboardReportScheduleUsesCompletedCalendarPeriods(t *testing.T) {
+	config := EmailSettingsConfig{
+		DashboardReportEmailFrequency: DashboardReportFrequencyDaily,
+		DashboardReportEmailSendTime:  "08:00",
+		DashboardReportEmailWeekday:   1,
+		DashboardReportEmailMonthDay:  1,
+	}
+	now := time.Date(2026, time.July, 27, 8, 30, 0, 0, time.Local)
+
+	daily, due := dashboardReportPeriodForSchedule(config, now)
+	require.True(t, due)
+	assert.Equal(t, "2026-07-26", daily.Start.Format("2006-01-02"))
+	assert.Equal(t, "2026-07-27", daily.End.Format("2006-01-02"))
+
+	config.DashboardReportEmailFrequency = DashboardReportFrequencyWeekly
+	weekly, due := dashboardReportPeriodForSchedule(config, now)
+	require.True(t, due)
+	assert.Equal(t, "2026-07-20", weekly.Start.Format("2006-01-02"))
+	assert.Equal(t, "2026-07-27", weekly.End.Format("2006-01-02"))
+
+	config.DashboardReportEmailFrequency = DashboardReportFrequencyMonthly
+	config.DashboardReportEmailMonthDay = 31
+	monthEnd := time.Date(2026, time.February, 28, 8, 30, 0, 0, time.Local)
+	monthly, due := dashboardReportPeriodForSchedule(config, monthEnd)
+	require.True(t, due)
+	assert.Equal(t, "2026-01-01", monthly.Start.Format("2006-01-02"))
+	assert.Equal(t, "2026-02-01", monthly.End.Format("2006-01-02"))
 }
