@@ -79,6 +79,7 @@ import {
   isUserDeleted,
 } from '../constants'
 import type { User, UserLoginIP } from '../types'
+import { userDetailDialogLayoutClasses } from './user-detail-layout'
 import { UserGroupRatiosCard } from './user-group-ratios-card'
 import { UserRequestContentPanel } from './user-request-content-panel'
 import { useUsers } from './users-provider'
@@ -580,8 +581,8 @@ export function UserDetailDialog() {
 
   return (
     <Dialog open={isOpen} onOpenChange={(value) => !value && setOpen(null)}>
-      <DialogContent className='max-h-[calc(100dvh-2rem)] overflow-hidden p-0 sm:max-w-[900px]'>
-        <DialogHeader className='gap-0 border-b px-4 pt-4 pr-12 pb-0 sm:px-6 sm:pt-5 sm:pr-14'>
+      <DialogContent className={userDetailDialogLayoutClasses.content}>
+        <DialogHeader className={userDetailDialogLayoutClasses.header}>
           <DialogTitle>{t('User detail')}</DialogTitle>
           <DialogDescription className='sr-only'>
             {user?.username || '-'}
@@ -669,10 +670,13 @@ export function UserDetailDialog() {
           </div>
         </DialogHeader>
 
-        <Tabs defaultValue='info' className='min-h-0 gap-0'>
+        <Tabs
+          defaultValue='info'
+          className={userDetailDialogLayoutClasses.tabs}
+        >
           <TabsList
             variant='line'
-            className='mx-4 mt-2 max-w-[calc(100%-2rem)] overflow-x-auto sm:mx-6 sm:max-w-[calc(100%-3rem)]'
+            className={userDetailDialogLayoutClasses.tabsList}
           >
             <TabsTrigger value='info'>{t('Basic Information')}</TabsTrigger>
             <TabsTrigger value='logs'>{t('Usage Logs')}</TabsTrigger>
@@ -685,7 +689,7 @@ export function UserDetailDialog() {
             </TabsTrigger>
           </TabsList>
 
-          <ScrollArea className='max-h-[calc(100dvh-19rem)]'>
+          <ScrollArea className={userDetailDialogLayoutClasses.scrollArea}>
             <TabsContent value='info' className='p-4 sm:p-6'>
               <div className='grid overflow-hidden rounded-lg border sm:grid-cols-3'>
                 <InfoItem label={t('ID')} value={user?.id ?? '-'} />
