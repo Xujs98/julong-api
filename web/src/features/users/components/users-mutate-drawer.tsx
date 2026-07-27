@@ -81,16 +81,19 @@ import {
   getUser,
   getGroups,
   getPermissionCatalog,
+  getUserUsageSummary,
 } from '../api'
 import { BINDING_FIELDS, ERROR_MESSAGES, SUCCESS_MESSAGES } from '../constants'
 import {
   userFormSchema,
   type UserFormValues,
   USER_FORM_DEFAULT_VALUES,
+  buildUserGroupRatioPreviews,
   transformFormDataToPayload,
   transformUserToFormDefaults,
 } from '../lib'
 import type { User } from '../types'
+import { UserGroupRatioAdjustmentFields } from './user-group-ratio-adjustment-fields'
 import { UserQuotaDialog } from './user-quota-dialog'
 import { useUsers } from './users-provider'
 
@@ -132,6 +135,16 @@ export function UsersMutateDrawer({
     resolver: zodResolver(userFormSchema),
     defaultValues: USER_FORM_DEFAULT_VALUES,
   })
+  const selectedGroup = form.watch('group')
+  const usageSummaryQuery = useQuery({
+    queryKey: ['admin-user-usage-summary', currentRow?.id, selectedGroup],
+    enabled: open && isUpdate && Boolean(currentRow?.id),
+    queryFn: async () => {
+      if (!currentRow?.id) return null
+      const result = await getUserUsageSummary(currentRow.id, selectedGroup)
+      return result.success ? (result.data ?? null) : null
+    },
+  })
 
   // Load existing data when updating
   useEffect(() => {
@@ -170,6 +183,24 @@ export function UsersMutateDrawer({
         })
         return
       }
+    }
+
+    form.clearErrors('group_ratio_adjustment_value')
+    const ratioPreviews = buildUserGroupRatioPreviews(
+      usageSummaryQuery.data?.base_group_ratios ?? {},
+      data.group_ratio_adjustment_enabled,
+      data.group_ratio_adjustment_mode,
+      data.group_ratio_adjustment_value
+    )
+    const invalidPreview = ratioPreviews.find((preview) => preview.invalid)
+    if (invalidPreview) {
+      form.setError('group_ratio_adjustment_value', {
+        type: 'manual',
+        message: t('Adjustment makes {{group}} ratio lower than 0', {
+          group: invalidPreview.group,
+        }),
+      })
+      return
     }
 
     setIsSubmitting(true)
@@ -469,6 +500,11 @@ export function UsersMutateDrawer({
                         <FormMessage />
                       </FormItem>
                     )}
+                  />
+
+                  <UserGroupRatioAdjustmentFields
+                    baseRatios={usageSummaryQuery.data?.base_group_ratios ?? {}}
+                    loading={usageSummaryQuery.isLoading}
                   />
 
                   <FormField

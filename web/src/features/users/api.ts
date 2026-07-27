@@ -257,9 +257,12 @@ export async function getAgentDetail(
 }
 
 export async function getUserUsageSummary(
-  userId: number
+  userId: number,
+  userGroup?: string
 ): Promise<ApiResponse<UserUsageSummary>> {
-  const res = await api.get(`/api/user/${userId}/usage-summary`)
+  const res = await api.get(`/api/user/${userId}/usage-summary`, {
+    params: userGroup ? { user_group: userGroup } : undefined,
+  })
   return res.data
 }
 

@@ -3,6 +3,7 @@ package controller
 import (
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -412,6 +413,41 @@ func normalizeAgentSettings(user *model.User) error {
 	return nil
 }
 
+func normalizeUserGroupRatioAdjustment(user *model.User) error {
+	if !user.GroupRatioAdjustmentEnabled {
+		user.GroupRatioAdjustment = 0
+		return nil
+	}
+	if math.IsNaN(user.GroupRatioAdjustment) || math.IsInf(user.GroupRatioAdjustment, 0) {
+		return errors.New("倍率调整值必须是有效数字")
+	}
+
+	selectedGroups, err := model.GetUserSelectedTokenGroups(user.Id)
+	if err != nil {
+		return err
+	}
+	groupsToValidate := map[string]struct{}{}
+	if user.Group != "" {
+		groupsToValidate[user.Group] = struct{}{}
+	}
+	for _, group := range selectedGroups {
+		if group == "auto" {
+			for _, autoGroup := range service.GetUserAutoGroup(user.Group) {
+				groupsToValidate[autoGroup] = struct{}{}
+			}
+			continue
+		}
+		groupsToValidate[group] = struct{}{}
+	}
+	for group := range groupsToValidate {
+		baseRatio := service.GetUserGroupRatio(user.Group, group)
+		if _, err := model.ApplyUserGroupRatioAdjustment(baseRatio, true, user.GroupRatioAdjustment); err != nil {
+			return fmt.Errorf("分组 %s 调整后的倍率不能小于 0", group)
+		}
+	}
+	return nil
+}
+
 func GetUser(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
@@ -442,6 +478,10 @@ func AdminGetUserUsageSummary(c *gin.Context) {
 	if !ok {
 		return
 	}
+	ratioUserGroup := strings.TrimSpace(c.Query("user_group"))
+	if ratioUserGroup == "" {
+		ratioUserGroup = user.Group
+	}
 	totalTokens, err := model.SumUserUsedToken(user.Id)
 	if err != nil {
 		common.ApiError(c, err)
@@ -468,11 +508,22 @@ func AdminGetUserUsageSummary(c *gin.Context) {
 	for _, usage := range groupUsageRows {
 		usageByGroup[usage.UseGroup] = usage
 	}
+	baseGroupRatios := make(map[string]float64, len(selectedGroups))
 	groupRatios := make(map[string]float64, len(selectedGroups))
 	groupUsage := make(map[string]gin.H, len(selectedGroups))
 	for _, groupName := range selectedGroups {
-		ratio := service.GetUserGroupRatio(user.Group, groupName)
+		baseRatio := service.GetUserGroupRatio(ratioUserGroup, groupName)
+		ratio, ratioErr := service.GetAdjustedUserGroupRatio(
+			ratioUserGroup,
+			groupName,
+			user.GroupRatioAdjustmentEnabled,
+			user.GroupRatioAdjustment,
+		)
+		if ratioErr != nil {
+			ratio = baseRatio + user.GroupRatioAdjustment
+		}
 		usage := usageByGroup[groupName]
+		baseGroupRatios[groupName] = baseRatio
 		groupRatios[groupName] = ratio
 		groupUsage[groupName] = gin.H{
 			"ratio":      ratio,
@@ -481,11 +532,12 @@ func AdminGetUserUsageSummary(c *gin.Context) {
 		}
 	}
 	common.ApiSuccess(c, gin.H{
-		"total_tokens": totalTokens,
-		"today_tokens": todayUsage.TotalTokens,
-		"today_quota":  todayUsage.TotalQuota,
-		"group_ratios": groupRatios,
-		"group_usage":  groupUsage,
+		"total_tokens":      totalTokens,
+		"today_tokens":      todayUsage.TotalTokens,
+		"today_quota":       todayUsage.TotalQuota,
+		"base_group_ratios": baseGroupRatios,
+		"group_ratios":      groupRatios,
+		"group_usage":       groupUsage,
 	})
 }
 
@@ -1025,6 +1077,10 @@ func UpdateUser(c *gin.Context) {
 	myRole := c.GetInt("role")
 	if !canManageTargetRole(myRole, originUser.Role) {
 		common.ApiErrorI18n(c, i18n.MsgUserNoPermissionHigherLevel)
+		return
+	}
+	if err := normalizeUserGroupRatioAdjustment(&updatedUser); err != nil {
+		common.ApiError(c, err)
 		return
 	}
 	if updatedUser.Password == "$I_LOVE_U" {

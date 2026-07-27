@@ -12,6 +12,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/QuantumNous/new-api/types"
 	"github.com/glebarez/sqlite"
 	"github.com/shopspring/decimal"
@@ -238,6 +239,30 @@ func TestTaskBillingContextPriceDataFiltersMultiplier(t *testing.T) {
 		"size":     3,
 		"identity": 1,
 	}, priceData.OtherRatios())
+}
+
+func TestRecalculateTaskQuotaByTokensUsesBillingContextGroupRatio(t *testing.T) {
+	truncate(t)
+	previousModelRatios := ratio_setting.ModelRatio2JSONString()
+	previousGroupRatios := ratio_setting.GroupRatio2JSONString()
+	t.Cleanup(func() {
+		require.NoError(t, ratio_setting.UpdateModelRatioByJSONString(previousModelRatios))
+		require.NoError(t, ratio_setting.UpdateGroupRatioByJSONString(previousGroupRatios))
+	})
+	require.NoError(t, ratio_setting.UpdateModelRatioByJSONString(`{"test-model":1}`))
+	require.NoError(t, ratio_setting.UpdateGroupRatioByJSONString(`{"default":9}`))
+
+	const userID = 31
+	seedUser(t, userID, 10000)
+	task := makeTask(userID, 0, 100, 0, BillingSourceWallet, 0)
+	task.PrivateData.BillingContext.GroupRatio = 0.18
+	require.NoError(t, model.DB.Create(task).Error)
+
+	RecalculateTaskQuotaByTokens(context.Background(), task, 1000)
+
+	assert.Equal(t, 9920, getUserQuota(t, userID))
+	assert.Equal(t, 180, task.Quota)
+	assert.Equal(t, 180, getTaskQuota(t, task.ID))
 }
 
 // ---------------------------------------------------------------------------

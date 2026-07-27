@@ -53,6 +53,24 @@ func TestUserRequestContentLoggingCacheRoundTrip(t *testing.T) {
 	assert.False(t, cached.RequestContentLoggingEnabled)
 }
 
+func TestUserGroupRatioAdjustmentCacheRoundTrip(t *testing.T) {
+	truncateTables(t)
+	useUserCacheMiniRedis(t)
+	user := User{
+		Username: "group-ratio-adjustment-cache", Password: "password", Group: "default",
+		Status: common.UserStatusEnabled, AuthVersion: 1,
+		GroupRatioAdjustmentEnabled: true,
+		GroupRatioAdjustment:        -0.075,
+	}
+	require.NoError(t, DB.Create(&user).Error)
+	require.NoError(t, populateUserCache(user))
+
+	cached, err := cacheGetUserBase(user.Id)
+	require.NoError(t, err)
+	assert.True(t, cached.GroupRatioAdjustmentEnabled)
+	assert.InDelta(t, -0.075, cached.GroupRatioAdjustment, 1e-12)
+}
+
 func TestUserAuthFenceRollbackExpiresAndRecovers(t *testing.T) {
 	truncateTables(t)
 	server := useUserCacheMiniRedis(t)

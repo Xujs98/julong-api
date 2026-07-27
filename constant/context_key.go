@@ -51,6 +51,8 @@ const (
 	ContextKeyUserGroup                        ContextKey = "user_group"
 	ContextKeyUsingGroup                       ContextKey = "group"
 	ContextKeyUserName                         ContextKey = "username"
+	ContextKeyUserGroupRatioAdjustmentEnabled  ContextKey = "user_group_ratio_adjustment_enabled"
+	ContextKeyUserGroupRatioAdjustment         ContextKey = "user_group_ratio_adjustment"
 	ContextKeyUserRequestContentLoggingEnabled ContextKey = "user_request_content_logging_enabled"
 
 	ContextKeyLocalCountTokens ContextKey = "local_count_tokens"

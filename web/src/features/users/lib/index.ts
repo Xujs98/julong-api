@@ -31,3 +31,10 @@ export {
   transformFormDataToPayload,
   transformUserToFormDefaults,
 } from './user-form'
+
+export {
+  buildUserGroupRatioPreviews,
+  getSignedUserGroupRatioAdjustment,
+  type UserGroupRatioAdjustmentMode,
+  type UserGroupRatioPreview,
+} from './user-ratio-adjustment'

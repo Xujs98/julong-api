@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/setting/billing_setting"
@@ -62,6 +63,36 @@ func TestModelPriceHelperTieredUsesPreloadedRequestInput(t *testing.T) {
 	require.Equal(t, "stream", info.TieredBillingSnapshot.EstimatedTier)
 	require.Equal(t, billing_setting.BillingModeTieredExpr, info.TieredBillingSnapshot.BillingMode)
 	require.Equal(t, common.QuotaPerUnit, info.TieredBillingSnapshot.QuotaPerUnit)
+}
+
+func TestHandleGroupRatioAppliesUserAdjustmentAfterSpecialRatio(t *testing.T) {
+	previousGroupRatios := ratio_setting.GroupRatio2JSONString()
+	previousOverrides := ratio_setting.GroupGroupRatio2JSONString()
+	t.Cleanup(func() {
+		require.NoError(t, ratio_setting.UpdateGroupRatioByJSONString(previousGroupRatios))
+		require.NoError(t, ratio_setting.UpdateGroupGroupRatioByJSONString(previousOverrides))
+	})
+	require.NoError(t, ratio_setting.UpdateGroupRatioByJSONString(`{"codex-v1":0.12}`))
+	require.NoError(t, ratio_setting.UpdateGroupGroupRatioByJSONString(`{"default":{"codex-v1":0.08}}`))
+
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	info := &relaycommon.RelayInfo{
+		UserId:                          7,
+		UserGroup:                       "default",
+		UsingGroup:                      "codex-v1",
+		UserGroupRatioAdjustmentEnabled: true,
+		UserGroupRatioAdjustment:        0.1,
+	}
+
+	ratioInfo, err := HandleGroupRatio(ctx, info)
+	require.NoError(t, err)
+	require.True(t, ratioInfo.HasSpecialRatio)
+	require.InDelta(t, 0.18, ratioInfo.GroupRatio, 1e-12)
+	require.InDelta(t, 0.18, ratioInfo.GroupSpecialRatio, 1e-12)
+
+	info.UserGroupRatioAdjustment = -0.1
+	_, err = HandleGroupRatio(ctx, info)
+	require.ErrorIs(t, err, model.ErrInvalidUserGroupRatioAdjustment)
 }
 
 func TestModelPriceHelperTieredPreConsumeMaxTokensFallback(t *testing.T) {

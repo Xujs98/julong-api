@@ -602,6 +602,37 @@ func TestUserBaseIncludesAuthorizationFields(t *testing.T) {
 	assert.Equal(t, user.Quota, base.Quota)
 }
 
+func TestUserEditPersistsGroupRatioAdjustmentWithoutAuthVersionChange(t *testing.T) {
+	setupUserSessionTest(t)
+	user := &User{
+		Username: "ratio-adjustment-edit", Password: "hashed-placeholder",
+		Role: common.RoleCommonUser, Status: common.UserStatusEnabled, Group: "default",
+	}
+	require.NoError(t, DB.Create(user).Error)
+	t.Cleanup(func() { _ = DB.Unscoped().Delete(&User{}, user.Id).Error })
+
+	user.GroupRatioAdjustmentEnabled = true
+	user.GroupRatioAdjustment = -0.05
+	require.NoError(t, DB.Transaction(func(tx *gorm.DB) error {
+		return user.EditWithTx(tx, false)
+	}))
+
+	var stored User
+	require.NoError(t, DB.First(&stored, user.Id).Error)
+	assert.True(t, stored.GroupRatioAdjustmentEnabled)
+	assert.InDelta(t, -0.05, stored.GroupRatioAdjustment, 1e-12)
+	assert.EqualValues(t, 1, stored.AuthVersion)
+
+	user.GroupRatioAdjustmentEnabled = false
+	user.GroupRatioAdjustment = 0
+	require.NoError(t, DB.Transaction(func(tx *gorm.DB) error {
+		return user.EditWithTx(tx, false)
+	}))
+	require.NoError(t, DB.First(&stored, user.Id).Error)
+	assert.False(t, stored.GroupRatioAdjustmentEnabled)
+	assert.Zero(t, stored.GroupRatioAdjustment)
+}
+
 func TestUserUpdateBumpsAuthVersionOnlyForAuthorizationChanges(t *testing.T) {
 	setupUserSessionTest(t)
 	user := &User{

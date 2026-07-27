@@ -79,3 +79,7 @@ func GetUserGroupRatio(userGroup, group string) float64 {
 	}
 	return ratio_setting.GetGroupRatio(group)
 }
+
+func GetAdjustedUserGroupRatio(userGroup, group string, enabled bool, adjustment float64) (float64, error) {
+	return model.ApplyUserGroupRatioAdjustment(GetUserGroupRatio(userGroup, group), enabled, adjustment)
+}

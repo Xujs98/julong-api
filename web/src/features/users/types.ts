@@ -56,6 +56,8 @@ export const userSchema = z.object({
   used_quota: z.number(),
   request_count: z.number(),
   group: z.string(),
+  group_ratio_adjustment_enabled: z.boolean().optional(),
+  group_ratio_adjustment: z.number().optional(),
   aff_code: z.string().optional(),
   aff_count: z.number().optional(),
   aff_quota: z.number().optional(),
@@ -145,6 +147,8 @@ export interface UserFormData {
   role?: number // Only used when creating user
   quota?: number // Only used when updating user
   group?: string // Only used when updating user
+  group_ratio_adjustment_enabled?: boolean
+  group_ratio_adjustment?: number
   remark?: string // Only used when updating user
   is_agent?: boolean
   agent_discount?: number
@@ -215,6 +219,7 @@ export interface UserUsageSummary {
   total_tokens: number
   today_tokens: number
   today_quota: number
+  base_group_ratios: Record<string, number>
   group_ratios: Record<string, number>
   group_usage?: Record<string, UserGroupUsage>
 }

@@ -86,16 +86,18 @@ type TokenCountMeta struct {
 }
 
 type RelayInfo struct {
-	TokenId           int
-	TokenKey          string
-	TokenGroup        string
-	UserId            int
-	UsingGroup        string // 使用的分组，当auto跨分组重试时，会变动
-	UserGroup         string // 用户所在分组
-	TokenUnlimited    bool
-	StartTime         time.Time
-	FirstResponseTime time.Time
-	isFirstResponse   bool
+	TokenId                         int
+	TokenKey                        string
+	TokenGroup                      string
+	UserId                          int
+	UsingGroup                      string // 使用的分组，当auto跨分组重试时，会变动
+	UserGroup                       string // 用户所在分组
+	UserGroupRatioAdjustmentEnabled bool
+	UserGroupRatioAdjustment        float64
+	TokenUnlimited                  bool
+	StartTime                       time.Time
+	FirstResponseTime               time.Time
+	isFirstResponse                 bool
 	//SendLastReasoningResponse bool
 	IsStream               bool
 	IsGeminiBatchEmbedding bool
@@ -458,6 +460,7 @@ func genBaseRelayInfo(c *gin.Context, request dto.Request) *RelayInfo {
 	if request != nil {
 		isStream = request.IsStream(c)
 	}
+	userGroupRatioAdjustment, _ := common.GetContextKeyType[float64](c, constant.ContextKeyUserGroupRatioAdjustment)
 	c.Set(string(constant.ContextKeyIsStream), isStream)
 
 	// firstResponseTime = time.Now() - 1 second
@@ -469,12 +472,14 @@ func genBaseRelayInfo(c *gin.Context, request dto.Request) *RelayInfo {
 	info := &RelayInfo{
 		Request: request,
 
-		RequestId:  reqId,
-		UserId:     common.GetContextKeyInt(c, constant.ContextKeyUserId),
-		UsingGroup: common.GetContextKeyString(c, constant.ContextKeyUsingGroup),
-		UserGroup:  common.GetContextKeyString(c, constant.ContextKeyUserGroup),
-		UserQuota:  common.GetContextKeyInt(c, constant.ContextKeyUserQuota),
-		UserEmail:  common.GetContextKeyString(c, constant.ContextKeyUserEmail),
+		RequestId:                       reqId,
+		UserId:                          common.GetContextKeyInt(c, constant.ContextKeyUserId),
+		UsingGroup:                      common.GetContextKeyString(c, constant.ContextKeyUsingGroup),
+		UserGroup:                       common.GetContextKeyString(c, constant.ContextKeyUserGroup),
+		UserGroupRatioAdjustmentEnabled: common.GetContextKeyBool(c, constant.ContextKeyUserGroupRatioAdjustmentEnabled),
+		UserGroupRatioAdjustment:        userGroupRatioAdjustment,
+		UserQuota:                       common.GetContextKeyInt(c, constant.ContextKeyUserQuota),
+		UserEmail:                       common.GetContextKeyString(c, constant.ContextKeyUserEmail),
 
 		OriginModelName: common.GetContextKeyString(c, constant.ContextKeyOriginalModel),
 

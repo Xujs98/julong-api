@@ -41,7 +41,7 @@ const claudeCacheCreation1hMultiplier = 6 / 3.75
 const defaultTieredPreConsumeMaxTokens = 8192
 
 // HandleGroupRatio checks for "auto_group" in the context and updates the group ratio and relayInfo.UsingGroup if present
-func HandleGroupRatio(ctx *gin.Context, relayInfo *relaycommon.RelayInfo) types.GroupRatioInfo {
+func HandleGroupRatio(ctx *gin.Context, relayInfo *relaycommon.RelayInfo) (types.GroupRatioInfo, error) {
 	groupRatioInfo := types.GroupRatioInfo{
 		GroupRatio:        1.0, // default ratio
 		GroupSpecialRatio: -1,
@@ -66,13 +66,29 @@ func HandleGroupRatio(ctx *gin.Context, relayInfo *relaycommon.RelayInfo) types.
 		groupRatioInfo.GroupRatio = ratio_setting.GetGroupRatio(relayInfo.UsingGroup)
 	}
 
-	return groupRatioInfo
+	adjustedRatio, err := model.ApplyUserGroupRatioAdjustment(
+		groupRatioInfo.GroupRatio,
+		relayInfo.UserGroupRatioAdjustmentEnabled,
+		relayInfo.UserGroupRatioAdjustment,
+	)
+	if err != nil {
+		return types.GroupRatioInfo{}, fmt.Errorf("invalid ratio adjustment for user %d in group %s: %w", relayInfo.UserId, relayInfo.UsingGroup, err)
+	}
+	groupRatioInfo.GroupRatio = adjustedRatio
+	if groupRatioInfo.HasSpecialRatio {
+		groupRatioInfo.GroupSpecialRatio = adjustedRatio
+	}
+
+	return groupRatioInfo, nil
 }
 
 func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens int, meta *types.TokenCountMeta) (types.PriceData, error) {
 	modelPrice, usePrice := ratio_setting.GetModelPrice(info.OriginModelName, false)
 
-	groupRatioInfo := HandleGroupRatio(c, info)
+	groupRatioInfo, err := HandleGroupRatio(c, info)
+	if err != nil {
+		return types.PriceData{}, err
+	}
 
 	// Check if this model uses tiered_expr billing
 	if billing_setting.GetBillingMode(info.OriginModelName) == billing_setting.BillingModeTieredExpr {
@@ -184,7 +200,10 @@ func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens 
 
 // ModelPriceHelperPerCall 按次/按量计费的 PriceHelper (MJ、Task)
 func ModelPriceHelperPerCall(c *gin.Context, info *relaycommon.RelayInfo) (types.PriceData, error) {
-	groupRatioInfo := HandleGroupRatio(c, info)
+	groupRatioInfo, err := HandleGroupRatio(c, info)
+	if err != nil {
+		return types.PriceData{}, err
+	}
 
 	modelPrice, success := ratio_setting.GetModelPrice(info.OriginModelName, true)
 	usePrice := success
@@ -213,7 +232,6 @@ func ModelPriceHelperPerCall(c *gin.Context, info *relaycommon.RelayInfo) (types
 	freeModel := false
 
 	if usePrice {
-		var err error
 		quota, err = common.QuotaFromFloatStrict(modelPrice * common.QuotaPerUnit * groupRatioInfo.GroupRatio)
 		if err != nil {
 			return types.PriceData{}, err

@@ -28,6 +28,7 @@ import { ROLE } from '@/lib/roles'
 
 import { DEFAULT_GROUP } from '../constants'
 import type { UserFormData, User } from '../types'
+import { getSignedUserGroupRatioAdjustment } from './user-ratio-adjustment'
 
 // ============================================================================
 // Form Schema
@@ -40,6 +41,9 @@ export const userFormSchema = z.object({
   role: z.number().optional(),
   quota_dollars: z.number().min(0).optional(),
   group: z.string().optional(),
+  group_ratio_adjustment_enabled: z.boolean(),
+  group_ratio_adjustment_mode: z.enum(['increase', 'decrease']),
+  group_ratio_adjustment_value: z.number().finite().min(0),
   remark: z.string().optional(),
   is_agent: z.boolean().optional(),
   agent_discount: z.number().min(0).max(100).optional(),
@@ -62,6 +66,9 @@ export const USER_FORM_DEFAULT_VALUES: UserFormValues = {
   role: 1, // Default to common user
   quota_dollars: 0,
   group: DEFAULT_GROUP,
+  group_ratio_adjustment_enabled: false,
+  group_ratio_adjustment_mode: 'increase',
+  group_ratio_adjustment_value: 0,
   remark: '',
   is_agent: false,
   agent_discount: 100,
@@ -109,6 +116,12 @@ export function transformFormDataToPayload(
   } else {
     // For update: quota is adjusted atomically via /api/user/manage, not sent here
     payload.group = data.group
+    payload.group_ratio_adjustment_enabled = data.group_ratio_adjustment_enabled
+    payload.group_ratio_adjustment = getSignedUserGroupRatioAdjustment(
+      data.group_ratio_adjustment_enabled,
+      data.group_ratio_adjustment_mode,
+      data.group_ratio_adjustment_value
+    )
     payload.remark = data.remark || undefined
     payload.id = userId
   }
@@ -122,6 +135,7 @@ export function transformFormDataToPayload(
  * the catalog at render time in UsersMutateDrawer.
  */
 export function transformUserToFormDefaults(user: User): UserFormValues {
+  const groupRatioAdjustment = user.group_ratio_adjustment ?? 0
   return {
     username: user.username,
     display_name: user.display_name,
@@ -129,6 +143,11 @@ export function transformUserToFormDefaults(user: User): UserFormValues {
     role: user.role,
     quota_dollars: quotaUnitsToDollars(user.quota),
     group: user.group || DEFAULT_GROUP,
+    group_ratio_adjustment_enabled:
+      user.group_ratio_adjustment_enabled ?? false,
+    group_ratio_adjustment_mode:
+      groupRatioAdjustment < 0 ? 'decrease' : 'increase',
+    group_ratio_adjustment_value: Math.abs(groupRatioAdjustment),
     remark: user.remark || '',
     is_agent: user.is_agent || false,
     agent_discount: user.agent_discount ?? 100,

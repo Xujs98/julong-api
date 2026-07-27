@@ -219,7 +219,7 @@ func TestAdminGetUserUsageSummaryReturnsSelectedGroupRatiosAndUsage(t *testing.T
 	previousGroupRatio := ratio_setting.GroupRatio2JSONString()
 	previousGroupGroupRatio := ratio_setting.GroupGroupRatio2JSONString()
 	require.NoError(t, ratio_setting.UpdateGroupRatioByJSONString(`{"default":1,"vip":0.8,"svip":0.6,"codex-v1":0.12}`))
-	require.NoError(t, ratio_setting.UpdateGroupGroupRatioByJSONString(`{"default":{"svip":0.4,"codex-v1":0.08}}`))
+	require.NoError(t, ratio_setting.UpdateGroupGroupRatioByJSONString(`{"default":{"svip":0.4,"codex-v1":0.08},"preview":{"svip":0.3,"codex-v1":0.07}}`))
 	t.Cleanup(func() {
 		require.NoError(t, ratio_setting.UpdateGroupRatioByJSONString(previousGroupRatio))
 		require.NoError(t, ratio_setting.UpdateGroupGroupRatioByJSONString(previousGroupGroupRatio))
@@ -227,6 +227,7 @@ func TestAdminGetUserUsageSummaryReturnsSelectedGroupRatiosAndUsage(t *testing.T
 	user := model.User{
 		Username: "usage-summary-user", Password: "password", Role: common.RoleCommonUser,
 		Status: common.UserStatusEnabled, Group: "default",
+		GroupRatioAdjustmentEnabled: true, GroupRatioAdjustment: 0.1,
 	}
 	require.NoError(t, db.Create(&user).Error)
 	require.NoError(t, db.Create(&[]model.Token{
@@ -244,7 +245,7 @@ func TestAdminGetUserUsageSummaryReturnsSelectedGroupRatiosAndUsage(t *testing.T
 	gin.SetMode(gin.TestMode)
 	recorder := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(recorder)
-	c.Request = httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/user/%d/usage-summary", user.Id), nil)
+	c.Request = httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/user/%d/usage-summary?user_group=preview", user.Id), nil)
 	c.Params = gin.Params{{Key: "id", Value: fmt.Sprintf("%d", user.Id)}}
 	c.Set("id", 9999)
 	c.Set("role", common.RoleRootUser)
@@ -256,8 +257,9 @@ func TestAdminGetUserUsageSummaryReturnsSelectedGroupRatiosAndUsage(t *testing.T
 	var response struct {
 		Success bool `json:"success"`
 		Data    struct {
-			GroupRatios map[string]float64 `json:"group_ratios"`
-			GroupUsage  map[string]struct {
+			BaseGroupRatios map[string]float64 `json:"base_group_ratios"`
+			GroupRatios     map[string]float64 `json:"group_ratios"`
+			GroupUsage      map[string]struct {
 				Ratio     float64 `json:"ratio"`
 				Quota     int64   `json:"quota"`
 				TokenUsed int64   `json:"token_used"`
@@ -267,11 +269,15 @@ func TestAdminGetUserUsageSummaryReturnsSelectedGroupRatiosAndUsage(t *testing.T
 	require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &response))
 	assert.True(t, response.Success)
 	assert.Equal(t, map[string]float64{
-		"codex-v1": 0.08,
+		"codex-v1": 0.07,
+		"svip":     0.3,
+	}, response.Data.BaseGroupRatios)
+	assert.Equal(t, map[string]float64{
+		"codex-v1": 0.17,
 		"svip":     0.4,
 	}, response.Data.GroupRatios)
 	require.Len(t, response.Data.GroupUsage, 2)
-	assert.Equal(t, 0.08, response.Data.GroupUsage["codex-v1"].Ratio)
+	assert.Equal(t, 0.17, response.Data.GroupUsage["codex-v1"].Ratio)
 	assert.EqualValues(t, 80, response.Data.GroupUsage["codex-v1"].Quota)
 	assert.EqualValues(t, 1000, response.Data.GroupUsage["codex-v1"].TokenUsed)
 	assert.Equal(t, 0.4, response.Data.GroupUsage["svip"].Ratio)
