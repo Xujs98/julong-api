@@ -105,7 +105,8 @@ func TryTieredSettle(relayInfo *relaycommon.RelayInfo, params billingexpr.TokenP
 		requestInput = *relayInfo.BillingRequestInput
 	}
 
-	tr, err := billingexpr.ComputeTieredQuotaWithRequest(snap, params, requestInput)
+	adjustedParams := billingexpr.ApplyModelTokenAdjustment(params, snap.ModelTokenAdjustment)
+	tr, err := billingexpr.ComputeTieredQuotaWithRequest(snap, adjustedParams, requestInput)
 	if err != nil {
 		quota = relayInfo.FinalPreConsumedQuota
 		if quota <= 0 {

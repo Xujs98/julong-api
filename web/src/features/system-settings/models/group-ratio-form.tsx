@@ -69,6 +69,7 @@ import { SettingsPageActionsPortal } from '../components/settings-page-context'
 import { safeJsonParse } from '../utils/json-parser'
 import { GroupRatioVisualEditor } from './group-ratio-visual-editor'
 import { GroupSpecialUsableRulesEditor } from './group-special-usable-editor'
+import { ModelTokenRatioEditor } from './model-token-ratio-editor'
 
 type GroupFormValues = {
   GroupRatio: string
@@ -80,6 +81,7 @@ type GroupFormValues = {
   ModelSquareGroupRatioDisplayMode: 'actual' | 'pricing_group'
   TokenGroupRatioDisplayMode: 'actual' | 'pricing_group'
   GroupSpecialUsableGroup: string
+  ModelTokenRatio: string
 }
 
 type GroupRatioFormProps = {
@@ -281,6 +283,12 @@ export const GroupRatioForm = memo(function GroupRatioForm({
               }
             />
 
+            <ModelTokenRatioEditor
+              value={form.watch('ModelTokenRatio')}
+              groupOptions={groupNames}
+              onChange={(value) => handleFieldChange('ModelTokenRatio', value)}
+            />
+
             <GroupSpecialUsableRulesEditor
               value={form.watch('GroupSpecialUsableGroup')}
               groupOptions={groupNames}
@@ -405,6 +413,25 @@ export const GroupRatioForm = memo(function GroupRatioForm({
                   <FormDescription>
                     {t(
                       'JSON array of group identifiers. When enabled below, new tokens rotate through this list.'
+                    )}
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name='ModelTokenRatio'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t('Model special ratio rules')}</FormLabel>
+                  <FormControl>
+                    <Textarea rows={8} {...field} />
+                  </FormControl>
+                  <FormDescription>
+                    {t(
+                      'Nested JSON: user group → billing group → model → optional token adjustments.'
                     )}
                   </FormDescription>
                   <FormMessage />

@@ -22,39 +22,40 @@ import (
 )
 
 type textQuotaSummary struct {
-	PromptTokens             int
-	CompletionTokens         int
-	TotalTokens              int
-	CacheTokens              int
-	CacheCreationTokens      int
-	CacheCreationTokens5m    int
-	CacheCreationTokens1h    int
-	ImageTokens              int
-	AudioTokens              int
-	ModelName                string
-	TokenName                string
-	UseTimeSeconds           int64
-	CompletionRatio          float64
-	CacheRatio               float64
-	ImageRatio               float64
-	ModelRatio               float64
-	GroupRatio               float64
-	ModelPrice               float64
-	CacheCreationRatio       float64
-	CacheCreationRatio5m     float64
-	CacheCreationRatio1h     float64
-	Quota                    int
-	IsClaudeUsageSemantic    bool
-	UsageSemantic            string
-	WebSearchPrice           float64
-	WebSearchCallCount       int
-	ClaudeWebSearchPrice     float64
-	ClaudeWebSearchCallCount int
-	FileSearchPrice          float64
-	FileSearchCallCount      int
-	AudioInputPrice          float64
-	ImageGenerationCallPrice float64
-	ToolCallSurchargeQuota   decimal.Decimal
+	PromptTokens              int
+	CompletionTokens          int
+	TotalTokens               int
+	CacheTokens               int
+	CacheCreationTokens       int
+	CacheCreationTokens5m     int
+	CacheCreationTokens1h     int
+	ImageTokens               int
+	AudioTokens               int
+	ModelName                 string
+	TokenName                 string
+	UseTimeSeconds            int64
+	CompletionRatio           float64
+	CacheRatio                float64
+	ImageRatio                float64
+	ModelRatio                float64
+	GroupRatio                float64
+	ModelPrice                float64
+	CacheCreationRatio        float64
+	CacheCreationRatio5m      float64
+	CacheCreationRatio1h      float64
+	Quota                     int
+	IsClaudeUsageSemantic     bool
+	UsageSemantic             string
+	WebSearchPrice            float64
+	WebSearchCallCount        int
+	ClaudeWebSearchPrice      float64
+	ClaudeWebSearchCallCount  int
+	FileSearchPrice           float64
+	FileSearchCallCount       int
+	AudioInputPrice           float64
+	ImageGenerationCallPrice  float64
+	ToolCallSurchargeQuota    decimal.Decimal
+	ModelTokenAdjustmentAudit *types.ModelTokenAdjustmentAudit
 }
 
 func cacheWriteTokensTotal(summary textQuotaSummary) int {
@@ -246,6 +247,11 @@ func calculateTextQuotaSummary(ctx *gin.Context, relayInfo *relaycommon.RelayInf
 	dCacheCreationRatio5m := decimal.NewFromFloat(summary.CacheCreationRatio5m)
 	dCacheCreationRatio1h := decimal.NewFromFloat(summary.CacheCreationRatio1h)
 	dQuotaPerUnit := decimal.NewFromFloat(common.QuotaPerUnit)
+	modelTokenAdjustment := relayInfo.PriceData.ModelTokenAdjustment
+	dInputTokenMultiplier := decimal.NewFromFloat(modelTokenAdjustment.InputMultiplier())
+	dOutputTokenMultiplier := decimal.NewFromFloat(modelTokenAdjustment.OutputMultiplier())
+	dCacheReadTokenMultiplier := decimal.NewFromFloat(modelTokenAdjustment.CacheReadMultiplier())
+	dCacheCreationTokenMultiplier := decimal.NewFromFloat(modelTokenAdjustment.CacheCreationMultiplier())
 
 	ratio := dModelRatio.Mul(dGroupRatio)
 	summary.ToolCallSurchargeQuota = calculateTextToolCallSurcharge(ctx, relayInfo, &summary)
@@ -259,7 +265,7 @@ func calculateTextQuotaSummary(ctx *gin.Context, relayInfo *relaycommon.RelayInf
 			if !summary.IsClaudeUsageSemantic && !legacyClaudeDerived {
 				baseTokens = baseTokens.Sub(dCacheTokens)
 			}
-			cachedTokensWithRatio = dCacheTokens.Mul(dCacheRatio)
+			cachedTokensWithRatio = dCacheTokens.Mul(dCacheRatio).Mul(dCacheReadTokenMultiplier)
 		}
 
 		var cachedCreationTokensWithRatio decimal.Decimal
@@ -267,15 +273,15 @@ func calculateTextQuotaSummary(ctx *gin.Context, relayInfo *relaycommon.RelayInf
 		if !dCachedCreationTokens.IsZero() || hasSplitCacheCreationTokens {
 			if !summary.IsClaudeUsageSemantic && !legacyClaudeDerived {
 				baseTokens = baseTokens.Sub(dCachedCreationTokens)
-				cachedCreationTokensWithRatio = dCachedCreationTokens.Mul(dCacheCreationRatio)
+				cachedCreationTokensWithRatio = dCachedCreationTokens.Mul(dCacheCreationRatio).Mul(dCacheCreationTokenMultiplier)
 			} else {
 				remaining := summary.CacheCreationTokens - summary.CacheCreationTokens5m - summary.CacheCreationTokens1h
 				if remaining < 0 {
 					remaining = 0
 				}
-				cachedCreationTokensWithRatio = decimal.NewFromInt(int64(remaining)).Mul(dCacheCreationRatio)
-				cachedCreationTokensWithRatio = cachedCreationTokensWithRatio.Add(decimal.NewFromInt(int64(summary.CacheCreationTokens5m)).Mul(dCacheCreationRatio5m))
-				cachedCreationTokensWithRatio = cachedCreationTokensWithRatio.Add(decimal.NewFromInt(int64(summary.CacheCreationTokens1h)).Mul(dCacheCreationRatio1h))
+				cachedCreationTokensWithRatio = decimal.NewFromInt(int64(remaining)).Mul(dCacheCreationRatio).Mul(dCacheCreationTokenMultiplier)
+				cachedCreationTokensWithRatio = cachedCreationTokensWithRatio.Add(decimal.NewFromInt(int64(summary.CacheCreationTokens5m)).Mul(dCacheCreationRatio5m).Mul(dCacheCreationTokenMultiplier))
+				cachedCreationTokensWithRatio = cachedCreationTokensWithRatio.Add(decimal.NewFromInt(int64(summary.CacheCreationTokens1h)).Mul(dCacheCreationRatio1h).Mul(dCacheCreationTokenMultiplier))
 			}
 		}
 
@@ -302,8 +308,9 @@ func calculateTextQuotaSummary(ctx *gin.Context, relayInfo *relaycommon.RelayInf
 			baseTokens = decimal.Zero
 		}
 
-		promptQuota := baseTokens.Add(cachedTokensWithRatio).Add(imageTokensWithRatio).Add(cachedCreationTokensWithRatio)
-		completionQuota := dCompletionTokens.Mul(dCompletionRatio)
+		adjustedBaseTokens := baseTokens.Mul(dInputTokenMultiplier)
+		promptQuota := adjustedBaseTokens.Add(cachedTokensWithRatio).Add(imageTokensWithRatio).Add(cachedCreationTokensWithRatio)
+		completionQuota := dCompletionTokens.Mul(dCompletionRatio).Mul(dOutputTokenMultiplier)
 		quotaCalculateDecimal := promptQuota.Add(completionQuota).Mul(ratio)
 		quotaCalculateDecimal = quotaCalculateDecimal.Add(summary.ToolCallSurchargeQuota)
 		quotaCalculateDecimal = quotaCalculateDecimal.Add(audioInputQuota)
@@ -315,6 +322,27 @@ func calculateTextQuotaSummary(ctx *gin.Context, relayInfo *relaycommon.RelayInf
 		quota, clamp := common.QuotaFromDecimalChecked(quotaCalculateDecimal)
 		summary.Quota = quota
 		noteQuotaClamp(relayInfo, clamp)
+
+		cacheCreationTokens := cacheWriteTokensTotal(summary)
+		promptIncludesCache := !summary.IsClaudeUsageSemantic && !legacyClaudeDerived
+		summary.ModelTokenAdjustmentAudit = buildModelTokenAdjustmentAudit(relayInfo, modelTokenAdjustment, modelTokenCategoryUsage{
+			LogInput:                       summary.PromptTokens,
+			LogOutput:                      summary.CompletionTokens,
+			Input:                          baseTokens.InexactFloat64(),
+			BilledInput:                    adjustedBaseTokens.InexactFloat64(),
+			Output:                         float64(summary.CompletionTokens),
+			BilledOutput:                   float64(summary.CompletionTokens) * modelTokenAdjustment.OutputMultiplier(),
+			CacheRead:                      float64(summary.CacheTokens),
+			BilledCacheRead:                float64(summary.CacheTokens) * modelTokenAdjustment.CacheReadMultiplier(),
+			CacheCreation:                  float64(cacheCreationTokens),
+			BilledCacheCreation:            float64(cacheCreationTokens) * modelTokenAdjustment.CacheCreationMultiplier(),
+			CacheCreation5m:                float64(summary.CacheCreationTokens5m),
+			BilledCacheCreation5m:          float64(summary.CacheCreationTokens5m) * modelTokenAdjustment.CacheCreationMultiplier(),
+			CacheCreation1h:                float64(summary.CacheCreationTokens1h),
+			BilledCacheCreation1h:          float64(summary.CacheCreationTokens1h) * modelTokenAdjustment.CacheCreationMultiplier(),
+			IncludeCacheReadInLogInput:     promptIncludesCache,
+			IncludeCacheCreationInLogInput: promptIncludesCache,
+		})
 	} else {
 		quotaCalculateDecimal := dModelPrice.Mul(dQuotaPerUnit).Mul(dGroupRatio)
 		quotaCalculateDecimal = quotaCalculateDecimal.Add(summary.ToolCallSurchargeQuota)
@@ -364,11 +392,46 @@ func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 		if snap := relayInfo.TieredBillingSnapshot; snap != nil {
 			tieredUsedVars = billingexpr.UsedVars(snap.ExprString)
 		}
-		tieredOk, tieredQuota, tieredRes := TryTieredSettle(relayInfo, BuildTieredTokenParams(billingUsage, summary.IsClaudeUsageSemantic, tieredUsedVars))
+		tieredParams := BuildTieredTokenParams(billingUsage, summary.IsClaudeUsageSemantic, tieredUsedVars)
+		tieredOk, tieredQuota, tieredRes := TryTieredSettle(relayInfo, tieredParams)
 		if tieredOk {
 			tieredBillingApplied = true
 			tieredResult = tieredRes
 			summary.Quota = composeTieredTextQuota(relayInfo, summary, tieredQuota, tieredRes)
+			if snap := relayInfo.TieredBillingSnapshot; snap != nil {
+				adjustedParams := billingexpr.ApplyModelTokenAdjustment(tieredParams, snap.ModelTokenAdjustment)
+				billedCacheRead := tieredParams.CR
+				if tieredUsedVars["cr"] {
+					billedCacheRead = adjustedParams.CR
+				}
+				billedCacheCreation := tieredParams.CC
+				if tieredUsedVars["cc"] {
+					billedCacheCreation = adjustedParams.CC
+				}
+				billedCacheCreation1h := tieredParams.CC1h
+				if tieredUsedVars["cc1h"] {
+					billedCacheCreation1h = adjustedParams.CC1h
+				}
+				promptIncludesCache := !summary.IsClaudeUsageSemantic
+				summary.ModelTokenAdjustmentAudit = buildModelTokenAdjustmentAudit(relayInfo, snap.ModelTokenAdjustment, modelTokenCategoryUsage{
+					LogInput:                       summary.PromptTokens,
+					LogOutput:                      summary.CompletionTokens,
+					Input:                          tieredParams.P,
+					BilledInput:                    adjustedParams.P,
+					Output:                         tieredParams.C,
+					BilledOutput:                   adjustedParams.C,
+					CacheRead:                      tieredParams.CR,
+					BilledCacheRead:                billedCacheRead,
+					CacheCreation:                  tieredParams.CC + tieredParams.CC1h,
+					BilledCacheCreation:            billedCacheCreation + billedCacheCreation1h,
+					CacheCreation5m:                float64(summary.CacheCreationTokens5m),
+					BilledCacheCreation5m:          float64(summary.CacheCreationTokens5m) * modelTokenMultiplierForVariable(snap.ModelTokenAdjustment.CacheCreationMultiplier(), tieredUsedVars["cc"]),
+					CacheCreation1h:                float64(summary.CacheCreationTokens1h),
+					BilledCacheCreation1h:          float64(summary.CacheCreationTokens1h) * modelTokenMultiplierForVariable(snap.ModelTokenAdjustment.CacheCreationMultiplier(), tieredUsedVars["cc1h"]),
+					IncludeCacheReadInLogInput:     promptIncludesCache && tieredUsedVars["cr"],
+					IncludeCacheCreationInLogInput: promptIncludesCache && (tieredUsedVars["cc"] || tieredUsedVars["cc1h"]),
+				})
+			}
 		}
 	}
 
@@ -485,6 +548,7 @@ func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 	if tieredBillingApplied {
 		InjectTieredBillingInfo(other, relayInfo, tieredResult)
 	}
+	attachModelTokenAdjustmentToOther(other, summary.ModelTokenAdjustmentAudit)
 
 	attachQuotaSaturation(ctx, relayInfo, other)
 

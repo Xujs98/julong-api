@@ -54,6 +54,10 @@ func TestFormatUserLogsStripsQuotaSaturation(t *testing.T) {
 				"kind":    "overflow",
 				"clamped": common.MaxQuota,
 			},
+			"model_token_adjustment": map[string]interface{}{
+				"actual": map[string]interface{}{"input": 100},
+				"billed": map[string]interface{}{"input": 110},
+			},
 		},
 	})
 	logs := []*Log{{Other: other}}

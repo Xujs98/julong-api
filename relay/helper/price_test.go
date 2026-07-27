@@ -65,6 +65,39 @@ func TestModelPriceHelperTieredUsesPreloadedRequestInput(t *testing.T) {
 	require.Equal(t, common.QuotaPerUnit, info.TieredBillingSnapshot.QuotaPerUnit)
 }
 
+func TestModelPriceHelperPreConsumeUsesModelTokenAdjustment(t *testing.T) {
+	previousModelRatios := ratio_setting.ModelRatio2JSONString()
+	previousGroupRatios := ratio_setting.GroupRatio2JSONString()
+	previousModelTokenRatios := ratio_setting.ModelTokenRatio2JSONString()
+	previousPreConsumedQuota := common.PreConsumedQuota
+	t.Cleanup(func() {
+		require.NoError(t, ratio_setting.UpdateModelRatioByJSONString(previousModelRatios))
+		require.NoError(t, ratio_setting.UpdateGroupRatioByJSONString(previousGroupRatios))
+		require.NoError(t, ratio_setting.UpdateModelTokenRatioByJSONString(previousModelTokenRatios))
+		common.PreConsumedQuota = previousPreConsumedQuota
+	})
+
+	require.NoError(t, ratio_setting.UpdateModelRatioByJSONString(`{"model-token-adjustment-test":1}`))
+	require.NoError(t, ratio_setting.UpdateGroupRatioByJSONString(`{"default":1,"auto-billing":1}`))
+	require.NoError(t, ratio_setting.UpdateModelTokenRatioByJSONString(`{"default":{"auto-billing":{"model-token-adjustment-test":{"input":0.1}}}}`))
+	common.PreConsumedQuota = 0
+
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Set("auto_group", "auto-billing")
+	info := &relaycommon.RelayInfo{
+		OriginModelName: "model-token-adjustment-test",
+		UserGroup:       "default",
+		UsingGroup:      "default",
+	}
+
+	priceData, err := ModelPriceHelper(ctx, info, 100, &types.TokenCountMeta{MaxTokens: 100})
+	require.NoError(t, err)
+	require.Equal(t, 210, priceData.QuotaToPreConsume)
+	require.Equal(t, "auto-billing", info.UsingGroup)
+	require.NotNil(t, priceData.ModelTokenAdjustment.Input)
+	require.InDelta(t, 1.1, priceData.ModelTokenAdjustment.InputMultiplier(), 1e-12)
+}
+
 func TestHandleGroupRatioAppliesUserAdjustmentAfterSpecialRatio(t *testing.T) {
 	previousGroupRatios := ratio_setting.GroupRatio2JSONString()
 	previousOverrides := ratio_setting.GroupGroupRatio2JSONString()

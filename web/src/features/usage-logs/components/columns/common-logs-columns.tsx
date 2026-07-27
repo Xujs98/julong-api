@@ -54,6 +54,7 @@ import {
   getAdminGroupRatioDetails,
   getDisplayedGroupRatio,
 } from '../../lib/group-ratio'
+import { getTokenUsageDisplay } from '../../lib/model-token-adjustment'
 import {
   isDisplayableLogType,
   isTimingLogType,
@@ -717,28 +718,24 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
     },
     {
       accessorKey: 'prompt_tokens',
-      header: 'Tokens',
+      header: t('Tokens'),
       cell: ({ row }) => {
         const log = row.original
         if (!isDisplayableLogType(log.type)) return null
 
         const other = parseLogOther(log.other)
 
-        const promptTokens = log.prompt_tokens || 0
-        const completionTokens = log.completion_tokens || 0
+        const tokenUsage = getTokenUsageDisplay(log, other, isAdmin)
+        const promptTokens = tokenUsage.displayed.input
+        const completionTokens = tokenUsage.displayed.output
         if (promptTokens === 0 && completionTokens === 0) {
           return <span className='text-muted-foreground text-xs'>-</span>
         }
 
-        const cacheReadTokens = other?.cache_tokens || 0
-        const cacheWrite5m = other?.cache_creation_tokens_5m || 0
-        const cacheWrite1h = other?.cache_creation_tokens_1h || 0
-        const hasSplitCache = cacheWrite5m > 0 || cacheWrite1h > 0
-        const cacheWriteTokens = hasSplitCache
-          ? cacheWrite5m + cacheWrite1h
-          : other?.cache_creation_tokens || 0
+        const cacheReadTokens = tokenUsage.displayed.cache_read || 0
+        const cacheWriteTokens = tokenUsage.displayed.cache_creation || 0
 
-        return (
+        const tokenContent = (
           <div className='flex flex-col gap-0.5'>
             <span className='font-mono text-xs font-medium tabular-nums'>
               {promptTokens.toLocaleString()} /{' '}
@@ -759,6 +756,56 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
               </div>
             )}
           </div>
+        )
+
+        if (!tokenUsage.hasAdjustment) return tokenContent
+
+        return (
+          <TooltipProvider delay={200}>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <div
+                    className='w-fit cursor-help'
+                    aria-label={t('Actual tokens')}
+                  />
+                }
+              >
+                {tokenContent}
+              </TooltipTrigger>
+              <TooltipContent side='top' className='w-60 space-y-2 p-3'>
+                <div className='text-foreground text-xs font-semibold'>
+                  {t('Actual tokens')}
+                </div>
+                <div className='grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-1 text-xs tabular-nums'>
+                  <span className='text-muted-foreground'>{t('Input')}</span>
+                  <span>{tokenUsage.actual.input.toLocaleString()}</span>
+                  <span className='text-muted-foreground'>{t('Output')}</span>
+                  <span>{tokenUsage.actual.output.toLocaleString()}</span>
+                  {(tokenUsage.actual.cache_read || 0) > 0 && (
+                    <>
+                      <span className='text-muted-foreground'>
+                        {t('Cache Read')}
+                      </span>
+                      <span>
+                        {tokenUsage.actual.cache_read?.toLocaleString()}
+                      </span>
+                    </>
+                  )}
+                  {(tokenUsage.actual.cache_creation || 0) > 0 && (
+                    <>
+                      <span className='text-muted-foreground'>
+                        {t('Cache Creation')}
+                      </span>
+                      <span>
+                        {tokenUsage.actual.cache_creation?.toLocaleString()}
+                      </span>
+                    </>
+                  )}
+                </div>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         )
       },
     },

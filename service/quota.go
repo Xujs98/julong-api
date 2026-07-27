@@ -30,13 +30,14 @@ type TokenDetails struct {
 }
 
 type QuotaInfo struct {
-	InputDetails  TokenDetails
-	OutputDetails TokenDetails
-	ModelName     string
-	UsePrice      bool
-	ModelPrice    float64
-	ModelRatio    float64
-	GroupRatio    float64
+	InputDetails         TokenDetails
+	OutputDetails        TokenDetails
+	ModelName            string
+	UsePrice             bool
+	ModelPrice           float64
+	ModelRatio           float64
+	GroupRatio           float64
+	ModelTokenAdjustment types.ModelTokenAdjustment
 }
 
 func hasCustomModelRatio(modelName string, currentRatio float64) bool {
@@ -71,8 +72,8 @@ func calculateAudioQuota(info QuotaInfo) (int, *common.QuotaClamp) {
 	outputAudioTokens := decimal.NewFromInt(int64(info.OutputDetails.AudioTokens))
 
 	quota := decimal.Zero
-	quota = quota.Add(inputTextTokens)
-	quota = quota.Add(outputTextTokens.Mul(completionRatio))
+	quota = quota.Add(inputTextTokens.Mul(decimal.NewFromFloat(info.ModelTokenAdjustment.InputMultiplier())))
+	quota = quota.Add(outputTextTokens.Mul(completionRatio).Mul(decimal.NewFromFloat(info.ModelTokenAdjustment.OutputMultiplier())))
 	quota = quota.Add(inputAudioTokens.Mul(audioRatio))
 	quota = quota.Add(outputAudioTokens.Mul(audioRatio).Mul(audioCompletionRatio))
 
@@ -138,10 +139,11 @@ func PreWssConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usag
 			TextTokens:  textOutTokens,
 			AudioTokens: audioOutTokens,
 		},
-		ModelName:  modelName,
-		UsePrice:   relayInfo.UsePrice,
-		ModelRatio: modelRatio,
-		GroupRatio: actualGroupRatio,
+		ModelName:            modelName,
+		UsePrice:             relayInfo.UsePrice,
+		ModelRatio:           modelRatio,
+		GroupRatio:           actualGroupRatio,
+		ModelTokenAdjustment: relayInfo.PriceData.ModelTokenAdjustment,
 	}
 
 	quota, clamp := calculateAudioQuota(quotaInfo)
@@ -167,11 +169,12 @@ func PostWssConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, mod
 	usage *dto.RealtimeUsage, extraContent string) {
 
 	var tieredResult *billingexpr.TieredResult
-	tieredOk, tieredQuota, tieredRes := TryTieredSettle(relayInfo, billingexpr.TokenParams{
+	tieredParams := billingexpr.TokenParams{
 		P:   float64(usage.InputTokens),
 		C:   float64(usage.OutputTokens),
 		Len: float64(usage.InputTokens),
-	})
+	}
+	tieredOk, tieredQuota, tieredRes := TryTieredSettle(relayInfo, tieredParams)
 	if tieredOk {
 		tieredResult = tieredRes
 	}
@@ -202,10 +205,11 @@ func PostWssConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, mod
 			TextTokens:  textOutTokens,
 			AudioTokens: audioOutTokens,
 		},
-		ModelName:  modelName,
-		UsePrice:   usePrice,
-		ModelRatio: modelRatio,
-		GroupRatio: groupRatio,
+		ModelName:            modelName,
+		UsePrice:             usePrice,
+		ModelRatio:           modelRatio,
+		GroupRatio:           groupRatio,
+		ModelTokenAdjustment: relayInfo.PriceData.ModelTokenAdjustment,
 	}
 
 	quota, clamp := calculateAudioQuota(quotaInfo)
@@ -246,9 +250,32 @@ func PostWssConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, mod
 	}
 	other := GenerateWssOtherInfo(ctx, relayInfo, usage, modelRatio, groupRatio,
 		completionRatio.InexactFloat64(), audioRatio.InexactFloat64(), audioCompletionRatio.InexactFloat64(), modelPrice, relayInfo.PriceData.GroupRatioInfo.GroupSpecialRatio)
+	var modelTokenAdjustmentAudit *types.ModelTokenAdjustmentAudit
+	if !usePrice {
+		modelTokenAdjustmentAudit = buildModelTokenAdjustmentAudit(relayInfo, relayInfo.PriceData.ModelTokenAdjustment, modelTokenCategoryUsage{
+			LogInput:     usage.InputTokens,
+			LogOutput:    usage.OutputTokens,
+			Input:        float64(textInputTokens),
+			BilledInput:  float64(textInputTokens) * relayInfo.PriceData.ModelTokenAdjustment.InputMultiplier(),
+			Output:       float64(textOutTokens),
+			BilledOutput: float64(textOutTokens) * relayInfo.PriceData.ModelTokenAdjustment.OutputMultiplier(),
+		})
+	}
 	if tieredResult != nil {
 		InjectTieredBillingInfo(other, relayInfo, tieredResult)
+		if snap := relayInfo.TieredBillingSnapshot; snap != nil {
+			adjustedParams := billingexpr.ApplyModelTokenAdjustment(tieredParams, snap.ModelTokenAdjustment)
+			modelTokenAdjustmentAudit = buildModelTokenAdjustmentAudit(relayInfo, snap.ModelTokenAdjustment, modelTokenCategoryUsage{
+				LogInput:     usage.InputTokens,
+				LogOutput:    usage.OutputTokens,
+				Input:        tieredParams.P,
+				BilledInput:  adjustedParams.P,
+				Output:       tieredParams.C,
+				BilledOutput: adjustedParams.C,
+			})
+		}
 	}
+	attachModelTokenAdjustmentToOther(other, modelTokenAdjustmentAudit)
 	attachQuotaSaturation(ctx, relayInfo, other)
 	model.RecordConsumeLog(ctx, relayInfo.UserId, model.RecordConsumeLogParams{
 		ChannelId:        relayInfo.ChannelId,
@@ -294,7 +321,8 @@ func PostAudioConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, u
 		tieredUsedVars = billingexpr.UsedVars(snap.ExprString)
 	}
 	var tieredResult *billingexpr.TieredResult
-	tieredOk, tieredQuota, tieredRes := TryTieredSettle(relayInfo, BuildTieredTokenParams(usage, false, tieredUsedVars))
+	tieredParams := BuildTieredTokenParams(usage, false, tieredUsedVars)
+	tieredOk, tieredQuota, tieredRes := TryTieredSettle(relayInfo, tieredParams)
 	if tieredOk {
 		tieredResult = tieredRes
 	}
@@ -325,10 +353,11 @@ func PostAudioConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, u
 			TextTokens:  textOutTokens,
 			AudioTokens: audioOutTokens,
 		},
-		ModelName:  relayInfo.OriginModelName,
-		UsePrice:   usePrice,
-		ModelRatio: modelRatio,
-		GroupRatio: groupRatio,
+		ModelName:            relayInfo.OriginModelName,
+		UsePrice:             usePrice,
+		ModelRatio:           modelRatio,
+		GroupRatio:           groupRatio,
+		ModelTokenAdjustment: relayInfo.PriceData.ModelTokenAdjustment,
 	}
 
 	quota, clamp := calculateAudioQuota(quotaInfo)
@@ -369,9 +398,32 @@ func PostAudioConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, u
 	}
 	other := GenerateAudioOtherInfo(ctx, relayInfo, usage, modelRatio, groupRatio,
 		completionRatio.InexactFloat64(), audioRatio.InexactFloat64(), audioCompletionRatio.InexactFloat64(), modelPrice, relayInfo.PriceData.GroupRatioInfo.GroupSpecialRatio)
+	var modelTokenAdjustmentAudit *types.ModelTokenAdjustmentAudit
+	if !usePrice {
+		modelTokenAdjustmentAudit = buildModelTokenAdjustmentAudit(relayInfo, relayInfo.PriceData.ModelTokenAdjustment, modelTokenCategoryUsage{
+			LogInput:     usage.PromptTokens,
+			LogOutput:    usage.CompletionTokens,
+			Input:        float64(textInputTokens),
+			BilledInput:  float64(textInputTokens) * relayInfo.PriceData.ModelTokenAdjustment.InputMultiplier(),
+			Output:       float64(textOutTokens),
+			BilledOutput: float64(textOutTokens) * relayInfo.PriceData.ModelTokenAdjustment.OutputMultiplier(),
+		})
+	}
 	if tieredResult != nil {
 		InjectTieredBillingInfo(other, relayInfo, tieredResult)
+		if snap := relayInfo.TieredBillingSnapshot; snap != nil {
+			adjustedParams := billingexpr.ApplyModelTokenAdjustment(tieredParams, snap.ModelTokenAdjustment)
+			modelTokenAdjustmentAudit = buildModelTokenAdjustmentAudit(relayInfo, snap.ModelTokenAdjustment, modelTokenCategoryUsage{
+				LogInput:     usage.PromptTokens,
+				LogOutput:    usage.CompletionTokens,
+				Input:        tieredParams.P,
+				BilledInput:  adjustedParams.P,
+				Output:       tieredParams.C,
+				BilledOutput: adjustedParams.C,
+			})
+		}
 	}
+	attachModelTokenAdjustmentToOther(other, modelTokenAdjustmentAudit)
 	attachQuotaSaturation(ctx, relayInfo, other)
 	model.RecordConsumeLog(ctx, relayInfo.UserId, model.RecordConsumeLogParams{
 		ChannelId:        relayInfo.ChannelId,

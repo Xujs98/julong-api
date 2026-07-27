@@ -14,6 +14,7 @@ import (
 	"github.com/QuantumNous/new-api/types"
 
 	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -68,6 +69,50 @@ func TestCalculateTextQuotaSummaryUnifiedForClaudeSemantic(t *testing.T) {
 	require.Equal(t, messageSummary.CacheCreationTokens1h, chatSummary.CacheCreationTokens1h)
 	require.True(t, chatSummary.IsClaudeUsageSemantic)
 	require.Equal(t, 1488, chatSummary.Quota)
+}
+
+func TestCalculateTextQuotaSummaryAppliesModelTokenAdjustmentsByCategory(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	inputAdjustment := 0.1
+	outputAdjustment := 0.2
+	cacheReadAdjustment := 0.5
+	cacheCreationAdjustment := 1.0
+	relayInfo := &relaycommon.RelayInfo{
+		OriginModelName: "model-token-adjustment-test",
+		PriceData: types.PriceData{
+			ModelRatio:         1,
+			CompletionRatio:    1,
+			CacheRatio:         1,
+			CacheCreationRatio: 1,
+			GroupRatioInfo: types.GroupRatioInfo{
+				GroupRatio: 1,
+			},
+			ModelTokenAdjustment: types.ModelTokenAdjustment{
+				Input:         &inputAdjustment,
+				Output:        &outputAdjustment,
+				CacheRead:     &cacheReadAdjustment,
+				CacheCreation: &cacheCreationAdjustment,
+			},
+		},
+		StartTime: time.Now(),
+	}
+	usage := &dto.Usage{
+		PromptTokens:     100,
+		CompletionTokens: 50,
+		PromptTokensDetails: dto.InputTokenDetails{
+			CachedTokens:         20,
+			CachedCreationTokens: 10,
+		},
+	}
+
+	summary := calculateTextQuotaSummary(ctx, relayInfo, usage)
+
+	// Text input 70*1.1 + cache read 20*1.5 + cache creation 10*2 + output 50*1.2.
+	require.Equal(t, 187, summary.Quota)
+	require.NotNil(t, summary.ModelTokenAdjustmentAudit)
+	assert.Equal(t, types.ModelTokenUsage{Input: 100, Output: 50, CacheRead: 20, CacheCreation: 10}, summary.ModelTokenAdjustmentAudit.Actual)
+	assert.Equal(t, types.ModelTokenUsage{Input: 127, Output: 60, CacheRead: 30, CacheCreation: 20}, summary.ModelTokenAdjustmentAudit.Billed)
 }
 
 func TestCalculateTextQuotaSummaryUsesSplitClaudeCacheCreationRatios(t *testing.T) {

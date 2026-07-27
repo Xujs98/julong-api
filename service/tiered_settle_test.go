@@ -8,7 +8,10 @@ import (
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/types"
 	"github.com/shopspring/decimal"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // Claude Sonnet-style tiered expression: standard vs long-context
@@ -83,6 +86,44 @@ func TestTryTieredSettleUsesFrozenRequestInput(t *testing.T) {
 	if result == nil || result.MatchedTier != "fast" {
 		t.Fatalf("matched tier = %v, want fast", result)
 	}
+}
+
+func TestTryTieredSettleAppliesFrozenModelTokenAdjustments(t *testing.T) {
+	inputAdjustment := 0.1
+	outputAdjustment := 0.2
+	cacheReadAdjustment := 0.5
+	cacheCreationAdjustment := 1.0
+	info := makeRelayInfo(`tier("default", p + c + cr + cc + cc1h)`, 1, 0, 0)
+	info.TieredBillingSnapshot.ModelTokenAdjustment = types.ModelTokenAdjustment{
+		Input:         &inputAdjustment,
+		Output:        &outputAdjustment,
+		CacheRead:     &cacheReadAdjustment,
+		CacheCreation: &cacheCreationAdjustment,
+	}
+
+	ok, quota, result := TryTieredSettle(info, billingexpr.TokenParams{
+		P: 100, C: 50, CR: 20, CC: 10, CC1h: 5,
+	})
+
+	require.True(t, ok)
+	require.NotNil(t, result)
+	// 110 + 60 + 30 + 20 + 10 = 230; 230 / 1M * 500K = 115.
+	assert.Equal(t, 115, quota)
+}
+
+func TestTryTieredSettleKeepsLenUnadjusted(t *testing.T) {
+	inputAdjustment := 0.1
+	info := makeRelayInfo(`len == 100 ? tier("expected", p) : tier("wrong", 1000000)`, 1, 100, 0)
+	info.TieredBillingSnapshot.ModelTokenAdjustment = types.ModelTokenAdjustment{
+		Input: &inputAdjustment,
+	}
+
+	ok, quota, result := TryTieredSettle(info, billingexpr.TokenParams{P: 100, Len: 100})
+
+	require.True(t, ok)
+	require.NotNil(t, result)
+	assert.Equal(t, "expected", result.MatchedTier)
+	assert.Equal(t, 55, quota)
 }
 
 func TestTryTieredSettleFallsBackToFrozenPreConsumeOnExprError(t *testing.T) {

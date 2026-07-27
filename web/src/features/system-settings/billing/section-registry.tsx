@@ -54,6 +54,7 @@ const getGroupDefaults = (settings: BillingSettings) => ({
   TokenGroupRatioDisplayMode: settings.TokenGroupRatioDisplayMode ?? 'actual',
   GroupSpecialUsableGroup:
     settings['group_ratio_setting.group_special_usable_group'],
+  ModelTokenRatio: settings['group_ratio_setting.model_token_ratio'],
 })
 
 const BILLING_SECTIONS = [

@@ -41,6 +41,7 @@ import { cn } from '@/lib/utils'
 import { LOG_TYPE_ENUM } from '../constants'
 import type { UsageLog } from '../data/schema'
 import { parseLogOther } from '../lib/format'
+import { getTokenUsageDisplay } from '../lib/model-token-adjustment'
 import {
   getLogTypeConfig,
   isDisplayableLogType,
@@ -48,7 +49,7 @@ import {
 } from '../lib/utils'
 import type { LogCategory } from '../types'
 import { StreamTpsCell, TimingMetricsCell } from './timing-metrics-cell'
-import { useUsageLogsContext } from './usage-logs-provider'
+import { useLogsViewScope, useUsageLogsContext } from './usage-logs-provider'
 
 const logTypeRowTint: Record<number, string> = {
   [LOG_TYPE_ENUM.ERROR]:
@@ -190,11 +191,14 @@ function MobileLogTimeStatus({
 /** Mobile-only Tokens block: always show cache ↓/↑ when present (no label). */
 function MobileTokensField({ log }: { log: UsageLog }) {
   const { t } = useTranslation()
+  const { isAdminView } = useLogsViewScope()
 
   if (!isDisplayableLogType(log.type)) return null
 
-  const promptTokens = log.prompt_tokens || 0
-  const completionTokens = log.completion_tokens || 0
+  const other = parseLogOther(log.other)
+  const tokenUsage = getTokenUsageDisplay(log, other, isAdminView)
+  const promptTokens = tokenUsage.displayed.input
+  const completionTokens = tokenUsage.displayed.output
   if (promptTokens === 0 && completionTokens === 0) {
     return (
       <div className='bg-muted/20 min-w-0 rounded-md px-2 py-1.5'>
@@ -203,14 +207,8 @@ function MobileTokensField({ log }: { log: UsageLog }) {
     )
   }
 
-  const other = parseLogOther(log.other)
-  const cacheReadTokens = other?.cache_tokens || 0
-  const cacheWrite5m = other?.cache_creation_tokens_5m || 0
-  const cacheWrite1h = other?.cache_creation_tokens_1h || 0
-  const hasSplitCache = cacheWrite5m > 0 || cacheWrite1h > 0
-  const cacheWriteTokens = hasSplitCache
-    ? cacheWrite5m + cacheWrite1h
-    : other?.cache_creation_tokens || 0
+  const cacheReadTokens = tokenUsage.displayed.cache_read || 0
+  const cacheWriteTokens = tokenUsage.displayed.cache_creation || 0
   const showCache = cacheReadTokens > 0 || cacheWriteTokens > 0
 
   return (

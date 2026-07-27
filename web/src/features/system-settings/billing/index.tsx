@@ -61,6 +61,7 @@ const defaultBillingSettings: BillingSettings = {
   ModelSquareGroupRatioDisplayMode: 'actual',
   TokenGroupRatioDisplayMode: 'actual',
   'group_ratio_setting.group_special_usable_group': '{}',
+  'group_ratio_setting.model_token_ratio': '{}',
   PayAddress: '',
   EpayId: '',
   EpayKey: '',

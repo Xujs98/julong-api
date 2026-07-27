@@ -1047,7 +1047,7 @@ function GroupOverrideDialog({
     <Dialog
       open={open}
       onOpenChange={onOpenChange}
-      title={editData ? t('Edit ratio override') : t('Add ratio override')}
+      title={editData ? t('Edit ratio') : t('Add ratio')}
       description={
         userGroup
           ? t(

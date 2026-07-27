@@ -136,6 +136,7 @@ const createGroupSchema = (t: Translate) =>
     ModelSquareGroupRatioDisplayMode: z.enum(['actual', 'pricing_group']),
     TokenGroupRatioDisplayMode: z.enum(['actual', 'pricing_group']),
     GroupSpecialUsableGroup: createJsonStringField(t),
+    ModelTokenRatio: createJsonStringField(t),
   })
 
 type ModelFormValues = z.infer<ReturnType<typeof createModelSchema>>
@@ -219,6 +220,7 @@ export function RatioSettingsCard({
     GroupSpecialUsableGroup: normalizeJsonString(
       groupDefaults.GroupSpecialUsableGroup
     ),
+    ModelTokenRatio: normalizeJsonString(groupDefaults.ModelTokenRatio),
   })
   const modelSchema = useMemo(() => createModelSchema(t), [t])
   const groupSchema = useMemo(() => createGroupSchema(t), [t])
@@ -259,6 +261,7 @@ export function RatioSettingsCard({
       GroupSpecialUsableGroup: formatJsonForTextarea(
         groupDefaults.GroupSpecialUsableGroup
       ),
+      ModelTokenRatio: formatJsonForTextarea(groupDefaults.ModelTokenRatio),
     },
   })
 
@@ -317,6 +320,7 @@ export function RatioSettingsCard({
       GroupSpecialUsableGroup: normalizeJsonString(
         groupDefaults.GroupSpecialUsableGroup
       ),
+      ModelTokenRatio: normalizeJsonString(groupDefaults.ModelTokenRatio),
     }
 
     groupForm.reset({
@@ -329,6 +333,7 @@ export function RatioSettingsCard({
       GroupSpecialUsableGroup: formatJsonForTextarea(
         groupDefaults.GroupSpecialUsableGroup
       ),
+      ModelTokenRatio: formatJsonForTextarea(groupDefaults.ModelTokenRatio),
     })
   }, [groupDefaults, groupForm])
 
@@ -432,12 +437,14 @@ export function RatioSettingsCard({
         GroupSpecialUsableGroup: normalizeJsonString(
           values.GroupSpecialUsableGroup
         ),
+        ModelTokenRatio: normalizeJsonString(values.ModelTokenRatio),
       }
 
       // Map form field names to API keys (most are 1:1, except GroupSpecialUsableGroup)
       const apiKeyMap: Record<string, string> = {
         GroupSpecialUsableGroup:
           'group_ratio_setting.group_special_usable_group',
+        ModelTokenRatio: 'group_ratio_setting.model_token_ratio',
       }
 
       const updates = (

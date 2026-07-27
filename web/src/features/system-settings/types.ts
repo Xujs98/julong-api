@@ -226,6 +226,7 @@ export type ModelSettings = {
   AutoGroups: string
   DefaultUseAutoGroup: boolean
   'group_ratio_setting.group_special_usable_group': string
+  'group_ratio_setting.model_token_ratio': string
   RetryTimes: number
   ChannelDisableThreshold: string
   AutomaticDisableChannelEnabled: boolean
@@ -283,6 +284,7 @@ export type BillingSettings = {
   ModelSquareGroupRatioDisplayMode: 'actual' | 'pricing_group'
   TokenGroupRatioDisplayMode: 'actual' | 'pricing_group'
   'group_ratio_setting.group_special_usable_group': string
+  'group_ratio_setting.model_token_ratio': string
   PayAddress: string
   EpayId: string
   EpayKey: string

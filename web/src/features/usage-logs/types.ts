@@ -114,6 +114,26 @@ export const USAGE_BILLING_PATH = {
 export type UsageBillingPath =
   (typeof USAGE_BILLING_PATH)[keyof typeof USAGE_BILLING_PATH]
 
+export interface ModelTokenUsage {
+  input: number
+  output: number
+  cache_read?: number
+  cache_creation?: number
+  cache_creation_5m?: number
+  cache_creation_1h?: number
+}
+
+export interface ModelTokenAdjustmentAudit {
+  adjustments: {
+    input?: number
+    output?: number
+    cache_read?: number
+    cache_creation?: number
+  }
+  actual: ModelTokenUsage
+  billed: ModelTokenUsage
+}
+
 export interface LogOtherData {
   admin_info?: {
     is_multi_key?: boolean
@@ -143,6 +163,7 @@ export interface LogOtherData {
       original: number
       clamped: number
     }
+    model_token_adjustment?: ModelTokenAdjustmentAudit
   }
   // Language-independent operation descriptor (audit/login logs).
   // Frontend renders localized content from action + params via i18n templates.
