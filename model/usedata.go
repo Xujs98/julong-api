@@ -9,6 +9,8 @@ import (
 	"gorm.io/gorm"
 )
 
+const dashboardReportDetailLimit = 10
+
 // QuotaData 柱状图数据
 type QuotaData struct {
 	Id                   int    `json:"id"`
@@ -70,6 +72,13 @@ type DashboardReportModel struct {
 	TokenUsed int64  `json:"token_used"`
 }
 
+type DashboardReportUser struct {
+	Username  string `json:"username" gorm:"column:username"`
+	Quota     int64  `json:"quota"`
+	Count     int64  `json:"count"`
+	TokenUsed int64  `json:"token_used"`
+}
+
 type DashboardReportData struct {
 	Quota        int64                  `json:"quota"`
 	Count        int64                  `json:"count"`
@@ -79,6 +88,8 @@ type DashboardReportData struct {
 	ChannelCount int64                  `json:"channel_count"`
 	GroupCount   int64                  `json:"group_count"`
 	TopModels    []DashboardReportModel `json:"top_models" gorm:"-"`
+	TopUsers     []DashboardReportUser  `json:"top_users" gorm:"-"`
+	TopGroups    []GroupQuotaData       `json:"top_groups" gorm:"-"`
 }
 
 func UpdateQuotaData() {
@@ -289,6 +300,28 @@ func GetDashboardReportData(startTime, endTime int64) (DashboardReportData, erro
 		Order("quota DESC, model_name ASC").
 		Limit(5).
 		Scan(&report.TopModels).Error; err != nil {
+		return DashboardReportData{}, err
+	}
+
+	report.TopUsers = make([]DashboardReportUser, 0)
+	if err := DB.Table("quota_data").
+		Select("username, COALESCE(SUM(quota), 0) AS quota, COALESCE(SUM(count), 0) AS count, COALESCE(SUM(token_used), 0) AS token_used").
+		Where("created_at >= ? AND created_at < ?", startTime, endTime).
+		Group("username").
+		Order("quota DESC, username ASC").
+		Limit(dashboardReportDetailLimit).
+		Scan(&report.TopUsers).Error; err != nil {
+		return DashboardReportData{}, err
+	}
+
+	report.TopGroups = make([]GroupQuotaData, 0)
+	if err := DB.Table("quota_data").
+		Select("use_group, COALESCE(SUM(quota), 0) AS quota, COALESCE(SUM(count), 0) AS count, COALESCE(SUM(token_used), 0) AS token_used, COUNT(DISTINCT user_id) AS user_count").
+		Where("created_at >= ? AND created_at < ?", startTime, endTime).
+		Group("use_group").
+		Order("quota DESC, use_group ASC").
+		Limit(dashboardReportDetailLimit).
+		Scan(&report.TopGroups).Error; err != nil {
 		return DashboardReportData{}, err
 	}
 	return report, nil

@@ -233,6 +233,11 @@ func TestSendDashboardReportTestEmailsUsesCurrentDashboardData(t *testing.T) {
 	assert.Contains(t, content, "1,000,000")
 	assert.Contains(t, content, "codex-v1")
 	assert.Contains(t, content, "gpt-4.1")
+	assert.Contains(t, content, "用户统计")
+	assert.Contains(t, content, "mail-admin")
+	assert.Contains(t, content, "分组数据分析")
+	assert.Contains(t, content, "default")
+	assert.Contains(t, content, "vip")
 }
 
 func TestDashboardReportScheduleUsesCompletedCalendarPeriods(t *testing.T) {

@@ -131,7 +131,11 @@ func TestDashboardReportTemplateExposesReportMetrics(t *testing.T) {
 	assert.Contains(t, template.Placeholders, "report_period")
 	assert.Contains(t, template.Placeholders, "total_consumption")
 	assert.Contains(t, template.Placeholders, "top_models")
+	assert.Contains(t, template.Placeholders, "top_users")
+	assert.Contains(t, template.Placeholders, "group_analysis")
 	assert.Contains(t, template.Content, "{{active_users}}")
+	assert.Contains(t, template.Content, "{{top_users}}")
+	assert.Contains(t, template.Content, "{{group_analysis}}")
 }
 
 func TestShouldSendAccountQuotaEmailOnlyOnFirstLowBalanceOrDownwardCrossing(t *testing.T) {

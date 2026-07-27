@@ -346,8 +346,12 @@ func newDashboardReportPeriod(frequency string, start, end time.Time) dashboardR
 
 func dashboardReportTemplateValues(report model.DashboardReportData, period dashboardReportPeriod, locale string) map[string]string {
 	reportType := period.TypeZH
+	unknownUser := "未知用户"
+	unknownGroup := "未标记分组"
 	if locale == EmailTemplateLocaleEnglish {
 		reportType = period.TypeEN
+		unknownUser = "Unknown user"
+		unknownGroup = "Unassigned group"
 	}
 	topModels := make([]string, 0, len(report.TopModels))
 	for index, item := range report.TopModels {
@@ -358,6 +362,44 @@ func dashboardReportTemplateValues(report model.DashboardReportData, period dash
 			topModels = append(topModels, "No usage data")
 		} else {
 			topModels = append(topModels, "暂无使用数据")
+		}
+	}
+	topUsers := make([]string, 0, len(report.TopUsers))
+	for index, item := range report.TopUsers {
+		username := strings.TrimSpace(item.Username)
+		if username == "" {
+			username = unknownUser
+		}
+		if locale == EmailTemplateLocaleEnglish {
+			topUsers = append(topUsers, fmt.Sprintf("%d. %s  Consumption %s | Requests %s | Tokens %s", index+1, username, formatDashboardReportConsumption(item.Quota), formatDashboardReportInteger(item.Count), formatDashboardReportInteger(item.TokenUsed)))
+		} else {
+			topUsers = append(topUsers, fmt.Sprintf("%d. %s  消费 %s | 请求 %s | Token %s", index+1, username, formatDashboardReportConsumption(item.Quota), formatDashboardReportInteger(item.Count), formatDashboardReportInteger(item.TokenUsed)))
+		}
+	}
+	if len(topUsers) == 0 {
+		if locale == EmailTemplateLocaleEnglish {
+			topUsers = append(topUsers, "No user usage data")
+		} else {
+			topUsers = append(topUsers, "暂无用户使用数据")
+		}
+	}
+	groupAnalysis := make([]string, 0, len(report.TopGroups))
+	for index, item := range report.TopGroups {
+		group := strings.TrimSpace(item.UseGroup)
+		if group == "" {
+			group = unknownGroup
+		}
+		if locale == EmailTemplateLocaleEnglish {
+			groupAnalysis = append(groupAnalysis, fmt.Sprintf("%d. %s  Consumption %s | Requests %s | Tokens %s | Users %s", index+1, group, formatDashboardReportConsumption(item.Quota), formatDashboardReportInteger(item.Count), formatDashboardReportInteger(item.TokenUsed), formatDashboardReportInteger(item.UserCount)))
+		} else {
+			groupAnalysis = append(groupAnalysis, fmt.Sprintf("%d. %s  消费 %s | 请求 %s | Token %s | 用户 %s", index+1, group, formatDashboardReportConsumption(item.Quota), formatDashboardReportInteger(item.Count), formatDashboardReportInteger(item.TokenUsed), formatDashboardReportInteger(item.UserCount)))
+		}
+	}
+	if len(groupAnalysis) == 0 {
+		if locale == EmailTemplateLocaleEnglish {
+			groupAnalysis = append(groupAnalysis, "No group usage data")
+		} else {
+			groupAnalysis = append(groupAnalysis, "暂无分组使用数据")
 		}
 	}
 	return map[string]string{
@@ -373,6 +415,8 @@ func dashboardReportTemplateValues(report model.DashboardReportData, period dash
 		"active_channels":   formatDashboardReportInteger(report.ChannelCount),
 		"active_groups":     formatDashboardReportInteger(report.GroupCount),
 		"top_models":        strings.Join(topModels, "\n"),
+		"top_users":         strings.Join(topUsers, "\n"),
+		"group_analysis":    strings.Join(groupAnalysis, "\n"),
 	}
 }
 

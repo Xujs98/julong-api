@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -283,6 +284,43 @@ func TestGetQuotaDataGroupByUseGroupAggregatesMetricsAndDistinctUsers(t *testing
 	require.Len(t, aliceAnalytics.Items, 2)
 	require.Equal(t, int64(175), aliceAnalytics.Totals.Quota)
 	require.Equal(t, int64(1), aliceAnalytics.Totals.UserCount)
+}
+
+func TestGetDashboardReportDataIncludesTopUsersAndGroups(t *testing.T) {
+	truncateTables(t)
+	seedFlowQuotaData(t, QuotaData{
+		UserID: 1, Username: "alice", UseGroup: "vip", ModelName: "gpt-a", ChannelID: 1,
+		CreatedAt: 1000, Count: 2, Quota: 100, TokenUsed: 40,
+	})
+	seedFlowQuotaData(t, QuotaData{
+		UserID: 1, Username: "alice", UseGroup: "vip", ModelName: "gpt-b", ChannelID: 2,
+		CreatedAt: 1100, Count: 1, Quota: 50, TokenUsed: 20,
+	})
+	seedFlowQuotaData(t, QuotaData{
+		UserID: 2, Username: "bob", UseGroup: "default", ModelName: "gpt-a", ChannelID: 1,
+		CreatedAt: 1200, Count: 3, Quota: 75, TokenUsed: 30,
+	})
+	seedFlowQuotaData(t, QuotaData{
+		UserID: 3, Username: "outside", UseGroup: "ignored", ModelName: "outside", ChannelID: 3,
+		CreatedAt: 3000, Count: 99, Quota: 999, TokenUsed: 999,
+	})
+
+	report, err := GetDashboardReportData(900, 2000)
+	require.NoError(t, err)
+	require.Len(t, report.TopUsers, 2)
+	require.Len(t, report.TopGroups, 2)
+	assert.Equal(t, DashboardReportUser{
+		Username: "alice", Quota: 150, Count: 3, TokenUsed: 60,
+	}, report.TopUsers[0])
+	assert.Equal(t, DashboardReportUser{
+		Username: "bob", Quota: 75, Count: 3, TokenUsed: 30,
+	}, report.TopUsers[1])
+	assert.Equal(t, GroupQuotaData{
+		UseGroup: "vip", Quota: 150, Count: 3, TokenUsed: 60, UserCount: 1,
+	}, report.TopGroups[0])
+	assert.Equal(t, GroupQuotaData{
+		UseGroup: "default", Quota: 75, Count: 3, TokenUsed: 30, UserCount: 1,
+	}, report.TopGroups[1])
 }
 
 func TestSaveQuotaDataCacheIncrementsActualAndDisplayMetricsIndependently(t *testing.T) {

@@ -126,7 +126,7 @@ var (
 			Label:        "Data dashboard report",
 			Description:  "Sent to selected administrators with a completed dashboard usage summary.",
 			Category:     "Operations",
-			Placeholders: []string{"system_name", "username", "display_name", "email", "report_type", "report_period", "generated_at", "total_consumption", "total_quota", "total_requests", "total_tokens", "active_users", "active_models", "active_channels", "active_groups", "top_models"},
+			Placeholders: []string{"system_name", "username", "display_name", "email", "report_type", "report_period", "generated_at", "total_consumption", "total_quota", "total_requests", "total_tokens", "active_users", "active_models", "active_channels", "active_groups", "top_models", "top_users", "group_analysis"},
 		},
 	}
 	emailTemplateDefaults = newEmailTemplateDefaults()
@@ -243,6 +243,10 @@ func newEmailTemplateDefaults() map[string]storedEmailTemplate {
 <p>原始额度：<strong>{{total_quota}}</strong><br>活跃模型：<strong>{{active_models}}</strong>，活跃渠道：<strong>{{active_channels}}</strong>，活跃分组：<strong>{{active_groups}}</strong></p>
 <p style="margin-bottom:8px;font-weight:600;">消费最高的模型</p>
 <pre style="margin:0;padding:14px;border-radius:6px;background:#f8fafc;color:#334155;font-family:inherit;white-space:pre-wrap;word-break:break-word;">{{top_models}}</pre>
+<p style="margin:20px 0 8px;font-weight:600;">用户统计（按消费排行）</p>
+<pre style="margin:0;padding:14px;border-radius:6px;background:#f8fafc;color:#334155;font-family:inherit;white-space:pre-wrap;word-break:break-word;">{{top_users}}</pre>
+<p style="margin:20px 0 8px;font-weight:600;">分组数据分析（按消费排行）</p>
+<pre style="margin:0;padding:14px;border-radius:6px;background:#f8fafc;color:#334155;font-family:inherit;white-space:pre-wrap;word-break:break-word;">{{group_analysis}}</pre>
 <p style="margin-top:24px;color:#6b7280;font-size:12px;">生成时间：{{generated_at}}</p>`)
 	add(EmailTemplateEventDashboardReport, EmailTemplateLocaleEnglish,
 		"[{{system_name}}] {{report_type}} dashboard report {{report_period}}", "Data dashboard report", "#2563eb", `
@@ -255,6 +259,10 @@ func newEmailTemplateDefaults() map[string]storedEmailTemplate {
 <p>Raw quota: <strong>{{total_quota}}</strong><br>Active models: <strong>{{active_models}}</strong>, active channels: <strong>{{active_channels}}</strong>, active groups: <strong>{{active_groups}}</strong></p>
 <p style="margin-bottom:8px;font-weight:600;">Top models by consumption</p>
 <pre style="margin:0;padding:14px;border-radius:6px;background:#f8fafc;color:#334155;font-family:inherit;white-space:pre-wrap;word-break:break-word;">{{top_models}}</pre>
+<p style="margin:20px 0 8px;font-weight:600;">User analytics by consumption</p>
+<pre style="margin:0;padding:14px;border-radius:6px;background:#f8fafc;color:#334155;font-family:inherit;white-space:pre-wrap;word-break:break-word;">{{top_users}}</pre>
+<p style="margin:20px 0 8px;font-weight:600;">Group data analysis by consumption</p>
+<pre style="margin:0;padding:14px;border-radius:6px;background:#f8fafc;color:#334155;font-family:inherit;white-space:pre-wrap;word-break:break-word;">{{group_analysis}}</pre>
 <p style="margin-top:24px;color:#6b7280;font-size:12px;">Generated at {{generated_at}}</p>`)
 
 	return defaults
@@ -518,11 +526,15 @@ func emailTemplateSampleValues(locale string) map[string]string {
 		"active_channels":       "12",
 		"active_groups":         "4",
 		"top_models":            "1. gpt-4.1  $52.30\n2. claude-sonnet-4  $41.20\n3. gemini-2.5-pro  $23.80",
+		"top_users":             "1. alice  消费 $62.10 | 请求 5,320 | Token 20,100,000\n2. bob  消费 $41.30 | 请求 3,210 | Token 15,200,000",
+		"group_analysis":        "1. default  消费 $72.40 | 请求 7,100 | Token 27,800,000 | 用户 210\n2. vip  消费 $56.10 | 请求 5,480 | Token 20,520,000 | 用户 118",
 	}
 	if locale == EmailTemplateLocaleEnglish {
 		values["display_name"] = "Demo User"
 		values["balance_type"] = "wallet balance"
 		values["report_type"] = "Daily"
+		values["top_users"] = "1. alice  Consumption $62.10 | Requests 5,320 | Tokens 20,100,000\n2. bob  Consumption $41.30 | Requests 3,210 | Tokens 15,200,000"
+		values["group_analysis"] = "1. default  Consumption $72.40 | Requests 7,100 | Tokens 27,800,000 | Users 210\n2. vip  Consumption $56.10 | Requests 5,480 | Tokens 20,520,000 | Users 118"
 	}
 	return values
 }

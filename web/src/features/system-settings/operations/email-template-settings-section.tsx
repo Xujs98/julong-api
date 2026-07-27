@@ -77,6 +77,8 @@ const PLACEHOLDER_LABELS: Record<string, string> = {
   active_channels: 'Active channels',
   active_groups: 'Active groups',
   top_models: 'Top models',
+  top_users: 'User Analytics',
+  group_analysis: 'Group Data Analysis',
 }
 
 const SAMPLE_VALUES: Record<EmailTemplateLocale, Record<string, string>> = {
@@ -115,6 +117,10 @@ const SAMPLE_VALUES: Record<EmailTemplateLocale, Record<string, string>> = {
     active_groups: '4',
     top_models:
       '1. gpt-4.1  $52.30\n2. claude-sonnet-4  $41.20\n3. gemini-2.5-pro  $23.80',
+    top_users:
+      '1. alice  消费 $62.10 | 请求 5,320 | Token 20,100,000\n2. bob  消费 $41.30 | 请求 3,210 | Token 15,200,000',
+    group_analysis:
+      '1. default  消费 $72.40 | 请求 7,100 | Token 27,800,000 | 用户 210\n2. vip  消费 $56.10 | 请求 5,480 | Token 20,520,000 | 用户 118',
   },
   en: {
     system_name: 'Julong API',
@@ -151,6 +157,10 @@ const SAMPLE_VALUES: Record<EmailTemplateLocale, Record<string, string>> = {
     active_groups: '4',
     top_models:
       '1. gpt-4.1  $52.30\n2. claude-sonnet-4  $41.20\n3. gemini-2.5-pro  $23.80',
+    top_users:
+      '1. alice  Consumption $62.10 | Requests 5,320 | Tokens 20,100,000\n2. bob  Consumption $41.30 | Requests 3,210 | Tokens 15,200,000',
+    group_analysis:
+      '1. default  Consumption $72.40 | Requests 7,100 | Tokens 27,800,000 | Users 210\n2. vip  Consumption $56.10 | Requests 5,480 | Tokens 20,520,000 | Users 118',
   },
 }
 
