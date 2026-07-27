@@ -165,6 +165,7 @@ export interface LogOtherData {
     }
     model_token_adjustment?: ModelTokenAdjustmentAudit
     billing_revenue?: {
+      original_quota?: number
       group_special_ratio?: number
       model_token_adjustment?: number
     }

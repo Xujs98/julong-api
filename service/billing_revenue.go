@@ -12,22 +12,36 @@ import (
 type billingRevenueCounterfactuals struct {
 	WithoutGroupSpecialRatio    *int
 	WithoutModelTokenAdjustment *int
+	OriginalQuota               *int
 }
 
 func calculateAudioBillingRevenueCounterfactuals(relayInfo *relaycommon.RelayInfo, quotaInfo QuotaInfo) billingRevenueCounterfactuals {
 	counterfactuals := billingRevenueCounterfactuals{}
 	groupRatioInfo := relayInfo.PriceData.GroupRatioInfo
-	if groupRatioInfo.HasSpecialRatio && groupRatioInfo.PricingGroupRatio >= 0 {
+	hasGroupSpecialRatio := groupRatioInfo.HasSpecialRatio && groupRatioInfo.PricingGroupRatio >= 0
+	hasModelTokenAdjustment := !quotaInfo.UsePrice && quotaInfo.ModelTokenAdjustment.HasAny()
+	if hasGroupSpecialRatio {
 		withoutSpecialRatio := quotaInfo
 		withoutSpecialRatio.GroupRatio = groupRatioInfo.PricingGroupRatio
 		quota, _ := calculateAudioQuota(withoutSpecialRatio)
 		counterfactuals.WithoutGroupSpecialRatio = &quota
 	}
-	if !quotaInfo.UsePrice && quotaInfo.ModelTokenAdjustment.HasAny() {
+	if hasModelTokenAdjustment {
 		withoutModelAdjustment := quotaInfo
 		withoutModelAdjustment.ModelTokenAdjustment = types.ModelTokenAdjustment{}
 		quota, _ := calculateAudioQuota(withoutModelAdjustment)
 		counterfactuals.WithoutModelTokenAdjustment = &quota
+	}
+	if hasGroupSpecialRatio || hasModelTokenAdjustment {
+		original := quotaInfo
+		if hasGroupSpecialRatio {
+			original.GroupRatio = groupRatioInfo.PricingGroupRatio
+		}
+		if hasModelTokenAdjustment {
+			original.ModelTokenAdjustment = types.ModelTokenAdjustment{}
+		}
+		quota, _ := calculateAudioQuota(original)
+		counterfactuals.OriginalQuota = &quota
 	}
 	return counterfactuals
 }
@@ -39,25 +53,36 @@ func calculateTieredBillingRevenueCounterfactuals(relayInfo *relaycommon.RelayIn
 	}
 
 	groupRatioInfo := relayInfo.PriceData.GroupRatioInfo
-	if groupRatioInfo.HasSpecialRatio && groupRatioInfo.PricingGroupRatio >= 0 {
+	hasGroupSpecialRatio := groupRatioInfo.HasSpecialRatio && groupRatioInfo.PricingGroupRatio >= 0
+	if hasGroupSpecialRatio {
 		quota := tieredQuotaWithSurcharge(actualResult.ActualQuotaBeforeGroup, groupRatioInfo.PricingGroupRatio, surchargeBeforeGroup)
 		counterfactuals.WithoutGroupSpecialRatio = &quota
 	}
 
 	snapshot := relayInfo.TieredBillingSnapshot
-	if !snapshot.ModelTokenAdjustment.HasAny() {
-		return counterfactuals
+	hasModelTokenAdjustment := snapshot.ModelTokenAdjustment.HasAny()
+	originalQuotaBeforeGroup := actualResult.ActualQuotaBeforeGroup
+	if hasModelTokenAdjustment {
+		requestInput := billingexpr.RequestInput{}
+		if relayInfo.BillingRequestInput != nil {
+			requestInput = *relayInfo.BillingRequestInput
+		}
+		withoutModelAdjustment, err := billingexpr.ComputeTieredQuotaWithRequest(snapshot, params, requestInput)
+		if err != nil {
+			return counterfactuals
+		}
+		quota := tieredQuotaWithSurcharge(withoutModelAdjustment.ActualQuotaBeforeGroup, snapshot.GroupRatio, surchargeBeforeGroup)
+		counterfactuals.WithoutModelTokenAdjustment = &quota
+		originalQuotaBeforeGroup = withoutModelAdjustment.ActualQuotaBeforeGroup
 	}
-	requestInput := billingexpr.RequestInput{}
-	if relayInfo.BillingRequestInput != nil {
-		requestInput = *relayInfo.BillingRequestInput
+	if hasGroupSpecialRatio || hasModelTokenAdjustment {
+		originalGroupRatio := snapshot.GroupRatio
+		if hasGroupSpecialRatio {
+			originalGroupRatio = groupRatioInfo.PricingGroupRatio
+		}
+		quota := tieredQuotaWithSurcharge(originalQuotaBeforeGroup, originalGroupRatio, surchargeBeforeGroup)
+		counterfactuals.OriginalQuota = &quota
 	}
-	withoutModelAdjustment, err := billingexpr.ComputeTieredQuotaWithRequest(snapshot, params, requestInput)
-	if err != nil {
-		return counterfactuals
-	}
-	quota := tieredQuotaWithSurcharge(withoutModelAdjustment.ActualQuotaBeforeGroup, snapshot.GroupRatio, surchargeBeforeGroup)
-	counterfactuals.WithoutModelTokenAdjustment = &quota
 	return counterfactuals
 }
 
@@ -70,6 +95,10 @@ func tieredQuotaWithSurcharge(quotaBeforeGroup float64, groupRatio float64, surc
 
 func buildBillingRevenueAudit(finalQuota int, counterfactuals billingRevenueCounterfactuals) *types.BillingRevenueAudit {
 	audit := &types.BillingRevenueAudit{}
+	if counterfactuals.OriginalQuota != nil {
+		originalQuota := int64(*counterfactuals.OriginalQuota)
+		audit.OriginalQuota = &originalQuota
+	}
 	if counterfactuals.WithoutGroupSpecialRatio != nil {
 		revenue := int64(finalQuota) - int64(*counterfactuals.WithoutGroupSpecialRatio)
 		audit.GroupSpecialRatio = &revenue

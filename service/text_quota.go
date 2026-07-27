@@ -261,6 +261,8 @@ func calculateTextQuotaSummary(ctx *gin.Context, relayInfo *relaycommon.RelayInf
 	dCacheCreationTokenMultiplier := decimal.NewFromFloat(modelTokenAdjustment.CacheCreationMultiplier())
 
 	ratio := dModelRatio.Mul(dGroupRatio)
+	groupRatioInfo := relayInfo.PriceData.GroupRatioInfo
+	hasGroupSpecialRatio := groupRatioInfo.HasSpecialRatio && groupRatioInfo.PricingGroupRatio >= 0
 	summary.ToolCallSurchargeBase = calculateTextToolCallSurchargeBase(ctx, relayInfo, &summary)
 	summary.ToolCallSurchargeQuota = summary.ToolCallSurchargeBase.Mul(dGroupRatio)
 
@@ -332,11 +334,13 @@ func calculateTextQuotaSummary(ctx *gin.Context, relayInfo *relaycommon.RelayInf
 		summary.Quota = quota
 		noteQuotaClamp(relayInfo, clamp)
 
+		quotaBeforeGroupWithoutModelAdjustment := quotaBeforeGroup
 		if modelTokenAdjustment.HasAny() {
 			promptQuotaWithoutAdjustment := baseTokens.Add(cachedTokensBase).Add(imageTokensWithRatio).Add(cachedCreationTokensBase)
 			completionQuotaWithoutAdjustment := dCompletionTokens.Mul(dCompletionRatio)
-			withoutModelAdjustment := promptQuotaWithoutAdjustment.Add(completionQuotaWithoutAdjustment).
-				Mul(dModelRatio).
+			quotaBeforeGroupWithoutModelAdjustment = promptQuotaWithoutAdjustment.Add(completionQuotaWithoutAdjustment).
+				Mul(dModelRatio)
+			withoutModelAdjustment := quotaBeforeGroupWithoutModelAdjustment.
 				Mul(dGroupRatio).
 				Add(summary.ToolCallSurchargeQuota).
 				Add(audioInputQuotaBase.Mul(dGroupRatio))
@@ -345,8 +349,7 @@ func calculateTextQuotaSummary(ctx *gin.Context, relayInfo *relaycommon.RelayInf
 			summary.BillingCounterfactuals.WithoutModelTokenAdjustment = &counterfactualQuota
 		}
 
-		groupRatioInfo := relayInfo.PriceData.GroupRatioInfo
-		if groupRatioInfo.HasSpecialRatio && groupRatioInfo.PricingGroupRatio >= 0 {
+		if hasGroupSpecialRatio {
 			pricingGroupRatio := decimal.NewFromFloat(groupRatioInfo.PricingGroupRatio)
 			withoutSpecialRatio := quotaBeforeGroup.Mul(pricingGroupRatio).
 				Add(summary.ToolCallSurchargeBase.Mul(pricingGroupRatio)).
@@ -354,6 +357,18 @@ func calculateTextQuotaSummary(ctx *gin.Context, relayInfo *relaycommon.RelayInf
 			withoutSpecialRatio = relayInfo.PriceData.ApplyOtherRatiosToDecimal(withoutSpecialRatio)
 			counterfactualQuota, _ := finalizeTextQuota(withoutSpecialRatio, dModelRatio.Mul(pricingGroupRatio), summary.TotalTokens)
 			summary.BillingCounterfactuals.WithoutGroupSpecialRatio = &counterfactualQuota
+		}
+		if hasGroupSpecialRatio || modelTokenAdjustment.HasAny() {
+			originalGroupRatio := dGroupRatio
+			if hasGroupSpecialRatio {
+				originalGroupRatio = decimal.NewFromFloat(groupRatioInfo.PricingGroupRatio)
+			}
+			originalQuota := quotaBeforeGroupWithoutModelAdjustment.Mul(originalGroupRatio).
+				Add(summary.ToolCallSurchargeBase.Mul(originalGroupRatio)).
+				Add(audioInputQuotaBase.Mul(originalGroupRatio))
+			originalQuota = relayInfo.PriceData.ApplyOtherRatiosToDecimal(originalQuota)
+			counterfactualQuota, _ := finalizeTextQuota(originalQuota, dModelRatio.Mul(originalGroupRatio), summary.TotalTokens)
+			summary.BillingCounterfactuals.OriginalQuota = &counterfactualQuota
 		}
 
 		cacheCreationTokens := cacheWriteTokensTotal(summary)
@@ -384,12 +399,12 @@ func calculateTextQuotaSummary(ctx *gin.Context, relayInfo *relaycommon.RelayInf
 		summary.Quota = quota
 		noteQuotaClamp(relayInfo, clamp)
 
-		groupRatioInfo := relayInfo.PriceData.GroupRatioInfo
-		if groupRatioInfo.HasSpecialRatio && groupRatioInfo.PricingGroupRatio >= 0 {
+		if hasGroupSpecialRatio {
 			pricingGroupRatio := decimal.NewFromFloat(groupRatioInfo.PricingGroupRatio)
 			withoutSpecialRatio := relayInfo.PriceData.ApplyOtherRatiosToDecimal(quotaBeforeGroup.Mul(pricingGroupRatio))
 			counterfactualQuota, _ := finalizeTextQuota(withoutSpecialRatio, decimal.Zero, summary.TotalTokens)
 			summary.BillingCounterfactuals.WithoutGroupSpecialRatio = &counterfactualQuota
+			summary.BillingCounterfactuals.OriginalQuota = &counterfactualQuota
 		}
 	}
 

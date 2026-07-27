@@ -19,11 +19,12 @@ For commercial licensing, please contact support@quantumnous.com
 import type { LogOtherData } from '../types'
 
 export type BillingRevenueLabelKey =
+  | 'Original cost'
   | 'Group special ratio revenue'
   | 'Model ratio revenue'
 
 export interface BillingRevenueItem {
-  key: 'group_special_ratio' | 'model_token_adjustment'
+  key: 'original_quota' | 'group_special_ratio' | 'model_token_adjustment'
   labelKey: BillingRevenueLabelKey
   quota: number
 }
@@ -38,6 +39,16 @@ export function getBillingRevenueItems(
   if (!revenue) return []
 
   const items: BillingRevenueItem[] = []
+  if (
+    revenue.original_quota != null &&
+    Number.isFinite(revenue.original_quota)
+  ) {
+    items.push({
+      key: 'original_quota',
+      labelKey: 'Original cost',
+      quota: revenue.original_quota,
+    })
+  }
   if (
     revenue.group_special_ratio != null &&
     Number.isFinite(revenue.group_special_ratio)

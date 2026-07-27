@@ -24,6 +24,7 @@ import { getBillingRevenueItems } from '../lib/billing-revenue.ts'
 const other = {
   admin_info: {
     billing_revenue: {
+      original_quota: 150,
       group_special_ratio: -20,
       model_token_adjustment: 0,
     },
@@ -31,8 +32,13 @@ const other = {
 }
 
 describe('getBillingRevenueItems', () => {
-  test('returns both configured revenue values for administrators', () => {
+  test('returns the configured cost breakdown for administrators', () => {
     assert.deepEqual(getBillingRevenueItems(other, true), [
+      {
+        key: 'original_quota',
+        labelKey: 'Original cost',
+        quota: 150,
+      },
       {
         key: 'group_special_ratio',
         labelKey: 'Group special ratio revenue',

@@ -43,9 +43,11 @@ func TestCalculateTextQuotaSummaryTracksBillingRevenueCounterfactuals(t *testing
 	audit := buildBillingRevenueAudit(summary.Quota, summary.BillingCounterfactuals)
 
 	require.NotNil(t, audit)
+	require.NotNil(t, audit.OriginalQuota)
 	require.NotNil(t, audit.GroupSpecialRatio)
 	require.NotNil(t, audit.ModelTokenAdjustment)
 	assert.Equal(t, 220, summary.Quota)
+	assert.Equal(t, int64(150), *audit.OriginalQuota)
 	assert.Equal(t, int64(55), *audit.GroupSpecialRatio)
 	assert.Equal(t, int64(20), *audit.ModelTokenAdjustment)
 }
@@ -82,11 +84,44 @@ func TestTieredBillingRevenueUsesUnadjustedTokensAndPricingGroup(t *testing.T) {
 	audit := buildBillingRevenueAudit(finalQuota, counterfactuals)
 
 	require.NotNil(t, audit)
+	require.NotNil(t, audit.OriginalQuota)
 	require.NotNil(t, audit.GroupSpecialRatio)
 	require.NotNil(t, audit.ModelTokenAdjustment)
 	assert.Equal(t, 220, finalQuota)
+	assert.Equal(t, int64(150), *audit.OriginalQuota)
 	assert.Equal(t, int64(55), *audit.GroupSpecialRatio)
 	assert.Equal(t, int64(20), *audit.ModelTokenAdjustment)
+}
+
+func TestAudioBillingRevenueTracksOriginalQuota(t *testing.T) {
+	inputAdjustment := 0.1
+	relayInfo := &relaycommon.RelayInfo{
+		PriceData: types.PriceData{
+			GroupRatioInfo: types.GroupRatioInfo{
+				GroupRatio:        2,
+				GroupSpecialRatio: 2,
+				PricingGroupRatio: 1.5,
+				HasSpecialRatio:   true,
+			},
+		},
+	}
+	quotaInfo := QuotaInfo{
+		InputDetails: TokenDetails{TextTokens: 100},
+		ModelName:    "revenue-model",
+		ModelRatio:   1,
+		GroupRatio:   2,
+		ModelTokenAdjustment: types.ModelTokenAdjustment{
+			Input: &inputAdjustment,
+		},
+	}
+	finalQuota, _ := calculateAudioQuota(quotaInfo)
+	counterfactuals := calculateAudioBillingRevenueCounterfactuals(relayInfo, quotaInfo)
+	audit := buildBillingRevenueAudit(finalQuota, counterfactuals)
+
+	require.NotNil(t, audit)
+	require.NotNil(t, audit.OriginalQuota)
+	assert.Equal(t, 220, finalQuota)
+	assert.Equal(t, int64(150), *audit.OriginalQuota)
 }
 
 func TestBuildBillingRevenueAuditPreservesDiscountsAsNegativeRevenue(t *testing.T) {
