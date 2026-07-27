@@ -21,24 +21,31 @@ import { describe, test } from 'node:test'
 
 import {
   formatUserGroupRatio,
-  getSortedUserGroupRatios,
+  getSortedUserGroupUsage,
   userGroupRatiosCardClassName,
 } from '../user-group-ratios-card-layout.ts'
 
 describe('UserGroupRatiosCard', () => {
-  test('keeps every actual group ratio and sorts groups consistently', () => {
-    const ratios = getSortedUserGroupRatios({
-      vip: 0.35,
-      default: 1,
-      svip: 0.25,
+  test('keeps selected group usage and sorts groups consistently', () => {
+    const usage = getSortedUserGroupUsage({
+      svip: { ratio: 0.25, quota: 120, token_used: 300 },
+      'codex-v1': { ratio: 0.08, quota: 80, token_used: 1000 },
     })
 
-    assert.deepEqual(ratios, [
-      { group: 'default', ratio: 1 },
-      { group: 'svip', ratio: 0.25 },
-      { group: 'vip', ratio: 0.35 },
+    assert.deepEqual(usage, [
+      {
+        group: 'codex-v1',
+        ratio: 0.08,
+        quota: 80,
+        tokenUsed: 1000,
+      },
+      { group: 'svip', ratio: 0.25, quota: 120, tokenUsed: 300 },
     ])
-    assert.equal(`${formatUserGroupRatio(ratios[2].ratio)}x`, '0.35x')
+    assert.equal(`${formatUserGroupRatio(usage[0].ratio)}x`, '0.08x')
+  })
+
+  test('returns no cards when the user selected no token groups', () => {
+    assert.deepEqual(getSortedUserGroupUsage({}), [])
   })
 
   test('uses a bordered card container below the user identity', () => {

@@ -16,19 +16,28 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-export interface UserGroupRatio {
+import type { UserGroupUsage } from '../types'
+
+export interface UserGroupUsageItem {
   group: string
   ratio: number
+  quota: number
+  tokenUsed: number
 }
 
 export const userGroupRatiosCardClassName =
   'mb-4 rounded-md border bg-muted/30 p-3 text-left'
 
-export function getSortedUserGroupRatios(
-  groupRatios: Record<string, number>
-): UserGroupRatio[] {
-  return Object.entries(groupRatios)
-    .map(([group, ratio]) => ({ group, ratio }))
+export function getSortedUserGroupUsage(
+  groupUsage: Record<string, UserGroupUsage>
+): UserGroupUsageItem[] {
+  return Object.entries(groupUsage)
+    .map(([group, usage]) => ({
+      group,
+      ratio: usage.ratio,
+      quota: usage.quota,
+      tokenUsed: usage.token_used,
+    }))
     .sort((left, right) => left.group.localeCompare(right.group))
 }
 

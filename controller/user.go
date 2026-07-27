@@ -20,7 +20,6 @@ import (
 	"github.com/QuantumNous/new-api/service/authz"
 	"github.com/QuantumNous/new-api/setting"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
-	"github.com/QuantumNous/new-api/setting/ratio_setting"
 
 	"github.com/QuantumNous/new-api/constant"
 
@@ -449,15 +448,38 @@ func AdminGetUserUsageSummary(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-	groupRatios := make(map[string]float64)
-	for groupName := range ratio_setting.GetGroupRatioCopy() {
-		groupRatios[groupName] = service.GetUserGroupRatio(user.Group, groupName)
+	selectedGroups, err := model.GetUserSelectedTokenGroups(user.Id)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	groupUsageRows, err := model.GetUserGroupUsage(user.Id, selectedGroups)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	usageByGroup := make(map[string]model.UserGroupUsage, len(groupUsageRows))
+	for _, usage := range groupUsageRows {
+		usageByGroup[usage.UseGroup] = usage
+	}
+	groupRatios := make(map[string]float64, len(selectedGroups))
+	groupUsage := make(map[string]gin.H, len(selectedGroups))
+	for _, groupName := range selectedGroups {
+		ratio := service.GetUserGroupRatio(user.Group, groupName)
+		usage := usageByGroup[groupName]
+		groupRatios[groupName] = ratio
+		groupUsage[groupName] = gin.H{
+			"ratio":      ratio,
+			"quota":      usage.Quota,
+			"token_used": usage.TokenUsed,
+		}
 	}
 	common.ApiSuccess(c, gin.H{
 		"total_tokens": totalTokens,
 		"today_tokens": todayUsage.TotalTokens,
 		"today_quota":  todayUsage.TotalQuota,
 		"group_ratios": groupRatios,
+		"group_usage":  groupUsage,
 	})
 }
 

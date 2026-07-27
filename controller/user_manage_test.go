@@ -33,7 +33,7 @@ func setupManageUserTestDB(t *testing.T) *gorm.DB {
 	require.NoError(t, err)
 	model.DB, model.LOG_DB = db, db
 	require.NoError(t, db.AutoMigrate(
-		&model.User{}, &model.UserSession{}, &model.Log{}, &model.CasbinRule{}, &model.AuthzRole{},
+		&model.User{}, &model.UserSession{}, &model.Token{}, &model.Log{}, &model.CasbinRule{}, &model.AuthzRole{},
 	))
 
 	t.Cleanup(func() {
@@ -214,21 +214,32 @@ func TestAdminGetUserQuotaIncreaseLogsReturnsTargetUserPage(t *testing.T) {
 	assert.NotContains(t, recorder.Body.String(), `"quota":120`)
 }
 
-func TestAdminGetUserUsageSummaryReturnsActualRatiosForAllGroups(t *testing.T) {
+func TestAdminGetUserUsageSummaryReturnsSelectedGroupRatiosAndUsage(t *testing.T) {
 	db := setupManageUserTestDB(t)
 	previousGroupRatio := ratio_setting.GroupRatio2JSONString()
 	previousGroupGroupRatio := ratio_setting.GroupGroupRatio2JSONString()
-	require.NoError(t, ratio_setting.UpdateGroupRatioByJSONString(`{"default":1,"vip":0.8,"svip":0.6}`))
-	require.NoError(t, ratio_setting.UpdateGroupGroupRatioByJSONString(`{"vip":{"vip":0.35,"svip":0.25}}`))
+	require.NoError(t, ratio_setting.UpdateGroupRatioByJSONString(`{"default":1,"vip":0.8,"svip":0.6,"codex-v1":0.12}`))
+	require.NoError(t, ratio_setting.UpdateGroupGroupRatioByJSONString(`{"default":{"svip":0.4,"codex-v1":0.08}}`))
 	t.Cleanup(func() {
 		require.NoError(t, ratio_setting.UpdateGroupRatioByJSONString(previousGroupRatio))
 		require.NoError(t, ratio_setting.UpdateGroupGroupRatioByJSONString(previousGroupGroupRatio))
 	})
 	user := model.User{
 		Username: "usage-summary-user", Password: "password", Role: common.RoleCommonUser,
-		Status: common.UserStatusEnabled, Group: "vip",
+		Status: common.UserStatusEnabled, Group: "default",
 	}
 	require.NoError(t, db.Create(&user).Error)
+	require.NoError(t, db.Create(&[]model.Token{
+		{UserId: user.Id, Key: "usage-summary-svip", Name: "svip", Group: "svip"},
+		{UserId: user.Id, Key: "usage-summary-codex", Name: "codex", Group: "codex-v1"},
+	}).Error)
+	require.NoError(t, db.Create(&[]model.Log{
+		{UserId: user.Id, Type: model.LogTypeConsume, Group: "svip", Quota: 120, PromptTokens: 200, CompletionTokens: 100},
+		{UserId: user.Id, Type: model.LogTypeConsume, Group: "svip", Quota: 30, PromptTokens: 20, CompletionTokens: 10},
+		{UserId: user.Id, Type: model.LogTypeConsume, Group: "codex-v1", Quota: 80, PromptTokens: 800, CompletionTokens: 200},
+		{UserId: user.Id, Type: model.LogTypeConsume, Group: "vip", Quota: 999, PromptTokens: 999, CompletionTokens: 1},
+		{UserId: user.Id, Type: model.LogTypeRefund, Group: "codex-v1", Quota: -20, PromptTokens: 100, CompletionTokens: 100},
+	}).Error)
 
 	gin.SetMode(gin.TestMode)
 	recorder := httptest.NewRecorder()
@@ -246,13 +257,26 @@ func TestAdminGetUserUsageSummaryReturnsActualRatiosForAllGroups(t *testing.T) {
 		Success bool `json:"success"`
 		Data    struct {
 			GroupRatios map[string]float64 `json:"group_ratios"`
+			GroupUsage  map[string]struct {
+				Ratio     float64 `json:"ratio"`
+				Quota     int64   `json:"quota"`
+				TokenUsed int64   `json:"token_used"`
+			} `json:"group_usage"`
 		} `json:"data"`
 	}
 	require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &response))
 	assert.True(t, response.Success)
 	assert.Equal(t, map[string]float64{
-		"default": 1,
-		"vip":     0.35,
-		"svip":    0.25,
+		"codex-v1": 0.08,
+		"svip":     0.4,
 	}, response.Data.GroupRatios)
+	require.Len(t, response.Data.GroupUsage, 2)
+	assert.Equal(t, 0.08, response.Data.GroupUsage["codex-v1"].Ratio)
+	assert.EqualValues(t, 80, response.Data.GroupUsage["codex-v1"].Quota)
+	assert.EqualValues(t, 1000, response.Data.GroupUsage["codex-v1"].TokenUsed)
+	assert.Equal(t, 0.4, response.Data.GroupUsage["svip"].Ratio)
+	assert.EqualValues(t, 150, response.Data.GroupUsage["svip"].Quota)
+	assert.EqualValues(t, 330, response.Data.GroupUsage["svip"].TokenUsed)
+	assert.NotContains(t, response.Data.GroupUsage, "default")
+	assert.NotContains(t, response.Data.GroupUsage, "vip")
 }

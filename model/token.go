@@ -9,6 +9,7 @@ import (
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/bytedance/gopkg/util/gopool"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type Token struct {
@@ -83,6 +84,20 @@ func GetAllUserTokens(userId int, startIdx int, num int) ([]*Token, error) {
 	var err error
 	err = DB.Where("user_id = ?", userId).Order("id desc").Limit(num).Offset(startIdx).Find(&tokens).Error
 	return tokens, err
+}
+
+func GetUserSelectedTokenGroups(userId int) ([]string, error) {
+	groups := make([]string, 0)
+	err := DB.Model(&Token{}).
+		Clauses(clause.Select{
+			Distinct: true,
+			Columns:  []clause.Column{{Name: "group"}},
+		}).
+		Where(map[string]interface{}{"user_id": userId}).
+		Where(clause.Neq{Column: clause.Column{Name: "group"}, Value: ""}).
+		Order(clause.OrderByColumn{Column: clause.Column{Name: "group"}}).
+		Find(&groups).Error
+	return groups, err
 }
 
 // sanitizeLikePattern 校验并清洗用户输入的 LIKE 搜索模式。

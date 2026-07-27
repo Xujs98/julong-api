@@ -16,6 +16,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 func applyExplicitLogTextFilter(tx *gorm.DB, column string, value string) (*gorm.DB, error) {
@@ -1065,6 +1066,12 @@ type UserUsageSummary struct {
 	TotalQuota  int64 `gorm:"column:total_quota"`
 }
 
+type UserGroupUsage struct {
+	UseGroup  string `gorm:"column:use_group"`
+	Quota     int64  `gorm:"column:quota"`
+	TokenUsed int64  `gorm:"column:token_used"`
+}
+
 func GetUserUsageSummaryBetween(userId int, startTimestamp int64, endTimestamp int64) (summary UserUsageSummary, err error) {
 	err = LOG_DB.Table("logs").
 		Select("COALESCE(sum(prompt_tokens), 0) + COALESCE(sum(completion_tokens), 0) AS total_tokens, COALESCE(sum(quota), 0) AS total_quota").
@@ -1077,6 +1084,27 @@ func GetUserUsageSummaryBetween(userId int, startTimestamp int64, endTimestamp i
 		).
 		Scan(&summary).Error
 	return summary, err
+}
+
+func GetUserGroupUsage(userId int, groups []string) ([]UserGroupUsage, error) {
+	usage := make([]UserGroupUsage, 0, len(groups))
+	if len(groups) == 0 {
+		return usage, nil
+	}
+	err := LOG_DB.Table("logs").
+		Clauses(clause.Select{Columns: []clause.Column{
+			{Name: "group", Alias: "use_group"},
+			{Name: "COALESCE(SUM(quota), 0)", Alias: "quota", Raw: true},
+			{Name: "COALESCE(SUM(prompt_tokens), 0) + COALESCE(SUM(completion_tokens), 0)", Alias: "token_used", Raw: true},
+		}}).
+		Where(map[string]interface{}{
+			"user_id": userId,
+			"type":    LogTypeConsume,
+			"group":   groups,
+		}).
+		Clauses(clause.GroupBy{Columns: []clause.Column{{Name: "group"}}}).
+		Scan(&usage).Error
+	return usage, err
 }
 
 func CountOldLog(ctx context.Context, targetTimestamp int64) (int64, error) {

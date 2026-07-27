@@ -172,6 +172,13 @@ export interface UserUsageSummary {
   today_tokens: number
   today_quota: number
   group_ratios: Record<string, number>
+  group_usage?: Record<string, UserGroupUsage>
+}
+
+export interface UserGroupUsage {
+  ratio: number
+  quota: number
+  token_used: number
 }
 
 export interface UserQuotaIncreaseLog {

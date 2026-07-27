@@ -546,7 +546,7 @@ export function UserDetailDialog() {
   const totalTokens = summaryQuery.data?.total_tokens ?? 0
   const todayTokens = summaryQuery.data?.today_tokens ?? 0
   const todayQuota = summaryQuery.data?.today_quota ?? 0
-  const groupRatios = summaryQuery.data?.group_ratios ?? {}
+  const groupUsage = summaryQuery.data?.group_usage ?? {}
   const logs = logsQuery.data || []
   const daysSinceLastLogin = getDaysSinceLastLogin(user?.last_login_at)
   let logRows: ReactNode
@@ -621,7 +621,7 @@ export function UserDetailDialog() {
               </div>
             </div>
           ) : (
-            <UserGroupRatiosCard groupRatios={groupRatios} />
+            <UserGroupRatiosCard groupUsage={groupUsage} />
           )}
           <div className='grid grid-cols-2 border-t sm:grid-cols-6'>
             <Metric
