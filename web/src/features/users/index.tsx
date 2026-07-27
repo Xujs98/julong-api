@@ -16,12 +16,16 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 
 import { SectionPageLayout } from '@/components/layout'
 
+import { listUserTags } from './api'
 import { AgentDetailDialog } from './components/agent-detail-dialog'
+import { UserBatchQuotaDialog } from './components/user-batch-quota-dialog'
 import { UserDetailDialog } from './components/user-detail-dialog'
+import { UserTagsDialog } from './components/user-tags-dialog'
 import { UsersDeleteDialog } from './components/users-delete-dialog'
 import { UsersMutateDrawer } from './components/users-mutate-drawer'
 import { UsersPrimaryButtons } from './components/users-primary-buttons'
@@ -30,7 +34,18 @@ import { UsersTable } from './components/users-table'
 
 function UsersContent() {
   const { t } = useTranslation()
-  const { open, setOpen, currentRow } = useUsers()
+  const { open, setOpen, currentRow, triggerRefresh } = useUsers()
+  const tagsQuery = useQuery({
+    queryKey: ['user-tags'],
+    queryFn: async () => {
+      const response = await listUserTags()
+      if (!response.success) {
+        throw new Error(response.message || t('Failed to load tags'))
+      }
+      return response.data || []
+    },
+  })
+  const tags = tagsQuery.data || []
 
   return (
     <>
@@ -40,7 +55,7 @@ function UsersContent() {
           <UsersPrimaryButtons />
         </SectionPageLayout.Actions>
         <SectionPageLayout.Content>
-          <UsersTable />
+          <UsersTable tags={tags} />
         </SectionPageLayout.Content>
       </SectionPageLayout>
 
@@ -52,6 +67,20 @@ function UsersContent() {
       <UsersDeleteDialog />
       <AgentDetailDialog />
       <UserDetailDialog />
+      <UserTagsDialog
+        open={open === 'tags'}
+        tags={tags}
+        onOpenChange={(isOpen) => !isOpen && setOpen(null)}
+        onChanged={async () => {
+          await tagsQuery.refetch()
+          triggerRefresh()
+        }}
+      />
+      <UserBatchQuotaDialog
+        open={open === 'batch-quota'}
+        onOpenChange={(isOpen) => !isOpen && setOpen(null)}
+        onSuccess={triggerRefresh}
+      />
     </>
   )
 }

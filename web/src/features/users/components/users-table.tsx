@@ -39,7 +39,7 @@ import {
   getUserRoleOptions,
   isUserDeleted,
 } from '../constants'
-import type { User, UserSortBy } from '../types'
+import type { User, UserSortBy, UserTag } from '../types'
 import { DataTableBulkActions } from './data-table-bulk-actions'
 import { useUsersColumns } from './users-columns'
 import { useUsers } from './users-provider'
@@ -54,14 +54,24 @@ const USER_SORTABLE_COLUMNS = new Set<UserSortBy>([
   'created_at',
   'last_login_at',
 ])
+const USER_INITIAL_COLUMN_VISIBILITY = { tag_id: false }
+
+type UsersTableProps = {
+  tags: UserTag[]
+}
 
 function isDisabledUserRow(user: User) {
   return isUserDeleted(user) || user.status === USER_STATUS.DISABLED
 }
 
-export function UsersTable() {
+function getUserRowClassName(user: User, isMobile: boolean) {
+  if (!isDisabledUserRow(user)) return undefined
+  return isMobile ? DISABLED_ROW_MOBILE : DISABLED_ROW_DESKTOP
+}
+
+export function UsersTable(props: UsersTableProps) {
   const { t } = useTranslation()
-  const columns = useUsersColumns()
+  const columns = useUsersColumns(props.tags)
   const { refreshTrigger } = useUsers()
   const isMobile = useMediaQuery('(max-width: 640px)')
   const [sorting, setSorting] = useState<SortingState>([])
@@ -83,6 +93,7 @@ export function UsersTable() {
       { columnId: 'status', searchKey: 'status', type: 'array' },
       { columnId: 'role', searchKey: 'role', type: 'array' },
       { columnId: 'group', searchKey: 'group', type: 'string' },
+      { columnId: 'tag_id', searchKey: 'tag', type: 'array' },
     ],
   })
   const statusFilter =
@@ -96,6 +107,10 @@ export function UsersTable() {
   const groupFilter =
     (columnFilters.find((filter) => filter.id === 'group')?.value as string) ??
     ''
+  const tagFilter =
+    (columnFilters.find((filter) => filter.id === 'tag_id')?.value as
+      | string[]
+      | undefined) ?? []
 
   const sortParams = useMemo(() => {
     const activeSort = sorting[0]
@@ -129,13 +144,17 @@ export function UsersTable() {
       statusFilter,
       roleFilter,
       groupFilter,
+      tagFilter,
       sortParams,
       refreshTrigger,
     ],
     queryFn: async () => {
       const hasFilter = globalFilter?.trim()
       const hasColumnFilter =
-        statusFilter.length > 0 || roleFilter.length > 0 || Boolean(groupFilter)
+        statusFilter.length > 0 ||
+        roleFilter.length > 0 ||
+        Boolean(groupFilter) ||
+        tagFilter.length > 0
       const params = {
         p: pagination.pageIndex + 1,
         page_size: pagination.pageSize,
@@ -150,6 +169,7 @@ export function UsersTable() {
               status: statusFilter[0] ?? '',
               role: roleFilter[0] ?? '',
               group: groupFilter,
+              tag_id: tagFilter[0] ?? '',
             })
           : await getUsers(params)
 
@@ -200,6 +220,7 @@ export function UsersTable() {
     manualSorting: true,
     totalCount: data?.total || 0,
     ensurePageInRange,
+    initialColumnVisibility: USER_INITIAL_COLUMN_VISIBILITY,
   })
 
   return (
@@ -229,14 +250,34 @@ export function UsersTable() {
             options: getUserRoleOptions(t),
             singleSelect: true,
           },
+          {
+            columnId: 'tag_id',
+            title: t('Tag'),
+            options: [
+              {
+                label: t('No tag'),
+                value: '0',
+                iconNode: (
+                  <span className='border-muted-foreground/50 size-3 rounded-full border' />
+                ),
+              },
+              ...props.tags.map((tag) => ({
+                label: tag.name,
+                value: String(tag.id),
+                iconNode: (
+                  <span
+                    className='size-3 rounded-full'
+                    style={{ backgroundColor: tag.color }}
+                  />
+                ),
+              })),
+            ],
+            singleSelect: true,
+          },
         ],
       }}
       getRowClassName={(row, { isMobile }) =>
-        isDisabledUserRow(row.original)
-          ? isMobile
-            ? DISABLED_ROW_MOBILE
-            : DISABLED_ROW_DESKTOP
-          : undefined
+        getUserRowClassName(row.original, isMobile)
       }
       bulkActions={<DataTableBulkActions table={table} />}
     />

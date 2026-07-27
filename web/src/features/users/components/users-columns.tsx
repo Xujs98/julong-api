@@ -38,12 +38,16 @@ import {
   USER_ROLES,
   isUserDeleted,
 } from '../constants'
-import type { User } from '../types'
+import {
+  getUserTagFilterValue,
+  USER_TAG_ROW_MARKER_CLASS_NAME,
+} from '../lib/user-tags'
+import type { User, UserTag } from '../types'
 import { DataTableRowActions } from './data-table-row-actions'
 import { UserQuotaCell } from './user-quota-cell'
 import { useUsers } from './users-provider'
 
-export function useUsersColumns(): ColumnDef<User>[] {
+export function useUsersColumns(tags: UserTag[]): ColumnDef<User>[] {
   const { t } = useTranslation()
   const { setOpen, setCurrentRow } = useUsers()
   return [
@@ -58,14 +62,33 @@ export function useUsersColumns(): ColumnDef<User>[] {
           className='translate-y-[2px]'
         />
       ),
-      cell: ({ row }) => (
-        <Checkbox
-          checked={row.getIsSelected()}
-          onCheckedChange={(value) => row.toggleSelected(!!value)}
-          aria-label='Select row'
-          className='translate-y-[2px]'
-        />
-      ),
+      cell: ({ row }) => {
+        const tag = row.original.tag
+        return (
+          <div className='relative flex h-9 items-center'>
+            {tag && (
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <span
+                      className={USER_TAG_ROW_MARKER_CLASS_NAME}
+                      style={{ backgroundColor: tag.color }}
+                      aria-label={t('Tag: {{name}}', { name: tag.name })}
+                    />
+                  }
+                />
+                <TooltipContent>{tag.name}</TooltipContent>
+              </Tooltip>
+            )}
+            <Checkbox
+              checked={row.getIsSelected()}
+              onCheckedChange={(value) => row.toggleSelected(!!value)}
+              aria-label='Select row'
+              className='translate-y-[2px]'
+            />
+          </div>
+        )
+      },
       enableSorting: false,
       enableHiding: false,
       size: 40,
@@ -73,16 +96,22 @@ export function useUsersColumns(): ColumnDef<User>[] {
     {
       accessorKey: 'id',
       header: t('ID'),
-      cell: ({ row }) => {
-        return (
-          <TableId
-            value={row.getValue('id') as number}
-            className='w-[60px] text-sm'
-          />
-        )
-      },
+      cell: ({ row }) => (
+        <TableId
+          value={row.getValue('id') as number}
+          className='w-[60px] text-sm'
+        />
+      ),
       size: 80,
       meta: { mobileOrder: 10 },
+    },
+    {
+      id: 'tag_id',
+      accessorFn: (user) => getUserTagFilterValue(user.tag_id),
+      header: t('Tag'),
+      filterFn: (row, id, value) => value.includes(String(row.getValue(id))),
+      enableSorting: false,
+      enableHiding: false,
     },
     {
       accessorKey: 'username',
@@ -392,7 +421,7 @@ export function useUsersColumns(): ColumnDef<User>[] {
     {
       id: 'actions',
       header: () => t('Actions'),
-      cell: ({ row }) => <DataTableRowActions row={row} />,
+      cell: ({ row }) => <DataTableRowActions row={row} tags={tags} />,
       meta: { pinned: 'right' as const },
     },
   ]

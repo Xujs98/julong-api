@@ -34,6 +34,11 @@ import type {
   UserLoginIP,
   UserRequestContentLogList,
   UserRequestContentLogDetail,
+  UserTag,
+  UserManagementOption,
+  PageData,
+  BatchQuotaAdjustPayload,
+  BatchQuotaAdjustResult,
 } from './types'
 
 // ============================================================================
@@ -69,6 +74,7 @@ export async function searchUsers(
     group = '',
     role = '',
     status = '',
+    tag_id = '',
     p = 1,
     page_size = 10,
     sort_by,
@@ -79,6 +85,7 @@ export async function searchUsers(
   queryParams.set('group', group)
   if (role) queryParams.set('role', role)
   if (status) queryParams.set('status', status)
+  if (tag_id) queryParams.set('tag_id', tag_id)
   queryParams.set('p', String(p))
   queryParams.set('page_size', String(page_size))
   if (sort_by) queryParams.set('sort_by', sort_by)
@@ -141,6 +148,68 @@ export async function adjustUserQuota(
   payload: ManageUserQuotaPayload
 ): Promise<ApiResponse<Partial<User>>> {
   const res = await api.post('/api/user/manage', payload)
+  return res.data
+}
+
+export async function listUserTags(): Promise<ApiResponse<UserTag[]>> {
+  const res = await api.get('/api/user/tags')
+  return res.data
+}
+
+export async function createUserTag(
+  name: string,
+  color: string
+): Promise<ApiResponse<UserTag>> {
+  const res = await api.post('/api/user/tags', { name, color })
+  return res.data
+}
+
+export async function updateUserTag(
+  tagId: number,
+  name: string,
+  color: string
+): Promise<ApiResponse<UserTag>> {
+  const res = await api.put(`/api/user/tags/${tagId}`, { name, color })
+  return res.data
+}
+
+export async function deleteUserTag(tagId: number): Promise<ApiResponse> {
+  const res = await api.delete(`/api/user/tags/${tagId}`)
+  return res.data
+}
+
+export async function assignUserTag(
+  userId: number,
+  tagId: number
+): Promise<ApiResponse> {
+  const res = await api.put(`/api/user/${userId}/tag`, { tag_id: tagId })
+  return res.data
+}
+
+export async function searchUserManagementOptions(
+  keyword: string,
+  page: number,
+  pageSize: number
+): Promise<ApiResponse<PageData<UserManagementOption>>> {
+  const res = await api.get('/api/user/options', {
+    params: { keyword, p: page, page_size: pageSize },
+  })
+  return res.data
+}
+
+export async function resolveUserManagementOptions(
+  userIds: number[]
+): Promise<ApiResponse<UserManagementOption[]>> {
+  const res = await api.post('/api/user/options/resolve', {
+    user_ids: userIds,
+  })
+  return res.data
+}
+
+export async function batchAdjustUserQuota(
+  payload: BatchQuotaAdjustPayload
+): Promise<ApiResponse<BatchQuotaAdjustResult>> {
+  const res = await api.post('/api/user/batch-quota', payload)
   return res.data
 }
 

@@ -106,6 +106,8 @@ type User struct {
 	AgentTopUpLink               string                     `json:"agent_topup_link" gorm:"type:varchar(255);column:agent_topup_link" validate:"max=255"`
 	AgentId                      int                        `json:"agent_id,omitempty" gorm:"-:all"`
 	AgentUsername                string                     `json:"agent_username,omitempty" gorm:"-:all"`
+	TagId                        int                        `json:"tag_id" gorm:"column:tag_id;index"`
+	Tag                          *UserTag                   `json:"tag,omitempty" gorm:"-:all"`
 	DeletedAt                    gorm.DeletedAt             `gorm:"index"`
 	LinuxDOId                    string                     `json:"linux_do_id" gorm:"column:linux_do_id;index"`
 	Setting                      string                     `json:"setting" gorm:"type:text;column:setting"`
@@ -389,12 +391,13 @@ func GetAllUsers(pageInfo *common.PageInfo, sortOptions ...UserSortOptions) (use
 	}
 
 	fillAgentInfo(users)
+	fillUserTagInfo(users)
 	fillUserIPInfo(users)
 
 	return users, total, nil
 }
 
-func SearchUsers(keyword string, group string, role *int, status *int, startIdx int, num int, sortOptions ...UserSortOptions) ([]*User, int64, error) {
+func SearchUsers(keyword string, group string, role *int, status *int, tagId *int, startIdx int, num int, sortOptions ...UserSortOptions) ([]*User, int64, error) {
 	var users []*User
 	var total int64
 	var err error
@@ -439,6 +442,9 @@ func SearchUsers(keyword string, group string, role *int, status *int, startIdx 
 			query = query.Where("deleted_at IS NULL").Where("status = ?", *status)
 		}
 	}
+	if tagId != nil {
+		query = query.Where("tag_id = ?", *tagId)
+	}
 
 	// 获取总数
 	err = query.Count(&total).Error
@@ -461,6 +467,7 @@ func SearchUsers(keyword string, group string, role *int, status *int, startIdx 
 	}
 
 	fillAgentInfo(users)
+	fillUserTagInfo(users)
 	fillUserIPInfo(users)
 
 	return users, total, nil
@@ -520,6 +527,41 @@ func fillAgentInfo(users []*User) {
 		if agent, ok := agentById[user.InviterId]; ok {
 			user.AgentId = agent.Id
 			user.AgentUsername = agent.Username
+		}
+	}
+}
+
+func fillUserTagInfo(users []*User) {
+	if len(users) == 0 {
+		return
+	}
+	tagIds := make([]int, 0)
+	seen := make(map[int]struct{})
+	for _, user := range users {
+		if user.TagId <= 0 {
+			continue
+		}
+		if _, exists := seen[user.TagId]; exists {
+			continue
+		}
+		seen[user.TagId] = struct{}{}
+		tagIds = append(tagIds, user.TagId)
+	}
+	if len(tagIds) == 0 {
+		return
+	}
+	var tags []UserTag
+	if err := DB.Where("id IN ?", tagIds).Find(&tags).Error; err != nil {
+		return
+	}
+	tagsById := make(map[int]UserTag, len(tags))
+	for _, tag := range tags {
+		tagsById[tag.Id] = tag
+	}
+	for _, user := range users {
+		if tag, exists := tagsById[user.TagId]; exists {
+			tagCopy := tag
+			user.Tag = &tagCopy
 		}
 	}
 }

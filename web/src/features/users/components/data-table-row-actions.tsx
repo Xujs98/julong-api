@@ -28,6 +28,9 @@ import {
   ShieldAlert,
   Link2,
   CreditCard,
+  Check,
+  Settings2,
+  Tag as TagIcon,
 } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -40,6 +43,9 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuShortcut,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
 } from '@/components/ui/dropdown-menu'
 import {
   Tooltip,
@@ -48,7 +54,12 @@ import {
 } from '@/components/ui/tooltip'
 import { UserSubscriptionsDialog } from '@/features/subscriptions/components/dialogs/user-subscriptions-dialog'
 
-import { manageUser, resetUserPasskey, resetUserTwoFA } from '../api'
+import {
+  assignUserTag,
+  manageUser,
+  resetUserPasskey,
+  resetUserTwoFA,
+} from '../api'
 import {
   USER_STATUS,
   USER_ROLE,
@@ -56,23 +67,25 @@ import {
   isUserDeleted,
 } from '../constants'
 import { getUserActionMessage } from '../lib'
-import type { User, ManageUserAction } from '../types'
+import type { User, ManageUserAction, UserTag } from '../types'
 import { UserBindingDialog } from './dialogs/user-binding-dialog'
 import { useUsers } from './users-provider'
 
 interface DataTableRowActionsProps {
   row: Row<User>
+  tags: UserTag[]
 }
 
-export function DataTableRowActions({ row }: DataTableRowActionsProps) {
+export function DataTableRowActions(props: DataTableRowActionsProps) {
   const { t } = useTranslation()
-  const user = row.original
+  const user = props.row.original
   const { setOpen, setCurrentRow, triggerRefresh } = useUsers()
   const [resetPasskeyOpen, setResetPasskeyOpen] = useState(false)
   const [resetTwoFAOpen, setResetTwoFAOpen] = useState(false)
   const [disableUserOpen, setDisableUserOpen] = useState(false)
   const [bindingDialogOpen, setBindingDialogOpen] = useState(false)
   const [subscriptionsDialogOpen, setSubscriptionsDialogOpen] = useState(false)
+  const [tagUpdating, setTagUpdating] = useState(false)
 
   const handleEdit = () => {
     setCurrentRow(user)
@@ -130,6 +143,28 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
     } finally {
       setResetTwoFAOpen(false)
     }
+  }
+
+  const handleTagAssignment = async (tagId: number) => {
+    setTagUpdating(true)
+    try {
+      const result = await assignUserTag(user.id, tagId)
+      if (!result.success) {
+        toast.error(result.message || t('Failed to update user tag'))
+        return
+      }
+      toast.success(t('User tag updated'))
+      triggerRefresh()
+    } catch {
+      toast.error(t(ERROR_MESSAGES.UNEXPECTED))
+    } finally {
+      setTagUpdating(false)
+    }
+  }
+
+  const handleManageTags = () => {
+    setCurrentRow(null)
+    setOpen('tags')
   }
 
   const isDisabled = user.status === USER_STATUS.DISABLED
@@ -225,6 +260,50 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
             <CreditCard size={16} />
           </DropdownMenuShortcut>
         </DropdownMenuItem>
+
+        <DropdownMenuSub>
+          <DropdownMenuSubTrigger>
+            <TagIcon />
+            {t('Tag')}
+          </DropdownMenuSubTrigger>
+          <DropdownMenuSubContent className='min-w-44'>
+            <DropdownMenuItem
+              disabled={tagUpdating}
+              onClick={() => handleTagAssignment(0)}
+            >
+              <span className='border-muted-foreground/50 size-3 rounded-full border' />
+              {t('No tag')}
+              {!user.tag_id && (
+                <DropdownMenuShortcut>
+                  <Check />
+                </DropdownMenuShortcut>
+              )}
+            </DropdownMenuItem>
+            {props.tags.map((tag) => (
+              <DropdownMenuItem
+                key={tag.id}
+                disabled={tagUpdating}
+                onClick={() => handleTagAssignment(tag.id)}
+              >
+                <span
+                  className='size-3 rounded-full'
+                  style={{ backgroundColor: tag.color }}
+                />
+                <span className='max-w-28 truncate'>{tag.name}</span>
+                {user.tag_id === tag.id && (
+                  <DropdownMenuShortcut>
+                    <Check />
+                  </DropdownMenuShortcut>
+                )}
+              </DropdownMenuItem>
+            ))}
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={handleManageTags}>
+              <Settings2 />
+              {t('Manage tags')}
+            </DropdownMenuItem>
+          </DropdownMenuSubContent>
+        </DropdownMenuSub>
 
         <DropdownMenuSeparator />
 

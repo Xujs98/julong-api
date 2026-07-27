@@ -33,6 +33,15 @@ export type UserStatus = z.infer<typeof userStatusSchema>
 export const userRoleSchema = z.number()
 export type UserRole = z.infer<typeof userRoleSchema>
 
+export const userTagSchema = z.object({
+  id: z.number(),
+  name: z.string(),
+  color: z.string(),
+  created_at: z.number().optional(),
+  updated_at: z.number().optional(),
+})
+export type UserTag = z.infer<typeof userTagSchema>
+
 export const userSchema = z.object({
   id: z.number(),
   username: z.string(),
@@ -57,6 +66,8 @@ export const userSchema = z.object({
   agent_topup_link: z.string().optional(),
   agent_id: z.number().optional(),
   agent_username: z.string().optional(),
+  tag_id: z.number().optional(),
+  tag: userTagSchema.nullable().optional(),
   linux_do_id: z.string().optional(),
   status: userStatusSchema,
   role: userRoleSchema,
@@ -120,6 +131,7 @@ export interface SearchUsersParams {
   group?: string
   role?: string
   status?: string
+  tag_id?: string
   p?: number
   page_size?: number
   sort_by?: UserSortBy
@@ -155,6 +167,38 @@ export interface ManageUserQuotaPayload {
   action: 'add_quota'
   mode: QuotaAdjustMode
   value: number
+}
+
+export interface UserManagementOption {
+  id: number
+  username: string
+  display_name: string
+  email: string
+}
+
+export interface PageData<T> {
+  page: number
+  page_size: number
+  total: number
+  items: T[]
+}
+
+export interface BatchQuotaAdjustPayload {
+  mode: QuotaAdjustMode
+  value: number
+  all_users: boolean
+  user_ids: number[]
+  send_email: boolean
+  email_locale: 'zh' | 'en'
+  email_subject: string
+  email_content: string
+}
+
+export interface BatchQuotaAdjustResult {
+  adjusted_count: number
+  email_success_count: number
+  email_skipped_count: number
+  email_failed_count: number
 }
 
 // ============================================================================
@@ -239,3 +283,5 @@ export type UsersDialogType =
   | 'delete'
   | 'agent-detail'
   | 'user-detail'
+  | 'tags'
+  | 'batch-quota'

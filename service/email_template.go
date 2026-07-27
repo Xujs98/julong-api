@@ -21,6 +21,7 @@ const (
 	EmailTemplateEventAccountQuotaAlert          = "account.quota_alert"
 	EmailTemplateEventChannelAnomalyDisabled     = "channel.anomaly_disabled"
 	EmailTemplateEventDashboardReport            = "dashboard.report"
+	EmailTemplateEventUserQuotaAdjustment        = "user.quota_adjustment"
 	EmailTemplateLocaleChinese                   = "zh"
 	EmailTemplateLocaleEnglish                   = "en"
 	maxEmailTemplateSubjectLength                = 255
@@ -68,6 +69,7 @@ var (
 		EmailTemplateEventAccountQuotaAlert,
 		EmailTemplateEventChannelAnomalyDisabled,
 		EmailTemplateEventDashboardReport,
+		EmailTemplateEventUserQuotaAdjustment,
 	}
 	emailTemplateDefinitions = map[string]EmailTemplateDefinition{
 		EmailTemplateEventGeneralNotification: {
@@ -127,6 +129,13 @@ var (
 			Description:  "Sent to selected administrators with a completed dashboard usage summary.",
 			Category:     "Operations",
 			Placeholders: []string{"system_name", "username", "display_name", "email", "report_type", "report_period", "generated_at", "total_consumption", "total_quota", "total_requests", "total_tokens", "active_users", "active_models", "active_channels", "active_groups", "top_models", "top_users", "group_analysis"},
+		},
+		EmailTemplateEventUserQuotaAdjustment: {
+			Event:        EmailTemplateEventUserQuotaAdjustment,
+			Label:        "Quota adjustment notice",
+			Description:  "Sent after an administrator adjusts user quota in bulk.",
+			Category:     "Billing",
+			Placeholders: []string{"system_name", "username", "display_name", "email", "operation", "adjustment_amount", "previous_quota", "current_quota", "operator_name", "adjusted_at"},
 		},
 	}
 	emailTemplateDefaults = newEmailTemplateDefaults()
@@ -264,6 +273,23 @@ func newEmailTemplateDefaults() map[string]storedEmailTemplate {
 <p style="margin:20px 0 8px;font-weight:600;">Group data analysis by consumption</p>
 <pre style="margin:0;padding:14px;border-radius:6px;background:#f8fafc;color:#334155;font-family:inherit;white-space:pre-wrap;word-break:break-word;">{{group_analysis}}</pre>
 <p style="margin-top:24px;color:#6b7280;font-size:12px;">Generated at {{generated_at}}</p>`)
+
+	add(EmailTemplateEventUserQuotaAdjustment, EmailTemplateLocaleChinese,
+		"[{{system_name}}] 额度调整通知", "额度调整通知", "#0f766e", `
+<p>{{display_name}}，您好：</p>
+<p>管理员 <strong>{{operator_name}}</strong> 已对您的账户额度执行<strong>{{operation}}</strong>操作。</p>
+<table role="presentation" style="width:100%;margin:24px 0;border-collapse:separate;border-spacing:8px;table-layout:fixed;">
+  <tr><td style="padding:16px;border-radius:6px;background:#f3f4f6;"><span style="display:block;color:#6b7280;font-size:12px;">调整前</span><strong style="font-size:20px;">{{previous_quota}}</strong></td><td style="padding:16px;border-radius:6px;background:#ecfdf5;"><span style="display:block;color:#047857;font-size:12px;">调整后</span><strong style="font-size:20px;color:#065f46;">{{current_quota}}</strong></td></tr>
+</table>
+<p>调整额度：<strong>{{adjustment_amount}}</strong><br>调整时间：{{adjusted_at}}</p>`)
+	add(EmailTemplateEventUserQuotaAdjustment, EmailTemplateLocaleEnglish,
+		"[{{system_name}}] Quota adjustment notice", "Quota adjustment notice", "#0f766e", `
+<p>Hello {{display_name}},</p>
+<p>Administrator <strong>{{operator_name}}</strong> performed a quota <strong>{{operation}}</strong> on your account.</p>
+<table role="presentation" style="width:100%;margin:24px 0;border-collapse:separate;border-spacing:8px;table-layout:fixed;">
+  <tr><td style="padding:16px;border-radius:6px;background:#f3f4f6;"><span style="display:block;color:#6b7280;font-size:12px;">Before</span><strong style="font-size:20px;">{{previous_quota}}</strong></td><td style="padding:16px;border-radius:6px;background:#ecfdf5;"><span style="display:block;color:#047857;font-size:12px;">After</span><strong style="font-size:20px;color:#065f46;">{{current_quota}}</strong></td></tr>
+</table>
+<p>Adjustment amount: <strong>{{adjustment_amount}}</strong><br>Adjusted at: {{adjusted_at}}</p>`)
 
 	return defaults
 }
@@ -423,6 +449,23 @@ func RenderEmailTemplateForLocale(event, locale string, values map[string]string
 	return renderStoredEmailTemplate(storedEmailTemplate{Subject: template.Subject, Content: template.Content}, resolved), nil
 }
 
+func RenderCustomEmailTemplateForLocale(event, locale, subject, content string, values map[string]string) (EmailTemplatePreview, error) {
+	definition, ok := emailTemplateDefinitions[strings.TrimSpace(event)]
+	if !ok {
+		return EmailTemplatePreview{}, errors.New("unsupported email template event")
+	}
+	subject = strings.TrimSpace(subject)
+	if err := validateEmailTemplate(definition, subject, content); err != nil {
+		return EmailTemplatePreview{}, err
+	}
+	resolved := make(map[string]string, len(values)+1)
+	for key, value := range values {
+		resolved[key] = value
+	}
+	resolved["system_name"] = common.SystemName
+	return renderStoredEmailTemplate(storedEmailTemplate{Subject: subject, Content: content}, resolved), nil
+}
+
 func validateEmailTemplate(definition EmailTemplateDefinition, subject, content string) error {
 	if strings.TrimSpace(subject) == "" || strings.TrimSpace(content) == "" {
 		return errors.New("email subject and content are required")
@@ -528,6 +571,12 @@ func emailTemplateSampleValues(locale string) map[string]string {
 		"top_models":            "1. gpt-4.1  $52.30\n2. claude-sonnet-4  $41.20\n3. gemini-2.5-pro  $23.80",
 		"top_users":             "1. alice  消费 $62.10 | 请求 5,320 | Token 20,100,000\n2. bob  消费 $41.30 | 请求 3,210 | Token 15,200,000",
 		"group_analysis":        "1. default  消费 $72.40 | 请求 7,100 | Token 27,800,000 | 用户 210\n2. vip  消费 $56.10 | 请求 5,480 | Token 20,520,000 | 用户 118",
+		"operation":             "增加",
+		"adjustment_amount":     "$10.00",
+		"previous_quota":        "$20.00",
+		"current_quota":         "$30.00",
+		"operator_name":         "root",
+		"adjusted_at":           "2026-07-27 12:00:00",
 	}
 	if locale == EmailTemplateLocaleEnglish {
 		values["display_name"] = "Demo User"
@@ -535,6 +584,7 @@ func emailTemplateSampleValues(locale string) map[string]string {
 		values["report_type"] = "Daily"
 		values["top_users"] = "1. alice  Consumption $62.10 | Requests 5,320 | Tokens 20,100,000\n2. bob  Consumption $41.30 | Requests 3,210 | Tokens 15,200,000"
 		values["group_analysis"] = "1. default  Consumption $72.40 | Requests 7,100 | Tokens 27,800,000 | Users 210\n2. vip  Consumption $56.10 | Requests 5,480 | Tokens 20,520,000 | Users 118"
+		values["operation"] = "increase"
 	}
 	return values
 }

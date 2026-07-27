@@ -376,9 +376,15 @@ func SearchUsers(c *gin.Context) {
 			status = &parsed
 		}
 	}
+	var tagId *int
+	if tagIdStr := c.Query("tag_id"); tagIdStr != "" {
+		if parsed, err := strconv.Atoi(tagIdStr); err == nil && parsed >= 0 {
+			tagId = &parsed
+		}
+	}
 	pageInfo := common.GetPageQuery(c)
 	sortOptions := model.NewUserSortOptions(c.Query("sort_by"), c.Query("sort_order"))
-	users, total, err := model.SearchUsers(keyword, group, role, status, pageInfo.GetStartIdx(), pageInfo.GetPageSize(), sortOptions)
+	users, total, err := model.SearchUsers(keyword, group, role, status, tagId, pageInfo.GetStartIdx(), pageInfo.GetPageSize(), sortOptions)
 	if err != nil {
 		common.ApiError(c, err)
 		return
