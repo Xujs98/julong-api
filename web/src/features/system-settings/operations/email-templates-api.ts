@@ -35,6 +35,14 @@ export type EmailTemplateLocale = 'zh' | 'en'
 
 export type DashboardReportEmailFrequency = 'daily' | 'weekly' | 'monthly'
 
+export type DashboardReportEmailSchedule = {
+  id: string
+  frequency: DashboardReportEmailFrequency
+  send_times: string[]
+  weekday: number
+  month_day: number
+}
+
 export type EmailSettingsConfig = {
   subscription_expiry_reminder_enabled: boolean
   low_balance_email_enabled: boolean
@@ -51,6 +59,7 @@ export type EmailSettingsConfig = {
   dashboard_report_email_weekday: number
   dashboard_report_email_month_day: number
   dashboard_report_email_recipient_user_ids: number[]
+  dashboard_report_email_schedules: DashboardReportEmailSchedule[]
 }
 
 export type EmailRecipientOption = {
@@ -128,6 +137,22 @@ export async function getEmailSettingsConfig() {
     { params: { _: Date.now() } }
   )
   const config = response.data.data
+  let dashboardReportSchedules: DashboardReportEmailSchedule[] = []
+  if (config) {
+    if (config.dashboard_report_email_schedules?.length) {
+      dashboardReportSchedules = config.dashboard_report_email_schedules
+    } else {
+      dashboardReportSchedules = [
+        {
+          id: crypto.randomUUID(),
+          frequency: config.dashboard_report_email_frequency ?? 'daily',
+          send_times: [config.dashboard_report_email_send_time ?? '08:00'],
+          weekday: config.dashboard_report_email_weekday ?? 1,
+          month_day: config.dashboard_report_email_month_day ?? 1,
+        },
+      ]
+    }
+  }
   return {
     ...response.data,
     data: config
@@ -147,6 +172,7 @@ export async function getEmailSettingsConfig() {
             config.dashboard_report_email_month_day ?? 1,
           dashboard_report_email_recipient_user_ids:
             config.dashboard_report_email_recipient_user_ids ?? [],
+          dashboard_report_email_schedules: dashboardReportSchedules,
         }
       : undefined,
   }

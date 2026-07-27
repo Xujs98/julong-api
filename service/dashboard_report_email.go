@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -16,11 +17,22 @@ const (
 	DashboardReportFrequencyDaily   = "daily"
 	DashboardReportFrequencyWeekly  = "weekly"
 	DashboardReportFrequencyMonthly = "monthly"
+	maxDashboardReportSchedules     = 20
+	maxDashboardReportSendTimes     = 12
 )
+
+type DashboardReportEmailSchedule struct {
+	ID        string   `json:"id"`
+	Frequency string   `json:"frequency"`
+	SendTimes []string `json:"send_times"`
+	Weekday   int      `json:"weekday"`
+	MonthDay  int      `json:"month_day"`
+}
 
 type DashboardReportEmailDispatchResult struct {
 	RecipientCount int    `json:"recipient_count"`
 	Period         string `json:"period"`
+	ScheduledTime  string `json:"scheduled_time,omitempty"`
 }
 
 type dashboardReportPeriod struct {
@@ -31,20 +43,49 @@ type dashboardReportPeriod struct {
 	TypeEN    string
 }
 
-func validateDashboardReportEmailSchedule(config EmailSettingsConfig) error {
-	switch config.DashboardReportEmailFrequency {
-	case DashboardReportFrequencyDaily, DashboardReportFrequencyWeekly, DashboardReportFrequencyMonthly:
-	default:
-		return errors.New("dashboard report frequency must be daily, weekly, or monthly")
+type dashboardReportDispatch struct {
+	Period        dashboardReportPeriod
+	DispatchKey   string
+	ScheduledTime string
+}
+
+type dashboardReportDispatchHistory map[string]int64
+
+func validateDashboardReportEmailSchedules(schedules []DashboardReportEmailSchedule) error {
+	if len(schedules) == 0 {
+		return errors.New("at least one dashboard report schedule is required")
 	}
-	if _, err := time.Parse("15:04", config.DashboardReportEmailSendTime); err != nil {
-		return errors.New("dashboard report send time must use HH:mm format")
+	if len(schedules) > maxDashboardReportSchedules {
+		return fmt.Errorf("dashboard report schedule count cannot exceed %d", maxDashboardReportSchedules)
 	}
-	if config.DashboardReportEmailWeekday < 1 || config.DashboardReportEmailWeekday > 7 {
-		return errors.New("dashboard report weekday must be between 1 and 7")
-	}
-	if config.DashboardReportEmailMonthDay < 1 || config.DashboardReportEmailMonthDay > 31 {
-		return errors.New("dashboard report month day must be between 1 and 31")
+	seenIDs := make(map[string]struct{}, len(schedules))
+	for _, schedule := range schedules {
+		if schedule.ID == "" || len(schedule.ID) > 64 {
+			return errors.New("dashboard report schedule ID is invalid")
+		}
+		if _, exists := seenIDs[schedule.ID]; exists {
+			return errors.New("dashboard report schedule IDs must be unique")
+		}
+		seenIDs[schedule.ID] = struct{}{}
+		switch schedule.Frequency {
+		case DashboardReportFrequencyDaily, DashboardReportFrequencyWeekly, DashboardReportFrequencyMonthly:
+		default:
+			return errors.New("dashboard report frequency must be daily, weekly, or monthly")
+		}
+		if len(schedule.SendTimes) == 0 || len(schedule.SendTimes) > maxDashboardReportSendTimes {
+			return fmt.Errorf("each dashboard report schedule must have between 1 and %d send times", maxDashboardReportSendTimes)
+		}
+		for _, sendTime := range schedule.SendTimes {
+			if _, err := time.Parse("15:04", sendTime); err != nil {
+				return errors.New("dashboard report send time must use HH:mm format")
+			}
+		}
+		if schedule.Weekday < 1 || schedule.Weekday > 7 {
+			return errors.New("dashboard report weekday must be between 1 and 7")
+		}
+		if schedule.MonthDay < 1 || schedule.MonthDay > 31 {
+			return errors.New("dashboard report month day must be between 1 and 31")
+		}
 	}
 	return nil
 }
@@ -57,8 +98,9 @@ func IsDashboardReportEmailDue(now time.Time) bool {
 	if err != nil || !config.DashboardReportEmailEnabled {
 		return false
 	}
-	period, due := dashboardReportPeriodForSchedule(config, now)
-	return due && emailOptionString(common.DashboardReportEmailLastPeriodOptionKey) != period.PeriodKey
+	history := loadDashboardReportDispatchHistory()
+	_, due := nextDashboardReportDispatch(config.DashboardReportEmailSchedules, now, history)
+	return due
 }
 
 func SendDashboardReportTestEmails(userIDs []int) (DashboardReportEmailDispatchResult, error) {
@@ -77,19 +119,26 @@ func sendDashboardReportTestEmailsAt(now time.Time, userIDs []int, sender EmailC
 }
 
 func DispatchDashboardReportEmails(ctx context.Context, sender EmailCampaignSender) (DashboardReportEmailDispatchResult, error) {
+	return dispatchDashboardReportEmailsAt(ctx, time.Now(), sender)
+}
+
+func dispatchDashboardReportEmailsAt(ctx context.Context, now time.Time, sender EmailCampaignSender) (DashboardReportEmailDispatchResult, error) {
 	config, err := GetEmailSettingsConfig()
 	if err != nil {
 		return DashboardReportEmailDispatchResult{}, err
 	}
-	period, due := dashboardReportPeriodForSchedule(config, time.Now())
-	if !config.DashboardReportEmailEnabled || !due || emailOptionString(common.DashboardReportEmailLastPeriodOptionKey) == period.PeriodKey {
+	history := loadDashboardReportDispatchHistory()
+	dispatch, due := nextDashboardReportDispatch(config.DashboardReportEmailSchedules, now, history)
+	if !config.DashboardReportEmailEnabled || !due {
 		return DashboardReportEmailDispatchResult{}, nil
 	}
-	result, err := sendDashboardReportEmails(ctx, period, config.DashboardReportEmailRecipientIDs, sender)
+	result, err := sendDashboardReportEmails(ctx, dispatch.Period, config.DashboardReportEmailRecipientIDs, sender)
 	if err != nil {
 		return result, err
 	}
-	if err := model.UpdateOption(common.DashboardReportEmailLastPeriodOptionKey, period.PeriodKey); err != nil {
+	result.ScheduledTime = dispatch.ScheduledTime
+	history[dispatch.DispatchKey] = now.Unix()
+	if err := persistDashboardReportDispatchHistory(history, now); err != nil {
 		return result, err
 	}
 	return result, nil
@@ -139,29 +188,25 @@ func sendDashboardReportEmails(ctx context.Context, period dashboardReportPeriod
 	return result, nil
 }
 
-func dashboardReportPeriodForSchedule(config EmailSettingsConfig, now time.Time) (dashboardReportPeriod, bool) {
-	sendTime, err := time.Parse("15:04", config.DashboardReportEmailSendTime)
-	if err != nil || now.Hour() < sendTime.Hour() || (now.Hour() == sendTime.Hour() && now.Minute() < sendTime.Minute()) {
-		return dashboardReportPeriod{}, false
-	}
+func dashboardReportPeriodForSchedule(schedule DashboardReportEmailSchedule, now time.Time) (dashboardReportPeriod, bool) {
 	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
-	switch config.DashboardReportEmailFrequency {
+	switch schedule.Frequency {
 	case DashboardReportFrequencyDaily:
 		start := today.AddDate(0, 0, -1)
-		return newDashboardReportPeriod(config.DashboardReportEmailFrequency, start, today), true
+		return newDashboardReportPeriod(schedule.Frequency, start, today), true
 	case DashboardReportFrequencyWeekly:
 		weekday := int(now.Weekday())
 		if weekday == 0 {
 			weekday = 7
 		}
-		if weekday != config.DashboardReportEmailWeekday {
+		if weekday != schedule.Weekday {
 			return dashboardReportPeriod{}, false
 		}
 		end := today.AddDate(0, 0, -(weekday - 1))
-		return newDashboardReportPeriod(config.DashboardReportEmailFrequency, end.AddDate(0, 0, -7), end), true
+		return newDashboardReportPeriod(schedule.Frequency, end.AddDate(0, 0, -7), end), true
 	case DashboardReportFrequencyMonthly:
 		lastDay := time.Date(now.Year(), now.Month()+1, 0, 0, 0, 0, 0, now.Location()).Day()
-		scheduledDay := config.DashboardReportEmailMonthDay
+		scheduledDay := schedule.MonthDay
 		if scheduledDay > lastDay {
 			scheduledDay = lastDay
 		}
@@ -169,10 +214,121 @@ func dashboardReportPeriodForSchedule(config EmailSettingsConfig, now time.Time)
 			return dashboardReportPeriod{}, false
 		}
 		end := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
-		return newDashboardReportPeriod(config.DashboardReportEmailFrequency, end.AddDate(0, -1, 0), end), true
+		return newDashboardReportPeriod(schedule.Frequency, end.AddDate(0, -1, 0), end), true
 	default:
 		return dashboardReportPeriod{}, false
 	}
+}
+
+func nextDashboardReportDispatch(schedules []DashboardReportEmailSchedule, now time.Time, history dashboardReportDispatchHistory) (dashboardReportDispatch, bool) {
+	for _, schedule := range schedules {
+		period, matchesDate := dashboardReportPeriodForSchedule(schedule, now)
+		if !matchesDate {
+			continue
+		}
+		for _, sendTime := range schedule.SendTimes {
+			parsed, err := time.Parse("15:04", sendTime)
+			if err != nil || now.Hour() < parsed.Hour() || (now.Hour() == parsed.Hour() && now.Minute() < parsed.Minute()) {
+				continue
+			}
+			dispatchKey := fmt.Sprintf("%s:%s:%d:%d:%s:%s", schedule.ID, schedule.Frequency, schedule.Weekday, schedule.MonthDay, sendTime, period.PeriodKey)
+			if _, sent := history[dispatchKey]; sent {
+				continue
+			}
+			return dashboardReportDispatch{Period: period, DispatchKey: dispatchKey, ScheduledTime: sendTime}, true
+		}
+	}
+	return dashboardReportDispatch{}, false
+}
+
+func decodeDashboardReportEmailSchedules(target *[]DashboardReportEmailSchedule) error {
+	raw := emailOptionString(common.DashboardReportEmailSchedulesOptionKey)
+	if raw == "" {
+		*target = []DashboardReportEmailSchedule{}
+		return nil
+	}
+	if err := common.UnmarshalJsonStr(raw, target); err != nil {
+		return fmt.Errorf("invalid dashboard report email schedules: %w", err)
+	}
+	return nil
+}
+
+func normalizeDashboardReportEmailSchedules(schedules []DashboardReportEmailSchedule) []DashboardReportEmailSchedule {
+	result := make([]DashboardReportEmailSchedule, 0, len(schedules))
+	for scheduleIndex, schedule := range schedules {
+		schedule.ID = strings.TrimSpace(schedule.ID)
+		if schedule.ID == "" {
+			schedule.ID = fmt.Sprintf("schedule-%d", scheduleIndex+1)
+		}
+		schedule.Frequency = strings.TrimSpace(schedule.Frequency)
+		if schedule.Frequency == "" {
+			schedule.Frequency = DashboardReportFrequencyDaily
+		}
+		if schedule.Weekday == 0 {
+			schedule.Weekday = 1
+		}
+		if schedule.MonthDay == 0 {
+			schedule.MonthDay = 1
+		}
+		seenTimes := make(map[string]struct{}, len(schedule.SendTimes))
+		sendTimes := make([]string, 0, len(schedule.SendTimes))
+		for _, sendTime := range schedule.SendTimes {
+			sendTime = strings.TrimSpace(sendTime)
+			if sendTime == "" {
+				continue
+			}
+			if _, exists := seenTimes[sendTime]; exists {
+				continue
+			}
+			seenTimes[sendTime] = struct{}{}
+			sendTimes = append(sendTimes, sendTime)
+		}
+		if len(sendTimes) == 0 {
+			sendTimes = append(sendTimes, "08:00")
+		}
+		sort.Strings(sendTimes)
+		schedule.SendTimes = sendTimes
+		result = append(result, schedule)
+	}
+	return result
+}
+
+func applyLegacyDashboardReportEmailSchedule(config *EmailSettingsConfig) {
+	if config == nil || len(config.DashboardReportEmailSchedules) == 0 {
+		return
+	}
+	first := config.DashboardReportEmailSchedules[0]
+	config.DashboardReportEmailFrequency = first.Frequency
+	config.DashboardReportEmailSendTime = first.SendTimes[0]
+	config.DashboardReportEmailWeekday = first.Weekday
+	config.DashboardReportEmailMonthDay = first.MonthDay
+}
+
+func loadDashboardReportDispatchHistory() dashboardReportDispatchHistory {
+	history := dashboardReportDispatchHistory{}
+	raw := emailOptionString(common.DashboardReportEmailDispatchHistoryOptionKey)
+	if raw == "" {
+		return history
+	}
+	if err := common.UnmarshalJsonStr(raw, &history); err != nil {
+		common.SysError("failed to load dashboard report dispatch history: " + err.Error())
+		return dashboardReportDispatchHistory{}
+	}
+	return history
+}
+
+func persistDashboardReportDispatchHistory(history dashboardReportDispatchHistory, now time.Time) error {
+	oldest := now.AddDate(0, 0, -90).Unix()
+	for key, sentAt := range history {
+		if sentAt < oldest {
+			delete(history, key)
+		}
+	}
+	data, err := common.Marshal(history)
+	if err != nil {
+		return err
+	}
+	return model.UpdateOption(common.DashboardReportEmailDispatchHistoryOptionKey, string(data))
 }
 
 func newDashboardReportPeriod(frequency string, start, end time.Time) dashboardReportPeriod {

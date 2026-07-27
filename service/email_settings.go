@@ -21,21 +21,22 @@ import (
 const maxOperationalEmailRecipients = 100
 
 type EmailSettingsConfig struct {
-	SubscriptionExpiryReminderEnabled bool    `json:"subscription_expiry_reminder_enabled"`
-	LowBalanceEmailEnabled            bool    `json:"low_balance_email_enabled"`
-	LowBalanceEmailThreshold          int     `json:"low_balance_email_threshold"`
-	LowBalanceEmailRechargeURL        string  `json:"low_balance_email_recharge_url"`
-	AccountQuotaEmailEnabled          bool    `json:"account_quota_email_enabled"`
-	AccountQuotaEmailThreshold        float64 `json:"account_quota_email_threshold"`
-	AccountQuotaEmailRecipientUserIDs []int   `json:"account_quota_email_recipient_user_ids"`
-	ChannelAnomalyEmailEnabled        bool    `json:"channel_anomaly_email_enabled"`
-	ChannelAnomalyEmailRecipientIDs   []int   `json:"channel_anomaly_email_recipient_user_ids"`
-	DashboardReportEmailEnabled       bool    `json:"dashboard_report_email_enabled"`
-	DashboardReportEmailFrequency     string  `json:"dashboard_report_email_frequency"`
-	DashboardReportEmailSendTime      string  `json:"dashboard_report_email_send_time"`
-	DashboardReportEmailWeekday       int     `json:"dashboard_report_email_weekday"`
-	DashboardReportEmailMonthDay      int     `json:"dashboard_report_email_month_day"`
-	DashboardReportEmailRecipientIDs  []int   `json:"dashboard_report_email_recipient_user_ids"`
+	SubscriptionExpiryReminderEnabled bool                           `json:"subscription_expiry_reminder_enabled"`
+	LowBalanceEmailEnabled            bool                           `json:"low_balance_email_enabled"`
+	LowBalanceEmailThreshold          int                            `json:"low_balance_email_threshold"`
+	LowBalanceEmailRechargeURL        string                         `json:"low_balance_email_recharge_url"`
+	AccountQuotaEmailEnabled          bool                           `json:"account_quota_email_enabled"`
+	AccountQuotaEmailThreshold        float64                        `json:"account_quota_email_threshold"`
+	AccountQuotaEmailRecipientUserIDs []int                          `json:"account_quota_email_recipient_user_ids"`
+	ChannelAnomalyEmailEnabled        bool                           `json:"channel_anomaly_email_enabled"`
+	ChannelAnomalyEmailRecipientIDs   []int                          `json:"channel_anomaly_email_recipient_user_ids"`
+	DashboardReportEmailEnabled       bool                           `json:"dashboard_report_email_enabled"`
+	DashboardReportEmailFrequency     string                         `json:"dashboard_report_email_frequency"`
+	DashboardReportEmailSendTime      string                         `json:"dashboard_report_email_send_time"`
+	DashboardReportEmailWeekday       int                            `json:"dashboard_report_email_weekday"`
+	DashboardReportEmailMonthDay      int                            `json:"dashboard_report_email_month_day"`
+	DashboardReportEmailRecipientIDs  []int                          `json:"dashboard_report_email_recipient_user_ids"`
+	DashboardReportEmailSchedules     []DashboardReportEmailSchedule `json:"dashboard_report_email_schedules"`
 }
 
 func GetEmailSettingsConfig() (EmailSettingsConfig, error) {
@@ -59,6 +60,19 @@ func GetEmailSettingsConfig() (EmailSettingsConfig, error) {
 	if config.DashboardReportEmailSendTime == "" {
 		config.DashboardReportEmailSendTime = "08:00"
 	}
+	if err := decodeDashboardReportEmailSchedules(&config.DashboardReportEmailSchedules); err != nil {
+		return EmailSettingsConfig{}, err
+	}
+	if len(config.DashboardReportEmailSchedules) == 0 {
+		config.DashboardReportEmailSchedules = []DashboardReportEmailSchedule{{
+			Frequency: config.DashboardReportEmailFrequency,
+			SendTimes: []string{config.DashboardReportEmailSendTime},
+			Weekday:   config.DashboardReportEmailWeekday,
+			MonthDay:  config.DashboardReportEmailMonthDay,
+		}}
+	}
+	config.DashboardReportEmailSchedules = normalizeDashboardReportEmailSchedules(config.DashboardReportEmailSchedules)
+	applyLegacyDashboardReportEmailSchedule(&config)
 	if err := decodeEmailRecipientIDs(common.AccountQuotaEmailRecipientUserIDsOptionKey, &config.AccountQuotaEmailRecipientUserIDs); err != nil {
 		return EmailSettingsConfig{}, err
 	}
@@ -92,20 +106,16 @@ func GetEmailSettingsConfig() (EmailSettingsConfig, error) {
 
 func UpdateEmailSettingsConfig(config EmailSettingsConfig) (EmailSettingsConfig, error) {
 	config.LowBalanceEmailRechargeURL = strings.TrimSpace(config.LowBalanceEmailRechargeURL)
-	config.DashboardReportEmailFrequency = strings.TrimSpace(config.DashboardReportEmailFrequency)
-	config.DashboardReportEmailSendTime = strings.TrimSpace(config.DashboardReportEmailSendTime)
-	if config.DashboardReportEmailFrequency == "" {
-		config.DashboardReportEmailFrequency = DashboardReportFrequencyDaily
+	if len(config.DashboardReportEmailSchedules) == 0 {
+		config.DashboardReportEmailSchedules = []DashboardReportEmailSchedule{{
+			Frequency: config.DashboardReportEmailFrequency,
+			SendTimes: []string{config.DashboardReportEmailSendTime},
+			Weekday:   config.DashboardReportEmailWeekday,
+			MonthDay:  config.DashboardReportEmailMonthDay,
+		}}
 	}
-	if config.DashboardReportEmailSendTime == "" {
-		config.DashboardReportEmailSendTime = "08:00"
-	}
-	if config.DashboardReportEmailWeekday == 0 {
-		config.DashboardReportEmailWeekday = 1
-	}
-	if config.DashboardReportEmailMonthDay == 0 {
-		config.DashboardReportEmailMonthDay = 1
-	}
+	config.DashboardReportEmailSchedules = normalizeDashboardReportEmailSchedules(config.DashboardReportEmailSchedules)
+	applyLegacyDashboardReportEmailSchedule(&config)
 	config.AccountQuotaEmailRecipientUserIDs = normalizeEmailRecipientIDs(config.AccountQuotaEmailRecipientUserIDs)
 	config.ChannelAnomalyEmailRecipientIDs = normalizeEmailRecipientIDs(config.ChannelAnomalyEmailRecipientIDs)
 	config.DashboardReportEmailRecipientIDs = normalizeEmailRecipientIDs(config.DashboardReportEmailRecipientIDs)
@@ -121,7 +131,7 @@ func UpdateEmailSettingsConfig(config EmailSettingsConfig) (EmailSettingsConfig,
 			return EmailSettingsConfig{}, errors.New("recharge URL must be a valid HTTP or HTTPS URL")
 		}
 	}
-	if err := validateDashboardReportEmailSchedule(config); err != nil {
+	if err := validateDashboardReportEmailSchedules(config.DashboardReportEmailSchedules); err != nil {
 		return EmailSettingsConfig{}, err
 	}
 	if len(config.AccountQuotaEmailRecipientUserIDs) > maxOperationalEmailRecipients || len(config.ChannelAnomalyEmailRecipientIDs) > maxOperationalEmailRecipients || len(config.DashboardReportEmailRecipientIDs) > maxOperationalEmailRecipients {
@@ -149,6 +159,10 @@ func UpdateEmailSettingsConfig(config EmailSettingsConfig) (EmailSettingsConfig,
 	if err != nil {
 		return EmailSettingsConfig{}, err
 	}
+	dashboardReportSchedulesJSON, err := common.Marshal(config.DashboardReportEmailSchedules)
+	if err != nil {
+		return EmailSettingsConfig{}, err
+	}
 	values := map[string]string{
 		common.SubscriptionExpiryReminderEnabledOptionKey:    strconv.FormatBool(config.SubscriptionExpiryReminderEnabled),
 		common.LowBalanceEmailEnabledOptionKey:               strconv.FormatBool(config.LowBalanceEmailEnabled),
@@ -165,6 +179,7 @@ func UpdateEmailSettingsConfig(config EmailSettingsConfig) (EmailSettingsConfig,
 		common.DashboardReportEmailWeekdayOptionKey:          strconv.Itoa(config.DashboardReportEmailWeekday),
 		common.DashboardReportEmailMonthDayOptionKey:         strconv.Itoa(config.DashboardReportEmailMonthDay),
 		common.DashboardReportEmailRecipientUserIDsOptionKey: string(dashboardReportRecipientJSON),
+		common.DashboardReportEmailSchedulesOptionKey:        string(dashboardReportSchedulesJSON),
 	}
 	if err := model.UpdateOptionsBulk(values); err != nil {
 		return EmailSettingsConfig{}, err

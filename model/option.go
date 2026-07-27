@@ -95,6 +95,8 @@ func InitOptionMap() {
 	common.OptionMap[common.DashboardReportEmailMonthDayOptionKey] = "1"
 	common.OptionMap[common.DashboardReportEmailRecipientUserIDsOptionKey] = "[]"
 	common.OptionMap[common.DashboardReportEmailLastPeriodOptionKey] = ""
+	common.OptionMap[common.DashboardReportEmailSchedulesOptionKey] = "[]"
+	common.OptionMap[common.DashboardReportEmailDispatchHistoryOptionKey] = "{}"
 	common.OptionMap["Notice"] = ""
 	common.OptionMap["About"] = ""
 	common.OptionMap["HomePageContent"] = ""

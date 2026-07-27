@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -78,6 +79,10 @@ func TestUpdateEmailSettingsConfigPersistsCompleteConfiguration(t *testing.T) {
 		DashboardReportEmailWeekday:       5,
 		DashboardReportEmailMonthDay:      15,
 		DashboardReportEmailRecipientIDs:  []int{users["admin"].Id, users["root"].Id},
+		DashboardReportEmailSchedules: []DashboardReportEmailSchedule{
+			{Frequency: DashboardReportFrequencyWeekly, SendTimes: []string{"18:00", "09:30"}, Weekday: 5, MonthDay: 15},
+			{Frequency: DashboardReportFrequencyDaily, SendTimes: []string{"23:00", "12:00"}, Weekday: 1, MonthDay: 1},
+		},
 	}
 
 	updated, err := UpdateEmailSettingsConfig(input)
@@ -88,12 +93,15 @@ func TestUpdateEmailSettingsConfigPersistsCompleteConfiguration(t *testing.T) {
 	assert.Equal(t, expectedRecipients, updated.DashboardReportEmailRecipientIDs)
 	assert.Equal(t, DashboardReportFrequencyWeekly, updated.DashboardReportEmailFrequency)
 	assert.Equal(t, "09:30", updated.DashboardReportEmailSendTime)
+	require.Len(t, updated.DashboardReportEmailSchedules, 2)
+	assert.Equal(t, []string{"09:30", "18:00"}, updated.DashboardReportEmailSchedules[0].SendTimes)
+	assert.Equal(t, []string{"12:00", "23:00"}, updated.DashboardReportEmailSchedules[1].SendTimes)
 	assert.Equal(t, input.LowBalanceEmailThreshold, updated.LowBalanceEmailThreshold)
 	assert.Equal(t, input.AccountQuotaEmailThreshold, updated.AccountQuotaEmailThreshold)
 
 	var optionCount int64
 	require.NoError(t, db.Model(&model.Option{}).Count(&optionCount).Error)
-	assert.EqualValues(t, 15, optionCount)
+	assert.EqualValues(t, 16, optionCount)
 	assert.Equal(t, "true", common.OptionMap[common.LowBalanceEmailEnabledOptionKey])
 	expectedChannelRecipients, err := common.Marshal([]int{users["root"].Id})
 	require.NoError(t, err)
@@ -122,6 +130,9 @@ func TestGetEmailSettingsConfigFallsBackToRootRecipients(t *testing.T) {
 	assert.Equal(t, []int{users["root"].Id}, config.AccountQuotaEmailRecipientUserIDs)
 	assert.Equal(t, []int{users["root"].Id}, config.ChannelAnomalyEmailRecipientIDs)
 	assert.Equal(t, []int{users["root"].Id}, config.DashboardReportEmailRecipientIDs)
+	require.Len(t, config.DashboardReportEmailSchedules, 1)
+	assert.Equal(t, DashboardReportFrequencyDaily, config.DashboardReportEmailSchedules[0].Frequency)
+	assert.Equal(t, []string{"08:00"}, config.DashboardReportEmailSchedules[0].SendTimes)
 }
 
 func TestGetEmailSettingsConfigReturnsEmptyRecipientArrays(t *testing.T) {
@@ -225,30 +236,91 @@ func TestSendDashboardReportTestEmailsUsesCurrentDashboardData(t *testing.T) {
 }
 
 func TestDashboardReportScheduleUsesCompletedCalendarPeriods(t *testing.T) {
-	config := EmailSettingsConfig{
-		DashboardReportEmailFrequency: DashboardReportFrequencyDaily,
-		DashboardReportEmailSendTime:  "08:00",
-		DashboardReportEmailWeekday:   1,
-		DashboardReportEmailMonthDay:  1,
+	schedule := DashboardReportEmailSchedule{
+		Frequency: DashboardReportFrequencyDaily,
+		SendTimes: []string{"08:00"},
+		Weekday:   1,
+		MonthDay:  1,
 	}
 	now := time.Date(2026, time.July, 27, 8, 30, 0, 0, time.Local)
 
-	daily, due := dashboardReportPeriodForSchedule(config, now)
+	daily, due := dashboardReportPeriodForSchedule(schedule, now)
 	require.True(t, due)
 	assert.Equal(t, "2026-07-26", daily.Start.Format("2006-01-02"))
 	assert.Equal(t, "2026-07-27", daily.End.Format("2006-01-02"))
 
-	config.DashboardReportEmailFrequency = DashboardReportFrequencyWeekly
-	weekly, due := dashboardReportPeriodForSchedule(config, now)
+	schedule.Frequency = DashboardReportFrequencyWeekly
+	weekly, due := dashboardReportPeriodForSchedule(schedule, now)
 	require.True(t, due)
 	assert.Equal(t, "2026-07-20", weekly.Start.Format("2006-01-02"))
 	assert.Equal(t, "2026-07-27", weekly.End.Format("2006-01-02"))
 
-	config.DashboardReportEmailFrequency = DashboardReportFrequencyMonthly
-	config.DashboardReportEmailMonthDay = 31
+	schedule.Frequency = DashboardReportFrequencyMonthly
+	schedule.MonthDay = 31
 	monthEnd := time.Date(2026, time.February, 28, 8, 30, 0, 0, time.Local)
-	monthly, due := dashboardReportPeriodForSchedule(config, monthEnd)
+	monthly, due := dashboardReportPeriodForSchedule(schedule, monthEnd)
 	require.True(t, due)
 	assert.Equal(t, "2026-01-01", monthly.Start.Format("2006-01-02"))
 	assert.Equal(t, "2026-02-01", monthly.End.Format("2006-01-02"))
+}
+
+func TestNextDashboardReportDispatchTracksEveryConditionAndSendTime(t *testing.T) {
+	now := time.Date(2026, time.July, 27, 23, 30, 0, 0, time.Local)
+	schedules := normalizeDashboardReportEmailSchedules([]DashboardReportEmailSchedule{
+		{Frequency: DashboardReportFrequencyDaily, SendTimes: []string{"23:00", "12:00"}, Weekday: 1, MonthDay: 1},
+		{Frequency: DashboardReportFrequencyWeekly, SendTimes: []string{"18:00"}, Weekday: 1, MonthDay: 1},
+	})
+	history := dashboardReportDispatchHistory{}
+
+	first, due := nextDashboardReportDispatch(schedules, now, history)
+	require.True(t, due)
+	assert.Equal(t, "12:00", first.ScheduledTime)
+	history[first.DispatchKey] = now.Unix()
+
+	second, due := nextDashboardReportDispatch(schedules, now, history)
+	require.True(t, due)
+	assert.Equal(t, "23:00", second.ScheduledTime)
+	history[second.DispatchKey] = now.Unix()
+
+	third, due := nextDashboardReportDispatch(schedules, now, history)
+	require.True(t, due)
+	assert.Equal(t, "18:00", third.ScheduledTime)
+	assert.Equal(t, "Weekly", third.Period.TypeEN)
+	history[third.DispatchKey] = now.Unix()
+
+	_, due = nextDashboardReportDispatch(schedules, now, history)
+	assert.False(t, due)
+}
+
+func TestDispatchDashboardReportEmailsSendsEachDueTimeOnce(t *testing.T) {
+	_, users := setupEmailSettingsTest(t)
+	_, err := UpdateEmailSettingsConfig(EmailSettingsConfig{
+		DashboardReportEmailEnabled:      true,
+		DashboardReportEmailRecipientIDs: []int{users["root"].Id},
+		DashboardReportEmailSchedules: []DashboardReportEmailSchedule{
+			{Frequency: DashboardReportFrequencyDaily, SendTimes: []string{"12:00", "23:00"}, Weekday: 1, MonthDay: 1},
+			{Frequency: DashboardReportFrequencyWeekly, SendTimes: []string{"18:00"}, Weekday: 1, MonthDay: 1},
+		},
+	})
+	require.NoError(t, err)
+	now := time.Date(2026, time.July, 27, 23, 30, 0, 0, time.Local)
+	sent := 0
+	sender := func(_, _, _ string) error {
+		sent++
+		return nil
+	}
+
+	first, err := dispatchDashboardReportEmailsAt(context.Background(), now, sender)
+	require.NoError(t, err)
+	assert.Equal(t, "12:00", first.ScheduledTime)
+	second, err := dispatchDashboardReportEmailsAt(context.Background(), now, sender)
+	require.NoError(t, err)
+	assert.Equal(t, "23:00", second.ScheduledTime)
+	third, err := dispatchDashboardReportEmailsAt(context.Background(), now, sender)
+	require.NoError(t, err)
+	assert.Equal(t, "18:00", third.ScheduledTime)
+	fourth, err := dispatchDashboardReportEmailsAt(context.Background(), now, sender)
+	require.NoError(t, err)
+	assert.Zero(t, fourth.RecipientCount)
+	assert.Equal(t, 3, sent)
 }

@@ -34,9 +34,9 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 import { Switch } from '@/components/ui/switch'
 
+import { DashboardReportScheduleEditor } from './dashboard-report-schedule-editor'
 import { EmailCampaignUserPicker } from './email-campaign-user-picker'
 import {
   getEmailSettingsConfig,
@@ -392,118 +392,13 @@ export function EmailAlertSettings() {
             patchConfig({ dashboard_report_email_enabled: checked })
           }
         >
-          <div className='grid gap-4 lg:grid-cols-3'>
-            <div className='space-y-1.5'>
-              <Label htmlFor='dashboard-report-frequency'>
-                {t('Report frequency')}
-              </Label>
-              <NativeSelect
-                id='dashboard-report-frequency'
-                className='w-full'
-                disabled={!config.dashboard_report_email_enabled}
-                value={config.dashboard_report_email_frequency}
-                onChange={(event) =>
-                  patchConfig({
-                    dashboard_report_email_frequency: event.target
-                      .value as EmailSettingsConfig['dashboard_report_email_frequency'],
-                  })
-                }
-              >
-                <NativeSelectOption value='daily'>
-                  {t('Daily')}
-                </NativeSelectOption>
-                <NativeSelectOption value='weekly'>
-                  {t('Weekly')}
-                </NativeSelectOption>
-                <NativeSelectOption value='monthly'>
-                  {t('Monthly')}
-                </NativeSelectOption>
-              </NativeSelect>
-            </div>
-            <div className='space-y-1.5'>
-              <Label htmlFor='dashboard-report-send-time'>
-                {t('Send time')}
-              </Label>
-              <Input
-                id='dashboard-report-send-time'
-                type='time'
-                disabled={!config.dashboard_report_email_enabled}
-                value={config.dashboard_report_email_send_time}
-                onChange={(event) =>
-                  patchConfig({
-                    dashboard_report_email_send_time: event.target.value,
-                  })
-                }
-              />
-            </div>
-            {config.dashboard_report_email_frequency === 'weekly' && (
-              <div className='space-y-1.5'>
-                <Label htmlFor='dashboard-report-weekday'>{t('Weekday')}</Label>
-                <NativeSelect
-                  id='dashboard-report-weekday'
-                  className='w-full'
-                  disabled={!config.dashboard_report_email_enabled}
-                  value={String(config.dashboard_report_email_weekday)}
-                  onChange={(event) =>
-                    patchConfig({
-                      dashboard_report_email_weekday: Number.parseInt(
-                        event.target.value,
-                        10
-                      ),
-                    })
-                  }
-                >
-                  <NativeSelectOption value='1'>
-                    {t('Monday')}
-                  </NativeSelectOption>
-                  <NativeSelectOption value='2'>
-                    {t('Tuesday')}
-                  </NativeSelectOption>
-                  <NativeSelectOption value='3'>
-                    {t('Wednesday')}
-                  </NativeSelectOption>
-                  <NativeSelectOption value='4'>
-                    {t('Thursday')}
-                  </NativeSelectOption>
-                  <NativeSelectOption value='5'>
-                    {t('Friday')}
-                  </NativeSelectOption>
-                  <NativeSelectOption value='6'>
-                    {t('Saturday')}
-                  </NativeSelectOption>
-                  <NativeSelectOption value='7'>
-                    {t('Sunday')}
-                  </NativeSelectOption>
-                </NativeSelect>
-              </div>
-            )}
-            {config.dashboard_report_email_frequency === 'monthly' && (
-              <div className='space-y-1.5'>
-                <Label htmlFor='dashboard-report-month-day'>
-                  {t('Day of month')}
-                </Label>
-                <Input
-                  id='dashboard-report-month-day'
-                  type='number'
-                  min={1}
-                  max={31}
-                  disabled={!config.dashboard_report_email_enabled}
-                  value={config.dashboard_report_email_month_day}
-                  onChange={(event) =>
-                    patchConfig({
-                      dashboard_report_email_month_day: Math.min(
-                        31,
-                        Math.max(
-                          1,
-                          Number.parseInt(event.target.value, 10) || 1
-                        )
-                      ),
-                    })
-                  }
-                />
-              </div>
-            )}
-          </div>
+          <DashboardReportScheduleEditor
+            disabled={!config.dashboard_report_email_enabled}
+            schedules={config.dashboard_report_email_schedules}
+            onChange={(dashboard_report_email_schedules) =>
+              patchConfig({ dashboard_report_email_schedules })
+            }
+          />
           <div className='space-y-1.5'>
             <Label htmlFor='dashboard-report-recipients'>
               {t('Recipients')}

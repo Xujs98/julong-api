@@ -145,6 +145,8 @@ const (
 	DashboardReportEmailMonthDayOptionKey         = "DashboardReportEmailMonthDay"
 	DashboardReportEmailRecipientUserIDsOptionKey = "DashboardReportEmailRecipientUserIDs"
 	DashboardReportEmailLastPeriodOptionKey       = "DashboardReportEmailLastPeriod"
+	DashboardReportEmailSchedulesOptionKey        = "DashboardReportEmailSchedules"
+	DashboardReportEmailDispatchHistoryOptionKey  = "DashboardReportEmailDispatchHistory"
 )
 
 var GitHubClientId = ""
