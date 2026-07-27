@@ -45,6 +45,7 @@ func HandleGroupRatio(ctx *gin.Context, relayInfo *relaycommon.RelayInfo) (types
 	groupRatioInfo := types.GroupRatioInfo{
 		GroupRatio:        1.0, // default ratio
 		GroupSpecialRatio: -1,
+		PricingGroupRatio: -1,
 	}
 
 	// check auto group
@@ -54,20 +55,18 @@ func HandleGroupRatio(ctx *gin.Context, relayInfo *relaycommon.RelayInfo) (types
 		relayInfo.UsingGroup = autoGroup.(string)
 	}
 
+	pricingGroupRatio := ratio_setting.GetGroupRatio(relayInfo.UsingGroup)
+	actualGroupRatio := pricingGroupRatio
+
 	// check user group special ratio
 	userGroupRatio, ok := ratio_setting.GetGroupGroupRatio(relayInfo.UserGroup, relayInfo.UsingGroup)
 	if ok {
-		// user group special ratio
-		groupRatioInfo.GroupSpecialRatio = userGroupRatio
-		groupRatioInfo.GroupRatio = userGroupRatio
+		actualGroupRatio = userGroupRatio
 		groupRatioInfo.HasSpecialRatio = true
-	} else {
-		// normal group ratio
-		groupRatioInfo.GroupRatio = ratio_setting.GetGroupRatio(relayInfo.UsingGroup)
 	}
 
 	adjustedRatio, err := model.ApplyUserGroupRatioAdjustment(
-		groupRatioInfo.GroupRatio,
+		actualGroupRatio,
 		relayInfo.UserGroupRatioAdjustmentEnabled,
 		relayInfo.UserGroupRatioAdjustment,
 	)
@@ -77,6 +76,16 @@ func HandleGroupRatio(ctx *gin.Context, relayInfo *relaycommon.RelayInfo) (types
 	groupRatioInfo.GroupRatio = adjustedRatio
 	if groupRatioInfo.HasSpecialRatio {
 		groupRatioInfo.GroupSpecialRatio = adjustedRatio
+		adjustedPricingGroupRatio, pricingErr := model.ApplyUserGroupRatioAdjustment(
+			pricingGroupRatio,
+			relayInfo.UserGroupRatioAdjustmentEnabled,
+			relayInfo.UserGroupRatioAdjustment,
+		)
+		if pricingErr == nil {
+			groupRatioInfo.PricingGroupRatio = adjustedPricingGroupRatio
+		}
+	} else {
+		groupRatioInfo.PricingGroupRatio = adjustedRatio
 	}
 
 	return groupRatioInfo, nil

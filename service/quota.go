@@ -214,8 +214,15 @@ func PostWssConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, mod
 
 	quota, clamp := calculateAudioQuota(quotaInfo)
 	noteQuotaClamp(relayInfo, clamp)
+	billingCounterfactuals := calculateAudioBillingRevenueCounterfactuals(relayInfo, quotaInfo)
 	if tieredOk {
 		quota = tieredQuota
+		billingCounterfactuals = calculateTieredBillingRevenueCounterfactuals(
+			relayInfo,
+			tieredParams,
+			tieredResult,
+			decimal.Zero,
+		)
 	}
 
 	totalTokens := usage.TotalTokens
@@ -232,6 +239,7 @@ func PostWssConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, mod
 		// in this case, must be some error happened
 		// we cannot just return, because we may have to return the pre-consumed quota
 		quota = 0
+		billingCounterfactuals = billingRevenueCounterfactuals{}
 		logContent += "（可能是上游超时）"
 		logger.LogError(ctx, fmt.Sprintf("total tokens is 0, cannot consume quota, userId %d, channelId %d, "+
 			"tokenId %d, model %s， pre-consumed quota %d", relayInfo.UserId, relayInfo.ChannelId, relayInfo.TokenId, modelName, relayInfo.FinalPreConsumedQuota))
@@ -276,6 +284,7 @@ func PostWssConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, mod
 		}
 	}
 	attachModelTokenAdjustmentToOther(other, modelTokenAdjustmentAudit)
+	attachBillingRevenueToOther(other, buildBillingRevenueAudit(quota, billingCounterfactuals))
 	attachQuotaSaturation(ctx, relayInfo, other)
 	model.RecordConsumeLog(ctx, relayInfo.UserId, model.RecordConsumeLogParams{
 		ChannelId:        relayInfo.ChannelId,
@@ -362,8 +371,15 @@ func PostAudioConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, u
 
 	quota, clamp := calculateAudioQuota(quotaInfo)
 	noteQuotaClamp(relayInfo, clamp)
+	billingCounterfactuals := calculateAudioBillingRevenueCounterfactuals(relayInfo, quotaInfo)
 	if tieredOk {
 		quota = tieredQuota
+		billingCounterfactuals = calculateTieredBillingRevenueCounterfactuals(
+			relayInfo,
+			tieredParams,
+			tieredResult,
+			decimal.Zero,
+		)
 	}
 
 	totalTokens := usage.TotalTokens
@@ -380,6 +396,7 @@ func PostAudioConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, u
 		// in this case, must be some error happened
 		// we cannot just return, because we may have to return the pre-consumed quota
 		quota = 0
+		billingCounterfactuals = billingRevenueCounterfactuals{}
 		logContent += "（可能是上游超时）"
 		logger.LogError(ctx, fmt.Sprintf("total tokens is 0, cannot consume quota, userId %d, channelId %d, "+
 			"tokenId %d, model %s， pre-consumed quota %d", relayInfo.UserId, relayInfo.ChannelId, relayInfo.TokenId, relayInfo.OriginModelName, relayInfo.FinalPreConsumedQuota))
@@ -424,6 +441,7 @@ func PostAudioConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, u
 		}
 	}
 	attachModelTokenAdjustmentToOther(other, modelTokenAdjustmentAudit)
+	attachBillingRevenueToOther(other, buildBillingRevenueAudit(quota, billingCounterfactuals))
 	attachQuotaSaturation(ctx, relayInfo, other)
 	model.RecordConsumeLog(ctx, relayInfo.UserId, model.RecordConsumeLogParams{
 		ChannelId:        relayInfo.ChannelId,

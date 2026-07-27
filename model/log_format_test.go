@@ -68,6 +68,9 @@ func TestFormatUserLogsStripsQuotaSaturation(t *testing.T) {
 	require.NoError(t, err)
 	_, hasAdminInfo := parsed["admin_info"]
 	require.False(t, hasAdminInfo, "admin_info (and nested quota_saturation) must be stripped for non-admin views")
+	billedUsage, ok := parsed["billed_token_usage"].(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, 110.0, billedUsage["input"])
 	// Non-admin billing fields remain visible.
 	require.Contains(t, parsed, "model_price")
 }

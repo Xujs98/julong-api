@@ -122,6 +122,7 @@ func TestHandleGroupRatioAppliesUserAdjustmentAfterSpecialRatio(t *testing.T) {
 	require.True(t, ratioInfo.HasSpecialRatio)
 	require.InDelta(t, 0.18, ratioInfo.GroupRatio, 1e-12)
 	require.InDelta(t, 0.18, ratioInfo.GroupSpecialRatio, 1e-12)
+	require.InDelta(t, 0.22, ratioInfo.PricingGroupRatio, 1e-12)
 
 	info.UserGroupRatioAdjustment = -0.1
 	_, err = HandleGroupRatio(ctx, info)

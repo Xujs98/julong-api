@@ -10,6 +10,7 @@ import (
 type GroupRatioInfo struct {
 	GroupRatio        float64
 	GroupSpecialRatio float64
+	PricingGroupRatio float64
 	HasSpecialRatio   bool
 }
 

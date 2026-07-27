@@ -301,6 +301,13 @@ func formatUserLogs(logs []*Log, startIdx int) {
 			actualDisplay := actualLogGroupRatioDisplay(otherMap)
 			display := storedUserDisplayGroupRatio(logs[i], otherMap)
 			applyUserLogDisplayMetrics(logs[i], otherMap, actualDisplay, display)
+			if adminInfo, ok := otherMap["admin_info"].(map[string]interface{}); ok {
+				if adjustment, ok := adminInfo["model_token_adjustment"].(map[string]interface{}); ok {
+					if billedUsage, ok := adjustment["billed"].(map[string]interface{}); ok {
+						otherMap["billed_token_usage"] = billedUsage
+					}
+				}
+			}
 			// Remove admin-only debug fields.
 			delete(otherMap, "admin_info")
 			// Remove operation-audit details (operator/route info), admin-only.

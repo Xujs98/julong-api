@@ -164,7 +164,12 @@ export interface LogOtherData {
       clamped: number
     }
     model_token_adjustment?: ModelTokenAdjustmentAudit
+    billing_revenue?: {
+      group_special_ratio?: number
+      model_token_adjustment?: number
+    }
   }
+  billed_token_usage?: ModelTokenUsage
   // Language-independent operation descriptor (audit/login logs).
   // Frontend renders localized content from action + params via i18n templates.
   op?: {

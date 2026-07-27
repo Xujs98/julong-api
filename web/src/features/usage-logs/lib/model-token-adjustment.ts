@@ -56,13 +56,19 @@ export function getTokenUsageDisplay(
     cache_creation_1h: other?.cache_creation_tokens_1h || 0,
   })
   const audit = isAdmin ? other?.admin_info?.model_token_adjustment : undefined
-  if (!audit) {
-    return { displayed: fallback, actual: fallback, hasAdjustment: false }
+  if (audit) {
+    return {
+      displayed: normalizeTokenUsage(audit.billed),
+      actual: normalizeTokenUsage(audit.actual),
+      hasAdjustment: true,
+    }
   }
 
-  return {
-    displayed: normalizeTokenUsage(audit.billed),
-    actual: normalizeTokenUsage(audit.actual),
-    hasAdjustment: true,
+  const billedUsage = other?.billed_token_usage
+  if (billedUsage) {
+    const displayed = normalizeTokenUsage(billedUsage)
+    return { displayed, actual: displayed, hasAdjustment: false }
   }
+
+  return { displayed: fallback, actual: fallback, hasAdjustment: false }
 }

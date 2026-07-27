@@ -70,6 +70,15 @@ const other: LogOtherData = {
   },
 }
 
+const userOther: LogOtherData = {
+  billed_token_usage: {
+    input: 127,
+    output: 60,
+    cache_read: 30,
+    cache_creation: 20,
+  },
+}
+
 describe('model token adjustment log display', () => {
   test('shows billed tokens to administrators and preserves actual tooltip values', () => {
     const display = getTokenUsageDisplay(log, other, true)
@@ -86,12 +95,13 @@ describe('model token adjustment log display', () => {
     assert.equal(display.actual.input, 100)
   })
 
-  test('keeps real log tokens for non-admin viewers', () => {
-    const display = getTokenUsageDisplay(log, other, false)
+  test('shows billed tokens to non-admin viewers without exposing actual tokens', () => {
+    const display = getTokenUsageDisplay(log, userOther, false)
 
     assert.equal(display.hasAdjustment, false)
-    assert.equal(display.displayed.input, 100)
-    assert.equal(display.displayed.output, 50)
-    assert.equal(display.displayed.cache_read, 20)
+    assert.equal(display.displayed.input, 127)
+    assert.equal(display.displayed.output, 60)
+    assert.equal(display.displayed.cache_read, 30)
+    assert.deepEqual(display.actual, display.displayed)
   })
 })
