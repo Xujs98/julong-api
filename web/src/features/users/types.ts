@@ -37,6 +37,8 @@ export const userTagSchema = z.object({
   id: z.number(),
   name: z.string(),
   color: z.string(),
+  built_in: z.boolean().optional(),
+  risk_level: z.enum(['medium', 'high']).optional(),
   created_at: z.number().optional(),
   updated_at: z.number().optional(),
 })
@@ -70,6 +72,7 @@ export const userSchema = z.object({
   agent_username: z.string().optional(),
   tag_id: z.number().optional(),
   tag: userTagSchema.nullable().optional(),
+  risk_tag: userTagSchema.nullable().optional(),
   linux_do_id: z.string().optional(),
   status: userStatusSchema,
   role: userRoleSchema,

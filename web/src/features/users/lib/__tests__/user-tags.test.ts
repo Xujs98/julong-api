@@ -20,6 +20,8 @@ import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
 
 import {
+  canManageUserTag,
+  getAssignableUserTags,
   getUserTagFilterValue,
   USER_TAG_COLOR_PRESETS,
   USER_TAG_ROW_MARKER_CLASS_NAME,
@@ -49,5 +51,22 @@ describe('user tag presentation', () => {
   test('maps users without a tag to the no-tag filter value', () => {
     assert.equal(getUserTagFilterValue(), '0')
     assert.equal(getUserTagFilterValue(15), '15')
+  })
+
+  test('excludes built-in risk tags from manual tag management', () => {
+    const tags = [
+      {
+        id: -1,
+        name: 'Medium risk',
+        color: '#C2410C',
+        built_in: true,
+        risk_level: 'medium' as const,
+      },
+      { id: 8, name: 'Follow up', color: '#3B82F6' },
+    ]
+
+    assert.equal(canManageUserTag(tags[0]), false)
+    assert.equal(canManageUserTag(tags[1]), true)
+    assert.deepEqual(getAssignableUserTags(tags), [tags[1]])
   })
 })

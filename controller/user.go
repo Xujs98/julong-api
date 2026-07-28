@@ -386,7 +386,7 @@ func SearchUsers(c *gin.Context) {
 	}
 	var tagId *int
 	if tagIdStr := c.Query("tag_id"); tagIdStr != "" {
-		if parsed, err := strconv.Atoi(tagIdStr); err == nil && parsed >= 0 {
+		if parsed, err := strconv.Atoi(tagIdStr); err == nil && (parsed >= 0 || model.IsBuiltInUserTagId(parsed)) {
 			tagId = &parsed
 		}
 	}

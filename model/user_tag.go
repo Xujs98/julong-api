@@ -10,14 +10,54 @@ import (
 
 const UserTagNameMaxLength = 32
 
+const (
+	UserTagRiskMediumId = -1
+	UserTagRiskHighId   = -2
+)
+
+const (
+	UserTagRiskMediumColor = "#C2410C"
+	UserTagRiskHighColor   = "#B91C1C"
+)
+
 var userTagColorPattern = regexp.MustCompile(`^#[0-9A-Fa-f]{6}$`)
 
 type UserTag struct {
 	Id        int    `json:"id"`
 	Name      string `json:"name" gorm:"type:varchar(32);uniqueIndex"`
 	Color     string `json:"color" gorm:"type:char(7)"`
+	BuiltIn   bool   `json:"built_in,omitempty" gorm:"-:all"`
+	RiskLevel string `json:"risk_level,omitempty" gorm:"-:all"`
 	CreatedAt int64  `json:"created_at" gorm:"autoCreateTime;column:created_at"`
 	UpdatedAt int64  `json:"updated_at" gorm:"autoUpdateTime;column:updated_at"`
+}
+
+func GetBuiltInUserTag(tagId int) (UserTag, bool) {
+	switch tagId {
+	case UserTagRiskMediumId:
+		return UserTag{
+			Id:        UserTagRiskMediumId,
+			Name:      "Medium risk",
+			Color:     UserTagRiskMediumColor,
+			BuiltIn:   true,
+			RiskLevel: UserRiskLevelMedium,
+		}, true
+	case UserTagRiskHighId:
+		return UserTag{
+			Id:        UserTagRiskHighId,
+			Name:      "High risk",
+			Color:     UserTagRiskHighColor,
+			BuiltIn:   true,
+			RiskLevel: UserRiskLevelHigh,
+		}, true
+	default:
+		return UserTag{}, false
+	}
+}
+
+func IsBuiltInUserTagId(tagId int) bool {
+	_, exists := GetBuiltInUserTag(tagId)
+	return exists
 }
 
 func NormalizeUserTag(tag *UserTag) error {
@@ -39,9 +79,14 @@ func NormalizeUserTag(tag *UserTag) error {
 }
 
 func ListUserTags() ([]UserTag, error) {
-	var tags []UserTag
-	err := DB.Order("id asc").Find(&tags).Error
-	return tags, err
+	mediumRiskTag, _ := GetBuiltInUserTag(UserTagRiskMediumId)
+	highRiskTag, _ := GetBuiltInUserTag(UserTagRiskHighId)
+	tags := []UserTag{mediumRiskTag, highRiskTag}
+	var customTags []UserTag
+	if err := DB.Order("id asc").Find(&customTags).Error; err != nil {
+		return nil, err
+	}
+	return append(tags, customTags...), nil
 }
 
 func CreateUserTag(tag *UserTag) error {

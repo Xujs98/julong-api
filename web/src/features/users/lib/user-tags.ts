@@ -17,6 +17,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
+import type { UserTag } from '../types'
+
 export const USER_TAG_COLOR_PRESETS = [
   '#EF4444',
   '#F97316',
@@ -30,4 +32,12 @@ export const USER_TAG_ROW_MARKER_CLASS_NAME =
 
 export function getUserTagFilterValue(tagId?: number): string {
   return String(tagId ?? 0)
+}
+
+export function canManageUserTag(tag: Pick<UserTag, 'built_in'>): boolean {
+  return !tag.built_in
+}
+
+export function getAssignableUserTags(tags: UserTag[]): UserTag[] {
+  return tags.filter(canManageUserTag)
 }

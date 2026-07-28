@@ -24,6 +24,7 @@ import { GroupBadge } from '@/components/group-badge'
 import { LongText } from '@/components/long-text'
 import { StatusBadge } from '@/components/status-badge'
 import { TableId } from '@/components/table-id'
+import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
   Tooltip,
@@ -135,6 +136,14 @@ export function useUsersColumns(tags: UserTag[]): ColumnDef<User>[] {
               >
                 {username}
               </button>
+              {user.risk_tag && (
+                <Badge
+                  className='text-white'
+                  style={{ backgroundColor: user.risk_tag.color }}
+                >
+                  {t(user.risk_tag.name)}
+                </Badge>
+              )}
               {remark && (
                 <Tooltip>
                   <TooltipTrigger

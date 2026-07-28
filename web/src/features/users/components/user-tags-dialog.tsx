@@ -23,6 +23,7 @@ import { toast } from 'sonner'
 
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { Dialog } from '@/components/dialog'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -33,7 +34,7 @@ import {
 } from '@/components/ui/tooltip'
 
 import { createUserTag, deleteUserTag, updateUserTag } from '../api'
-import { USER_TAG_COLOR_PRESETS } from '../lib/user-tags'
+import { canManageUserTag, USER_TAG_COLOR_PRESETS } from '../lib/user-tags'
 import type { UserTag } from '../types'
 
 type UserTagsDialogProps = {
@@ -63,6 +64,7 @@ export function UserTagsDialog(props: UserTagsDialogProps) {
   }
 
   const handleEdit = (tag: UserTag) => {
+    if (!canManageUserTag(tag)) return
     setEditingTagId(tag.id)
     setName(tag.name)
     setColor(tag.color)
@@ -93,7 +95,7 @@ export function UserTagsDialog(props: UserTagsDialogProps) {
   }
 
   const handleDelete = async () => {
-    if (!deleteTarget) return
+    if (!deleteTarget || !canManageUserTag(deleteTarget)) return
     try {
       const result = await deleteUserTag(deleteTarget.id)
       if (!result.success) {
@@ -202,44 +204,50 @@ export function UserTagsDialog(props: UserTagsDialogProps) {
                     style={{ backgroundColor: tag.color }}
                   />
                   <span className='min-w-0 flex-1 truncate text-sm font-medium'>
-                    {tag.name}
+                    {tag.built_in ? t(tag.name) : tag.name}
                   </span>
                   <span className='text-muted-foreground font-mono text-xs'>
                     {tag.color}
                   </span>
-                  <Tooltip>
-                    <TooltipTrigger
-                      render={
-                        <Button
-                          type='button'
-                          variant='ghost'
-                          size='icon-sm'
-                          aria-label={t('Edit tag')}
-                          onClick={() => handleEdit(tag)}
-                        />
-                      }
-                    >
-                      <Pencil />
-                    </TooltipTrigger>
-                    <TooltipContent>{t('Edit tag')}</TooltipContent>
-                  </Tooltip>
-                  <Tooltip>
-                    <TooltipTrigger
-                      render={
-                        <Button
-                          type='button'
-                          variant='ghost'
-                          size='icon-sm'
-                          className='text-destructive hover:text-destructive'
-                          aria-label={t('Delete tag')}
-                          onClick={() => setDeleteTarget(tag)}
-                        />
-                      }
-                    >
-                      <Trash2 />
-                    </TooltipTrigger>
-                    <TooltipContent>{t('Delete tag')}</TooltipContent>
-                  </Tooltip>
+                  {!canManageUserTag(tag) ? (
+                    <Badge variant='secondary'>{t('Built-in')}</Badge>
+                  ) : (
+                    <>
+                      <Tooltip>
+                        <TooltipTrigger
+                          render={
+                            <Button
+                              type='button'
+                              variant='ghost'
+                              size='icon-sm'
+                              aria-label={t('Edit tag')}
+                              onClick={() => handleEdit(tag)}
+                            />
+                          }
+                        >
+                          <Pencil />
+                        </TooltipTrigger>
+                        <TooltipContent>{t('Edit tag')}</TooltipContent>
+                      </Tooltip>
+                      <Tooltip>
+                        <TooltipTrigger
+                          render={
+                            <Button
+                              type='button'
+                              variant='ghost'
+                              size='icon-sm'
+                              className='text-destructive hover:text-destructive'
+                              aria-label={t('Delete tag')}
+                              onClick={() => setDeleteTarget(tag)}
+                            />
+                          }
+                        >
+                          <Trash2 />
+                        </TooltipTrigger>
+                        <TooltipContent>{t('Delete tag')}</TooltipContent>
+                      </Tooltip>
+                    </>
+                  )}
                 </div>
               ))}
             </div>

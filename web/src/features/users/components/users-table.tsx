@@ -262,7 +262,7 @@ export function UsersTable(props: UsersTableProps) {
                 ),
               },
               ...props.tags.map((tag) => ({
-                label: tag.name,
+                label: tag.built_in ? t(tag.name) : tag.name,
                 value: String(tag.id),
                 iconNode: (
                   <span

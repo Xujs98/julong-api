@@ -67,6 +67,7 @@ import {
   isUserDeleted,
 } from '../constants'
 import { getUserActionMessage } from '../lib'
+import { getAssignableUserTags } from '../lib/user-tags'
 import type { User, ManageUserAction, UserTag } from '../types'
 import { UserBindingDialog } from './dialogs/user-binding-dialog'
 import { useUsers } from './users-provider'
@@ -279,7 +280,7 @@ export function DataTableRowActions(props: DataTableRowActionsProps) {
                 </DropdownMenuShortcut>
               )}
             </DropdownMenuItem>
-            {props.tags.map((tag) => (
+            {getAssignableUserTags(props.tags).map((tag) => (
               <DropdownMenuItem
                 key={tag.id}
                 disabled={tagUpdating}

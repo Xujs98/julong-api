@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/dto"
@@ -110,6 +111,7 @@ type User struct {
 	AgentUsername                string                     `json:"agent_username,omitempty" gorm:"-:all"`
 	TagId                        int                        `json:"tag_id" gorm:"column:tag_id;index"`
 	Tag                          *UserTag                   `json:"tag,omitempty" gorm:"-:all"`
+	RiskTag                      *UserTag                   `json:"risk_tag,omitempty" gorm:"-:all"`
 	DeletedAt                    gorm.DeletedAt             `gorm:"index"`
 	LinuxDOId                    string                     `json:"linux_do_id" gorm:"column:linux_do_id;index"`
 	Setting                      string                     `json:"setting" gorm:"type:text;column:setting"`
@@ -397,6 +399,7 @@ func GetAllUsers(pageInfo *common.PageInfo, sortOptions ...UserSortOptions) (use
 
 	fillAgentInfo(users)
 	fillUserTagInfo(users)
+	fillUserRiskTagInfo(users, time.Now().Unix())
 	fillUserIPInfo(users)
 
 	return users, total, nil
@@ -406,6 +409,8 @@ func SearchUsers(keyword string, group string, role *int, status *int, tagId *in
 	var users []*User
 	var total int64
 	var err error
+	riskGeneratedAt := time.Now().Unix()
+	var riskReports map[int]*UserRiskReport
 
 	// 开始事务
 	tx := DB.Begin()
@@ -448,7 +453,39 @@ func SearchUsers(keyword string, group string, role *int, status *int, tagId *in
 		}
 	}
 	if tagId != nil {
-		query = query.Where("tag_id = ?", *tagId)
+		if riskTag, builtIn := GetBuiltInUserTag(*tagId); builtIn {
+			candidateQuery := query.Session(&gorm.Session{})
+			if !common.UserRiskDetectionEnabled {
+				candidateQuery = candidateQuery.Where("risk_detection_enabled = ?", true)
+			}
+			var candidateUserIds []int
+			if err = candidateQuery.Pluck("id", &candidateUserIds).Error; err != nil {
+				tx.Rollback()
+				return nil, 0, err
+			}
+			const riskQueryBatchSize = 500
+			riskReports = make(map[int]*UserRiskReport, len(candidateUserIds))
+			for start := 0; start < len(candidateUserIds); start += riskQueryBatchSize {
+				end := min(start+riskQueryBatchSize, len(candidateUserIds))
+				batchReports, reportErr := getUserRiskReports(candidateUserIds[start:end], UserRiskTagWindowDays, riskGeneratedAt)
+				if reportErr != nil {
+					tx.Rollback()
+					return nil, 0, reportErr
+				}
+				for userId, report := range batchReports {
+					riskReports[userId] = report
+				}
+			}
+			matchedUserIds := make([]int, 0)
+			for _, userId := range candidateUserIds {
+				if report := riskReports[userId]; report != nil && report.Level == riskTag.RiskLevel {
+					matchedUserIds = append(matchedUserIds, userId)
+				}
+			}
+			query = query.Where("id IN ?", matchedUserIds)
+		} else {
+			query = query.Where("tag_id = ?", *tagId)
+		}
 	}
 
 	// 获取总数
@@ -473,6 +510,11 @@ func SearchUsers(keyword string, group string, role *int, status *int, tagId *in
 
 	fillAgentInfo(users)
 	fillUserTagInfo(users)
+	if riskReports != nil {
+		fillUserRiskTagsFromReports(users, riskReports)
+	} else {
+		fillUserRiskTagInfo(users, riskGeneratedAt)
+	}
 	fillUserIPInfo(users)
 
 	return users, total, nil
