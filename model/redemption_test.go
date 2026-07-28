@@ -400,3 +400,27 @@ func TestDeleteUsedAgentRedemptionDoesNotRefund(t *testing.T) {
 	require.NoError(t, LOG_DB.Model(&Log{}).Where("user_id = ? AND type = ?", agent.Id, LogTypeRefund).Count(&count).Error)
 	assert.Equal(t, int64(0), count)
 }
+
+func TestDeleteRedemptionsByIdsDeletesOnlySelectedRows(t *testing.T) {
+	require.NoError(t, DB.AutoMigrate(&Redemption{}))
+	require.NoError(t, DB.Session(&gorm.Session{AllowGlobalUpdate: true}).Unscoped().Delete(&Redemption{}).Error)
+	t.Cleanup(func() {
+		require.NoError(t, DB.Session(&gorm.Session{AllowGlobalUpdate: true}).Unscoped().Delete(&Redemption{}).Error)
+	})
+
+	redemptions := []Redemption{
+		{Name: "batch-delete-one", Key: "50000000000000000000000000000001", Status: common.RedemptionCodeStatusEnabled, Quota: 100},
+		{Name: "batch-delete-two", Key: "50000000000000000000000000000002", Status: common.RedemptionCodeStatusEnabled, Quota: 100},
+		{Name: "batch-keep", Key: "50000000000000000000000000000003", Status: common.RedemptionCodeStatusEnabled, Quota: 100},
+	}
+	require.NoError(t, DB.Create(&redemptions).Error)
+
+	deleted, err := DeleteRedemptionsByIds([]int{redemptions[0].Id, redemptions[1].Id})
+	require.NoError(t, err)
+	assert.Equal(t, int64(2), deleted)
+
+	var remaining []Redemption
+	require.NoError(t, DB.Order("id asc").Find(&remaining).Error)
+	require.Len(t, remaining, 1)
+	assert.Equal(t, redemptions[2].Id, remaining[0].Id)
+}

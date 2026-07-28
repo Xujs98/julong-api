@@ -43,3 +43,35 @@ export function isRedemptionExpired(
 ): boolean {
   return status === 1 && isTimestampExpired(expired_time)
 }
+
+export type RedemptionCodeExportItem = {
+  name: string
+  key: string
+}
+
+export function formatRedemptionCodes(
+  items: RedemptionCodeExportItem[],
+  includeNames: boolean
+): string {
+  return items
+    .map((item) => (includeNames ? `${item.name}\t${item.key}` : item.key))
+    .join('\n')
+}
+
+export function downloadRedemptionCodes(
+  items: RedemptionCodeExportItem[]
+): void {
+  if (items.length === 0) return
+
+  const content = `\uFEFF${formatRedemptionCodes(items, true)}`
+  const url = URL.createObjectURL(
+    new Blob([content], { type: 'text/plain;charset=utf-8' })
+  )
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `redemption-codes-${Date.now()}.txt`
+  document.body.append(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(url)
+}

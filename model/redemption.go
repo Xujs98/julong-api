@@ -360,29 +360,61 @@ func DeleteRedemptionById(id int) (err error) {
 	if id == 0 {
 		return errors.New("id 为空！")
 	}
-	var refundUserId int
-	var refundAmount int
-	var refundedRedemption Redemption
-	err = DB.Transaction(func(tx *gorm.DB) error {
-		redemption := Redemption{Id: id}
-		if err := tx.Where(redemption).First(&redemption).Error; err != nil {
-			return err
-		}
-		userId, refund, err := refundAgentRedemptionCharge(tx, &redemption)
-		if err != nil {
-			return err
-		}
-		if refund > 0 {
-			refundUserId = userId
-			refundAmount = refund
-			refundedRedemption = redemption
-		}
-		return tx.Delete(&redemption).Error
-	})
-	if err == nil && refundAmount > 0 {
-		RecordAgentRedemptionRefundLog(refundUserId, &refundedRedemption, refundAmount)
+	rowsAffected, err := DeleteRedemptionsByIds([]int{id})
+	if err != nil {
+		return err
 	}
-	return err
+	if rowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
+}
+
+func DeleteRedemptionsByIds(ids []int) (int64, error) {
+	if len(ids) == 0 {
+		return 0, errors.New("ids 不能为空！")
+	}
+
+	type pendingRefundLog struct {
+		userId     int
+		refund     int
+		redemption Redemption
+	}
+	var rowsAffected int64
+	var refundLogs []pendingRefundLog
+	err := DB.Transaction(func(tx *gorm.DB) error {
+		var redemptions []Redemption
+		if err := lockForUpdate(tx).Where("id IN ?", ids).Find(&redemptions).Error; err != nil {
+			return err
+		}
+		if len(redemptions) == 0 {
+			return nil
+		}
+
+		for i := range redemptions {
+			userId, refund, err := refundAgentRedemptionCharge(tx, &redemptions[i])
+			if err != nil {
+				return err
+			}
+			if refund > 0 {
+				refundLogs = append(refundLogs, pendingRefundLog{
+					userId:     userId,
+					refund:     refund,
+					redemption: redemptions[i],
+				})
+			}
+		}
+
+		result := tx.Delete(&redemptions)
+		rowsAffected = result.RowsAffected
+		return result.Error
+	})
+	if err == nil {
+		for _, refundLog := range refundLogs {
+			RecordAgentRedemptionRefundLog(refundLog.userId, &refundLog.redemption, refundLog.refund)
+		}
+	}
+	return rowsAffected, err
 }
 
 func DeleteInvalidRedemptions() (int64, error) {

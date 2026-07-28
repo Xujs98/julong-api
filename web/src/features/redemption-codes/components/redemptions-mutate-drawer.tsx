@@ -80,7 +80,7 @@ export function RedemptionsMutateDrawer({
 }: RedemptionsMutateDrawerProps) {
   const { t } = useTranslation()
   const isUpdate = !!currentRow
-  const { triggerRefresh } = useRedemptions()
+  const { triggerRefresh, setOpen, setGeneratedRedemptions } = useRedemptions()
   const currentUser = useAuthStore((s) => s.auth.user)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -128,7 +128,8 @@ export function RedemptionsMutateDrawer({
         // Create mode
         const result = await createRedemption(basePayload)
         if (result.success) {
-          const count = result.data?.length || 0
+          const codes = result.data || []
+          const count = codes.length
           toast.success(
             count > 1
               ? t('Successfully created {{count}} redemption codes', {
@@ -136,7 +137,8 @@ export function RedemptionsMutateDrawer({
                 })
               : t(SUCCESS_MESSAGES.REDEMPTION_CREATED)
           )
-          onOpenChange(false)
+          setGeneratedRedemptions({ name: data.name, codes })
+          setOpen('generated')
           triggerRefresh()
         }
       }

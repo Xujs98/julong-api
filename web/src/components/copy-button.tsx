@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { Check, Copy } from 'lucide-react'
-import { type ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { Button } from '@/components/ui/button'
@@ -32,6 +32,7 @@ import { cn } from '@/lib/utils'
 interface CopyButtonProps {
   value: string
   children?: ReactNode
+  icon?: ReactNode
   className?: string
   iconClassName?: string
   variant?: 'ghost' | 'outline' | 'default' | 'secondary' | 'destructive'
@@ -44,6 +45,7 @@ interface CopyButtonProps {
 export function CopyButton({
   value,
   children,
+  icon,
   className,
   iconClassName,
   variant = 'ghost',
@@ -71,7 +73,7 @@ export function CopyButton({
       {isCopied ? (
         <Check className={cn('text-success', iconClassName)} />
       ) : (
-        <Copy className={cn(iconClassName)} />
+        (icon ?? <Copy className={cn(iconClassName)} />)
       )}
       {children}
     </Button>
@@ -80,7 +82,7 @@ export function CopyButton({
   if (tooltip || successTooltip) {
     return (
       <Tooltip>
-        <TooltipTrigger render={button}></TooltipTrigger>
+        <TooltipTrigger render={button} />
         <TooltipContent>
           <p>{isCopied ? resolvedSuccessTooltip : resolvedTooltip}</p>
         </TooltipContent>

@@ -86,4 +86,14 @@ export interface RedemptionFormData {
 // Dialog Types
 // ============================================================================
 
-export type RedemptionsDialogType = 'create' | 'update' | 'delete' | 'view'
+export type GeneratedRedemptions = {
+  name: string
+  codes: string[]
+}
+
+export type RedemptionsDialogType =
+  | 'create'
+  | 'update'
+  | 'delete'
+  | 'generated'
+  | 'view'
