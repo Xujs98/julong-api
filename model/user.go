@@ -467,7 +467,7 @@ func SearchUsers(keyword string, group string, role *int, status *int, tagId *in
 			riskReports = make(map[int]*UserRiskReport, len(candidateUserIds))
 			for start := 0; start < len(candidateUserIds); start += riskQueryBatchSize {
 				end := min(start+riskQueryBatchSize, len(candidateUserIds))
-				batchReports, reportErr := getUserRiskReports(candidateUserIds[start:end], UserRiskTagWindowDays, riskGeneratedAt)
+				batchReports, reportErr := GetUserRiskReports(candidateUserIds[start:end], UserRiskTagWindowDays, riskGeneratedAt)
 				if reportErr != nil {
 					tx.Rollback()
 					return nil, 0, reportErr

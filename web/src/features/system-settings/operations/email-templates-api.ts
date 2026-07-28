@@ -34,6 +34,9 @@ export type EmailTemplate = {
 export type EmailTemplateLocale = 'zh' | 'en'
 
 export type DashboardReportEmailFrequency = 'daily' | 'weekly' | 'monthly'
+export type RiskUserEmailLevel = 'medium' | 'high'
+
+const DEFAULT_RISK_USER_EMAIL_LEVELS: RiskUserEmailLevel[] = ['medium', 'high']
 
 export type DashboardReportEmailSchedule = {
   id: string
@@ -60,6 +63,9 @@ export type EmailSettingsConfig = {
   dashboard_report_email_month_day: number
   dashboard_report_email_recipient_user_ids: number[]
   dashboard_report_email_schedules: DashboardReportEmailSchedule[]
+  risk_user_email_enabled: boolean
+  risk_user_email_levels: RiskUserEmailLevel[]
+  risk_user_email_recipient_user_ids: number[]
 }
 
 export type EmailRecipientOption = {
@@ -173,6 +179,12 @@ export async function getEmailSettingsConfig() {
           dashboard_report_email_recipient_user_ids:
             config.dashboard_report_email_recipient_user_ids ?? [],
           dashboard_report_email_schedules: dashboardReportSchedules,
+          risk_user_email_enabled: config.risk_user_email_enabled ?? false,
+          risk_user_email_levels: config.risk_user_email_levels?.length
+            ? config.risk_user_email_levels
+            : [...DEFAULT_RISK_USER_EMAIL_LEVELS],
+          risk_user_email_recipient_user_ids:
+            config.risk_user_email_recipient_user_ids ?? [],
         }
       : undefined,
   }
@@ -219,6 +231,23 @@ export async function sendDashboardReportTestEmail(recipientUserIds: number[]) {
     ApiResponse<{ recipient_count: number; period: string }>
   >('/api/email-settings/dashboard-report/test', {
     recipient_user_ids: recipientUserIds,
+  })
+  return response.data
+}
+
+export async function sendRiskUserTestEmail(
+  recipientUserIds: number[],
+  riskLevels: RiskUserEmailLevel[]
+) {
+  const response = await api.post<
+    ApiResponse<{
+      recipient_count: number
+      risk_user_count: number
+      levels: RiskUserEmailLevel[]
+    }>
+  >('/api/email-settings/risk-user/test', {
+    recipient_user_ids: recipientUserIds,
+    risk_levels: riskLevels,
   })
   return response.data
 }

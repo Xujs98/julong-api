@@ -346,7 +346,7 @@ func GetUserRiskReport(userId int, windowDays int, generatedAt int64) (*UserRisk
 	}), nil
 }
 
-func getUserRiskReports(userIds []int, windowDays int, generatedAt int64) (map[int]*UserRiskReport, error) {
+func GetUserRiskReports(userIds []int, windowDays int, generatedAt int64) (map[int]*UserRiskReport, error) {
 	if windowDays <= 0 || generatedAt <= 0 {
 		return nil, errors.New("invalid user risk report range")
 	}
@@ -474,6 +474,25 @@ func getUserRiskReports(userIds []int, windowDays int, generatedAt int64) (map[i
 	return reports, nil
 }
 
+func ListRiskDetectionUsers(afterUserId int, limit int, globalEnabled bool) ([]User, error) {
+	if limit <= 0 {
+		limit = 500
+	}
+	if limit > 500 {
+		limit = 500
+	}
+	query := DB.Model(&User{}).
+		Select("id", "username", "display_name", "risk_detection_enabled").
+		Where("id > ?", afterUserId).
+		Where("deleted_at IS NULL")
+	if !globalEnabled {
+		query = query.Where("risk_detection_enabled = ?", true)
+	}
+	var users []User
+	err := query.Order("id asc").Limit(limit).Find(&users).Error
+	return users, err
+}
+
 func fillUserRiskTagInfo(users []*User, generatedAt int64) {
 	if len(users) == 0 || generatedAt <= 0 {
 		return
@@ -484,7 +503,7 @@ func fillUserRiskTagInfo(users []*User, generatedAt int64) {
 			enabledUserIds = append(enabledUserIds, user.Id)
 		}
 	}
-	reports, err := getUserRiskReports(enabledUserIds, UserRiskTagWindowDays, generatedAt)
+	reports, err := GetUserRiskReports(enabledUserIds, UserRiskTagWindowDays, generatedAt)
 	if err != nil {
 		return
 	}

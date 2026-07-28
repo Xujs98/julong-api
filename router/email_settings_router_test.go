@@ -25,4 +25,5 @@ func TestEmailSettingsRoutesKeepLegacyConfigAliases(t *testing.T) {
 	assert.Contains(t, routes, http.MethodPut+" /api/email-settings")
 	assert.Contains(t, routes, http.MethodGet+" /api/email-settings/config")
 	assert.Contains(t, routes, http.MethodPut+" /api/email-settings/config")
+	assert.Contains(t, routes, http.MethodPost+" /api/email-settings/risk-user/test")
 }

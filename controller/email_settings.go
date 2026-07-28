@@ -22,6 +22,11 @@ type dashboardReportTestEmailRequest struct {
 	RecipientUserIDs []int `json:"recipient_user_ids"`
 }
 
+type riskUserTestEmailRequest struct {
+	RecipientUserIDs []int    `json:"recipient_user_ids"`
+	RiskLevels       []string `json:"risk_levels"`
+}
+
 func GetEmailSettingsConfig(c *gin.Context) {
 	config, err := service.GetEmailSettingsConfig()
 	if err != nil {
@@ -100,6 +105,20 @@ func SendDashboardReportTestEmail(c *gin.Context) {
 		return
 	}
 	result, err := service.SendDashboardReportTestEmails(req.RecipientUserIDs)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, result)
+}
+
+func SendRiskUserTestEmail(c *gin.Context) {
+	var req riskUserTestEmailRequest
+	if err := common.DecodeJson(c.Request.Body, &req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "无效的参数"})
+		return
+	}
+	result, err := service.SendRiskUserTestEmails(req.RecipientUserIDs, req.RiskLevels)
 	if err != nil {
 		common.ApiError(c, err)
 		return

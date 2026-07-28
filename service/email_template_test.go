@@ -138,6 +138,17 @@ func TestDashboardReportTemplateExposesReportMetrics(t *testing.T) {
 	assert.Contains(t, template.Content, "{{group_analysis}}")
 }
 
+func TestRiskUserTemplateExposesRiskSummary(t *testing.T) {
+	setupEmailTemplateTest(t)
+	template, err := GetEmailTemplateForLocale(EmailTemplateEventRiskUserDetected, EmailTemplateLocaleChinese)
+	require.NoError(t, err)
+	assert.Contains(t, template.Placeholders, "risk_user_count")
+	assert.Contains(t, template.Placeholders, "risk_levels")
+	assert.Contains(t, template.Placeholders, "risk_users")
+	assert.Contains(t, template.Content, "{{window_days}}")
+	assert.Contains(t, template.Content, "{{detected_at}}")
+}
+
 func TestShouldSendAccountQuotaEmailOnlyOnFirstLowBalanceOrDownwardCrossing(t *testing.T) {
 	tests := []struct {
 		name              string

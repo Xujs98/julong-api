@@ -37,6 +37,9 @@ type EmailSettingsConfig struct {
 	DashboardReportEmailMonthDay      int                            `json:"dashboard_report_email_month_day"`
 	DashboardReportEmailRecipientIDs  []int                          `json:"dashboard_report_email_recipient_user_ids"`
 	DashboardReportEmailSchedules     []DashboardReportEmailSchedule `json:"dashboard_report_email_schedules"`
+	RiskUserEmailEnabled              bool                           `json:"risk_user_email_enabled"`
+	RiskUserEmailLevels               []string                       `json:"risk_user_email_levels"`
+	RiskUserEmailRecipientIDs         []int                          `json:"risk_user_email_recipient_user_ids"`
 }
 
 func GetEmailSettingsConfig() (EmailSettingsConfig, error) {
@@ -53,6 +56,10 @@ func GetEmailSettingsConfig() (EmailSettingsConfig, error) {
 		DashboardReportEmailSendTime:      emailOptionString(common.DashboardReportEmailSendTimeOptionKey),
 		DashboardReportEmailWeekday:       emailOptionInt(common.DashboardReportEmailWeekdayOptionKey, 1),
 		DashboardReportEmailMonthDay:      emailOptionInt(common.DashboardReportEmailMonthDayOptionKey, 1),
+		RiskUserEmailEnabled:              emailOptionBool(common.RiskUserEmailEnabledOptionKey, false),
+	}
+	if err := decodeRiskUserEmailLevels(&config.RiskUserEmailLevels); err != nil {
+		return EmailSettingsConfig{}, err
 	}
 	if config.DashboardReportEmailFrequency == "" {
 		config.DashboardReportEmailFrequency = DashboardReportFrequencyDaily
@@ -82,7 +89,10 @@ func GetEmailSettingsConfig() (EmailSettingsConfig, error) {
 	if err := decodeEmailRecipientIDs(common.DashboardReportEmailRecipientUserIDsOptionKey, &config.DashboardReportEmailRecipientIDs); err != nil {
 		return EmailSettingsConfig{}, err
 	}
-	if len(config.AccountQuotaEmailRecipientUserIDs) == 0 || len(config.ChannelAnomalyEmailRecipientIDs) == 0 || len(config.DashboardReportEmailRecipientIDs) == 0 {
+	if err := decodeEmailRecipientIDs(common.RiskUserEmailRecipientUserIDsOptionKey, &config.RiskUserEmailRecipientIDs); err != nil {
+		return EmailSettingsConfig{}, err
+	}
+	if len(config.AccountQuotaEmailRecipientUserIDs) == 0 || len(config.ChannelAnomalyEmailRecipientIDs) == 0 || len(config.DashboardReportEmailRecipientIDs) == 0 || len(config.RiskUserEmailRecipientIDs) == 0 {
 		rootRecipients, err := model.GetOperationalEmailRecipientUsers(nil)
 		if err != nil {
 			return EmailSettingsConfig{}, err
@@ -99,6 +109,9 @@ func GetEmailSettingsConfig() (EmailSettingsConfig, error) {
 		}
 		if len(config.DashboardReportEmailRecipientIDs) == 0 {
 			config.DashboardReportEmailRecipientIDs = append([]int{}, rootIDs...)
+		}
+		if len(config.RiskUserEmailRecipientIDs) == 0 {
+			config.RiskUserEmailRecipientIDs = append([]int{}, rootIDs...)
 		}
 	}
 	return config, nil
@@ -119,6 +132,8 @@ func UpdateEmailSettingsConfig(config EmailSettingsConfig) (EmailSettingsConfig,
 	config.AccountQuotaEmailRecipientUserIDs = normalizeEmailRecipientIDs(config.AccountQuotaEmailRecipientUserIDs)
 	config.ChannelAnomalyEmailRecipientIDs = normalizeEmailRecipientIDs(config.ChannelAnomalyEmailRecipientIDs)
 	config.DashboardReportEmailRecipientIDs = normalizeEmailRecipientIDs(config.DashboardReportEmailRecipientIDs)
+	config.RiskUserEmailLevels = normalizeRiskUserEmailLevels(config.RiskUserEmailLevels)
+	config.RiskUserEmailRecipientIDs = normalizeEmailRecipientIDs(config.RiskUserEmailRecipientIDs)
 	if config.LowBalanceEmailThreshold < 0 {
 		return EmailSettingsConfig{}, errors.New("low balance threshold cannot be negative")
 	}
@@ -134,7 +149,10 @@ func UpdateEmailSettingsConfig(config EmailSettingsConfig) (EmailSettingsConfig,
 	if err := validateDashboardReportEmailSchedules(config.DashboardReportEmailSchedules); err != nil {
 		return EmailSettingsConfig{}, err
 	}
-	if len(config.AccountQuotaEmailRecipientUserIDs) > maxOperationalEmailRecipients || len(config.ChannelAnomalyEmailRecipientIDs) > maxOperationalEmailRecipients || len(config.DashboardReportEmailRecipientIDs) > maxOperationalEmailRecipients {
+	if config.RiskUserEmailEnabled && len(config.RiskUserEmailLevels) == 0 {
+		return EmailSettingsConfig{}, errors.New("at least one risk level is required")
+	}
+	if len(config.AccountQuotaEmailRecipientUserIDs) > maxOperationalEmailRecipients || len(config.ChannelAnomalyEmailRecipientIDs) > maxOperationalEmailRecipients || len(config.DashboardReportEmailRecipientIDs) > maxOperationalEmailRecipients || len(config.RiskUserEmailRecipientIDs) > maxOperationalEmailRecipients {
 		return EmailSettingsConfig{}, fmt.Errorf("recipient count cannot exceed %d", maxOperationalEmailRecipients)
 	}
 	if err := validateOperationalEmailRecipientIDs(config.AccountQuotaEmailRecipientUserIDs); err != nil {
@@ -144,6 +162,9 @@ func UpdateEmailSettingsConfig(config EmailSettingsConfig) (EmailSettingsConfig,
 		return EmailSettingsConfig{}, err
 	}
 	if err := validateOperationalEmailRecipientIDs(config.DashboardReportEmailRecipientIDs); err != nil {
+		return EmailSettingsConfig{}, err
+	}
+	if err := validateOperationalEmailRecipientIDs(config.RiskUserEmailRecipientIDs); err != nil {
 		return EmailSettingsConfig{}, err
 	}
 
@@ -160,6 +181,14 @@ func UpdateEmailSettingsConfig(config EmailSettingsConfig) (EmailSettingsConfig,
 		return EmailSettingsConfig{}, err
 	}
 	dashboardReportSchedulesJSON, err := common.Marshal(config.DashboardReportEmailSchedules)
+	if err != nil {
+		return EmailSettingsConfig{}, err
+	}
+	riskUserLevelsJSON, err := common.Marshal(config.RiskUserEmailLevels)
+	if err != nil {
+		return EmailSettingsConfig{}, err
+	}
+	riskUserRecipientJSON, err := common.Marshal(config.RiskUserEmailRecipientIDs)
 	if err != nil {
 		return EmailSettingsConfig{}, err
 	}
@@ -180,6 +209,9 @@ func UpdateEmailSettingsConfig(config EmailSettingsConfig) (EmailSettingsConfig,
 		common.DashboardReportEmailMonthDayOptionKey:         strconv.Itoa(config.DashboardReportEmailMonthDay),
 		common.DashboardReportEmailRecipientUserIDsOptionKey: string(dashboardReportRecipientJSON),
 		common.DashboardReportEmailSchedulesOptionKey:        string(dashboardReportSchedulesJSON),
+		common.RiskUserEmailEnabledOptionKey:                 strconv.FormatBool(config.RiskUserEmailEnabled),
+		common.RiskUserEmailLevelsOptionKey:                  string(riskUserLevelsJSON),
+		common.RiskUserEmailRecipientUserIDsOptionKey:        string(riskUserRecipientJSON),
 	}
 	if err := model.UpdateOptionsBulk(values); err != nil {
 		return EmailSettingsConfig{}, err

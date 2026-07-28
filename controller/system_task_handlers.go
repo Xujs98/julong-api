@@ -26,6 +26,7 @@ func RegisterScheduledSystemTasks() {
 	service.RegisterSystemTaskHandler(emailCampaignDispatchHandler{})
 	service.RegisterSystemTaskHandler(subscriptionExpiryEmailHandler{})
 	service.RegisterSystemTaskHandler(dashboardReportEmailHandler{})
+	service.RegisterSystemTaskHandler(riskUserEmailHandler{})
 }
 
 // channelTestHandler runs the scheduled "test all channels" job. Enablement and
@@ -225,6 +226,29 @@ func (dashboardReportEmailHandler) NewPayload() any { return nil }
 
 func (dashboardReportEmailHandler) Run(ctx context.Context, task *model.SystemTask, runnerID string) {
 	result, err := service.DispatchDashboardReportEmails(ctx, common.SendEmail)
+	if err != nil {
+		finishSystemTaskHandler(task, runnerID, model.SystemTaskStatusFailed, result, err)
+		return
+	}
+	finishSystemTaskHandler(task, runnerID, model.SystemTaskStatusSucceeded, result, nil)
+}
+
+type riskUserEmailHandler struct{}
+
+func (riskUserEmailHandler) Type() string {
+	return model.SystemTaskTypeRiskUserEmail
+}
+
+func (riskUserEmailHandler) Enabled() bool {
+	return common.SMTPServer != "" && (common.SMTPFrom != "" || common.SMTPAccount != "") && service.IsRiskUserEmailEnabled()
+}
+
+func (riskUserEmailHandler) Interval() time.Duration { return 10 * time.Minute }
+
+func (riskUserEmailHandler) NewPayload() any { return nil }
+
+func (riskUserEmailHandler) Run(ctx context.Context, task *model.SystemTask, runnerID string) {
+	result, err := service.DispatchRiskUserEmails(ctx, common.SendEmail)
 	if err != nil {
 		finishSystemTaskHandler(task, runnerID, model.SystemTaskStatusFailed, result, err)
 		return

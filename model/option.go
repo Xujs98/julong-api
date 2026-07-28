@@ -98,6 +98,10 @@ func InitOptionMap() {
 	common.OptionMap[common.DashboardReportEmailLastPeriodOptionKey] = ""
 	common.OptionMap[common.DashboardReportEmailSchedulesOptionKey] = "[]"
 	common.OptionMap[common.DashboardReportEmailDispatchHistoryOptionKey] = "{}"
+	common.OptionMap[common.RiskUserEmailEnabledOptionKey] = "false"
+	common.OptionMap[common.RiskUserEmailLevelsOptionKey] = `["medium","high"]`
+	common.OptionMap[common.RiskUserEmailRecipientUserIDsOptionKey] = "[]"
+	common.OptionMap[common.RiskUserEmailDispatchStateOptionKey] = "{}"
 	common.OptionMap["Notice"] = ""
 	common.OptionMap["About"] = ""
 	common.OptionMap["HomePageContent"] = ""

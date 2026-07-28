@@ -148,6 +148,10 @@ const (
 	DashboardReportEmailLastPeriodOptionKey       = "DashboardReportEmailLastPeriod"
 	DashboardReportEmailSchedulesOptionKey        = "DashboardReportEmailSchedules"
 	DashboardReportEmailDispatchHistoryOptionKey  = "DashboardReportEmailDispatchHistory"
+	RiskUserEmailEnabledOptionKey                 = "RiskUserEmailEnabled"
+	RiskUserEmailLevelsOptionKey                  = "RiskUserEmailLevels"
+	RiskUserEmailRecipientUserIDsOptionKey        = "RiskUserEmailRecipientUserIDs"
+	RiskUserEmailDispatchStateOptionKey           = "RiskUserEmailDispatchState"
 )
 
 var GitHubClientId = ""

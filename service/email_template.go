@@ -21,6 +21,7 @@ const (
 	EmailTemplateEventAccountQuotaAlert          = "account.quota_alert"
 	EmailTemplateEventChannelAnomalyDisabled     = "channel.anomaly_disabled"
 	EmailTemplateEventDashboardReport            = "dashboard.report"
+	EmailTemplateEventRiskUserDetected           = "user.risk_detected"
 	EmailTemplateEventUserQuotaAdjustment        = "user.quota_adjustment"
 	EmailTemplateLocaleChinese                   = "zh"
 	EmailTemplateLocaleEnglish                   = "en"
@@ -69,6 +70,7 @@ var (
 		EmailTemplateEventAccountQuotaAlert,
 		EmailTemplateEventChannelAnomalyDisabled,
 		EmailTemplateEventDashboardReport,
+		EmailTemplateEventRiskUserDetected,
 		EmailTemplateEventUserQuotaAdjustment,
 	}
 	emailTemplateDefinitions = map[string]EmailTemplateDefinition{
@@ -129,6 +131,13 @@ var (
 			Description:  "Sent to selected administrators with a completed dashboard usage summary.",
 			Category:     "Operations",
 			Placeholders: []string{"system_name", "username", "display_name", "email", "report_type", "report_period", "generated_at", "total_consumption", "total_quota", "total_requests", "total_tokens", "active_users", "active_models", "active_channels", "active_groups", "top_models", "top_users", "group_analysis"},
+		},
+		EmailTemplateEventRiskUserDetected: {
+			Event:        EmailTemplateEventRiskUserDetected,
+			Label:        "Risk user alert",
+			Description:  "Sent to selected administrators when users reach the selected risk levels.",
+			Category:     "Operations",
+			Placeholders: []string{"system_name", "username", "display_name", "email", "alert_mode", "risk_user_count", "risk_levels", "risk_users", "window_days", "detected_at"},
 		},
 		EmailTemplateEventUserQuotaAdjustment: {
 			Event:        EmailTemplateEventUserQuotaAdjustment,
@@ -273,6 +282,27 @@ func newEmailTemplateDefaults() map[string]storedEmailTemplate {
 <p style="margin:20px 0 8px;font-weight:600;">Group data analysis by consumption</p>
 <pre style="margin:0;padding:14px;border-radius:6px;background:#f8fafc;color:#334155;font-family:inherit;white-space:pre-wrap;word-break:break-word;">{{group_analysis}}</pre>
 <p style="margin-top:24px;color:#6b7280;font-size:12px;">Generated at {{generated_at}}</p>`)
+
+	add(EmailTemplateEventRiskUserDetected, EmailTemplateLocaleChinese,
+		"[{{system_name}}] 发现 {{risk_user_count}} 名风险用户", "风险用户提醒", "#dc2626", `
+<p>{{display_name}}，您好：</p>
+<p>风险检测发现符合通知条件的用户，请及时进入用户列表核查。</p>
+<table role="presentation" style="width:100%;margin:24px 0;border-collapse:separate;border-spacing:8px;table-layout:fixed;">
+  <tr><td style="padding:16px;border-radius:6px;background:#fef2f2;"><span style="display:block;color:#991b1b;font-size:12px;">风险用户</span><strong style="font-size:20px;color:#7f1d1d;">{{risk_user_count}}</strong></td><td style="padding:16px;border-radius:6px;background:#fff7ed;"><span style="display:block;color:#9a3412;font-size:12px;">风险等级</span><strong style="font-size:16px;color:#7c2d12;">{{risk_levels}}</strong></td></tr>
+</table>
+<p>提醒方式：<strong>{{alert_mode}}</strong><br>评估窗口：最近 <strong>{{window_days}}</strong> 天<br>检测时间：{{detected_at}}</p>
+<p style="margin:20px 0 8px;font-weight:600;">风险用户明细</p>
+<pre style="margin:0;padding:14px;border-radius:6px;background:#f8fafc;color:#334155;font-family:inherit;white-space:pre-wrap;word-break:break-word;">{{risk_users}}</pre>`)
+	add(EmailTemplateEventRiskUserDetected, EmailTemplateLocaleEnglish,
+		"[{{system_name}}] {{risk_user_count}} risk user(s) detected", "Risk user alert", "#dc2626", `
+<p>Hello {{display_name}},</p>
+<p>Risk detection found users matching the configured notification levels. Review them in the user list.</p>
+<table role="presentation" style="width:100%;margin:24px 0;border-collapse:separate;border-spacing:8px;table-layout:fixed;">
+  <tr><td style="padding:16px;border-radius:6px;background:#fef2f2;"><span style="display:block;color:#991b1b;font-size:12px;">Risk users</span><strong style="font-size:20px;color:#7f1d1d;">{{risk_user_count}}</strong></td><td style="padding:16px;border-radius:6px;background:#fff7ed;"><span style="display:block;color:#9a3412;font-size:12px;">Risk levels</span><strong style="font-size:16px;color:#7c2d12;">{{risk_levels}}</strong></td></tr>
+</table>
+<p>Alert mode: <strong>{{alert_mode}}</strong><br>Evaluation window: last <strong>{{window_days}}</strong> days<br>Detected at: {{detected_at}}</p>
+<p style="margin:20px 0 8px;font-weight:600;">Risk user details</p>
+<pre style="margin:0;padding:14px;border-radius:6px;background:#f8fafc;color:#334155;font-family:inherit;white-space:pre-wrap;word-break:break-word;">{{risk_users}}</pre>`)
 
 	add(EmailTemplateEventUserQuotaAdjustment, EmailTemplateLocaleChinese,
 		"[{{system_name}}] 额度调整通知", "额度调整通知", "#0f766e", `
@@ -571,6 +601,12 @@ func emailTemplateSampleValues(locale string) map[string]string {
 		"top_models":            "1. gpt-4.1  $52.30\n2. claude-sonnet-4  $41.20\n3. gemini-2.5-pro  $23.80",
 		"top_users":             "1. alice  消费 $62.10 | 请求 5,320 | Token 20,100,000\n2. bob  消费 $41.30 | 请求 3,210 | Token 15,200,000",
 		"group_analysis":        "1. default  消费 $72.40 | 请求 7,100 | Token 27,800,000 | 用户 210\n2. vip  消费 $56.10 | 请求 5,480 | Token 20,520,000 | 用户 118",
+		"alert_mode":            "测试邮件",
+		"risk_user_count":       "2",
+		"risk_levels":           "中风险、高风险",
+		"risk_users":            "#1024 risk_medium_demo（风险测试用户） | 中风险 30 分 | 请求 12 | 错误 3 | 返还 0 | 信号：高错误率\n#1025 risk_high_demo（高风险测试用户） | 高风险 75 分 | 请求 18 | 错误 10 | 返还 3 | 信号：高错误率、输出后返还",
+		"window_days":           "7",
+		"detected_at":           "2026-07-28 12:00:00",
 		"operation":             "增加",
 		"adjustment_amount":     "$10.00",
 		"previous_quota":        "$20.00",
@@ -584,6 +620,9 @@ func emailTemplateSampleValues(locale string) map[string]string {
 		values["report_type"] = "Daily"
 		values["top_users"] = "1. alice  Consumption $62.10 | Requests 5,320 | Tokens 20,100,000\n2. bob  Consumption $41.30 | Requests 3,210 | Tokens 15,200,000"
 		values["group_analysis"] = "1. default  Consumption $72.40 | Requests 7,100 | Tokens 27,800,000 | Users 210\n2. vip  Consumption $56.10 | Requests 5,480 | Tokens 20,520,000 | Users 118"
+		values["alert_mode"] = "Test email"
+		values["risk_levels"] = "Medium risk, High risk"
+		values["risk_users"] = "#1024 risk_medium_demo (Risk Demo User) | Medium risk 30 pts | Requests 12 | Errors 3 | Refunds 0 | Signals: High error rate\n#1025 risk_high_demo (High Risk Demo User) | High risk 75 pts | Requests 18 | Errors 10 | Refunds 3 | Signals: High error rate, Refund after output"
 		values["operation"] = "increase"
 	}
 	return values

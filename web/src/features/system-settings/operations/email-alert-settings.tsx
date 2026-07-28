@@ -24,6 +24,7 @@ import {
   Save,
   Send,
   ShieldAlert,
+  TriangleAlert,
   WalletCards,
   type LucideIcon,
 } from 'lucide-react'
@@ -32,6 +33,7 @@ import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
@@ -44,9 +46,19 @@ import {
   searchEmailSettingsRecipients,
   sendChannelAnomalyTestEmail,
   sendDashboardReportTestEmail,
+  sendRiskUserTestEmail,
   updateEmailSettingsConfig,
   type EmailSettingsConfig,
+  type RiskUserEmailLevel,
 } from './email-templates-api'
+
+const RISK_USER_EMAIL_LEVELS: Array<{
+  value: RiskUserEmailLevel
+  labelKey: string
+}> = [
+  { value: 'medium', labelKey: 'Medium risk' },
+  { value: 'high', labelKey: 'High risk' },
+]
 
 type AlertPanelProps = {
   icon: LucideIcon
@@ -98,6 +110,7 @@ export function EmailAlertSettings() {
   const [saving, setSaving] = useState(false)
   const [testingChannelAnomaly, setTestingChannelAnomaly] = useState(false)
   const [testingDashboardReport, setTestingDashboardReport] = useState(false)
+  const [testingRiskUser, setTestingRiskUser] = useState(false)
 
   const loadConfig = useCallback(async () => {
     setLoading(true)
@@ -136,6 +149,13 @@ export function EmailAlertSettings() {
     }
     if (config.account_quota_email_threshold < 0) {
       toast.error(t('Account quota threshold cannot be negative'))
+      return
+    }
+    if (
+      config.risk_user_email_enabled &&
+      config.risk_user_email_levels.length === 0
+    ) {
+      toast.error(t('Select at least one risk level'))
       return
     }
     setSaving(true)
@@ -203,6 +223,51 @@ export function EmailAlertSettings() {
     }
   }
 
+  const toggleRiskUserLevel = (level: RiskUserEmailLevel, checked: boolean) => {
+    if (!config) return
+    const selected = new Set(config.risk_user_email_levels)
+    if (checked) selected.add(level)
+    else selected.delete(level)
+    patchConfig({
+      risk_user_email_levels: RISK_USER_EMAIL_LEVELS.map(
+        (option) => option.value
+      ).filter((value) => selected.has(value)),
+    })
+  }
+
+  const testRiskUser = async () => {
+    if (!config) return
+    if (config.risk_user_email_levels.length === 0) {
+      toast.error(t('Select at least one risk level'))
+      return
+    }
+    setTestingRiskUser(true)
+    try {
+      const response = await sendRiskUserTestEmail(
+        config.risk_user_email_recipient_user_ids,
+        config.risk_user_email_levels
+      )
+      if (!response.success || !response.data) throw new Error(response.message)
+      toast.success(
+        t(
+          'Risk alert test email sent to {{count}} recipient(s), covering {{users}} user(s)',
+          {
+            count: response.data.recipient_count,
+            users: response.data.risk_user_count,
+          }
+        )
+      )
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : t('Failed to send risk alert test email')
+      )
+    } finally {
+      setTestingRiskUser(false)
+    }
+  }
+
   if (loadError) {
     return (
       <div className='flex min-h-32 flex-col items-center justify-center gap-3 rounded-lg border p-5 text-center'>
@@ -235,7 +300,7 @@ export function EmailAlertSettings() {
           <h3 className='text-base font-semibold'>{t('Email reminders')}</h3>
           <p className='text-muted-foreground mt-1 text-sm'>
             {t(
-              'Configure automatic billing, subscription, and channel alerts.'
+              'Configure automatic billing, subscription, channel, and risk alerts.'
             )}
           </p>
         </div>
@@ -430,6 +495,75 @@ export function EmailAlertSettings() {
                 {testingDashboardReport
                   ? t('Sending...')
                   : t('Send real data test')}
+              </Button>
+            </div>
+          </div>
+        </AlertPanel>
+
+        <AlertPanel
+          icon={TriangleAlert}
+          title={t('Risk user alert')}
+          description={t(
+            'Send email when risk detection identifies users at the selected levels.'
+          )}
+          toggleLabel={t('Enable risk user alert')}
+          checked={config.risk_user_email_enabled}
+          onCheckedChange={(checked) =>
+            patchConfig({ risk_user_email_enabled: checked })
+          }
+        >
+          <div className='space-y-2'>
+            <Label>{t('Risk levels')}</Label>
+            <div className='grid gap-2 sm:grid-cols-2'>
+              {RISK_USER_EMAIL_LEVELS.map((option) => {
+                const checked = config.risk_user_email_levels.includes(
+                  option.value
+                )
+                return (
+                  <label
+                    key={option.value}
+                    className='hover:bg-muted/50 flex min-h-10 cursor-pointer items-center gap-3 rounded-md border px-3 py-2 text-sm'
+                  >
+                    <Checkbox
+                      checked={checked}
+                      disabled={!config.risk_user_email_enabled}
+                      onCheckedChange={(nextChecked) =>
+                        toggleRiskUserLevel(option.value, nextChecked)
+                      }
+                    />
+                    <span>{t(option.labelKey)}</span>
+                  </label>
+                )
+              })}
+            </div>
+          </div>
+          <div className='space-y-1.5'>
+            <Label htmlFor='risk-user-recipients'>{t('Recipients')}</Label>
+            <EmailCampaignUserPicker
+              id='risk-user-recipients'
+              labelKey='Alert recipients'
+              queryKeyPrefix='risk-user-email'
+              searchUsers={searchEmailSettingsRecipients}
+              resolveUsers={resolveEmailSettingsRecipients}
+              selectedUserIds={config.risk_user_email_recipient_user_ids}
+              onChange={(risk_user_email_recipient_user_ids) =>
+                patchConfig({ risk_user_email_recipient_user_ids })
+              }
+            />
+            <p className='text-muted-foreground text-xs'>
+              {t(
+                'Only users currently marked at the selected risk levels are included. The test email uses current real risk data.'
+              )}
+            </p>
+            <div className='flex justify-end'>
+              <Button
+                type='button'
+                variant='outline'
+                disabled={testingRiskUser}
+                onClick={testRiskUser}
+              >
+                <Send className='size-4' />
+                {testingRiskUser ? t('Sending...') : t('Send real data test')}
               </Button>
             </div>
           </div>

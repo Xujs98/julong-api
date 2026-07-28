@@ -18,7 +18,7 @@ func setupEmailSettingsTest(t *testing.T) (*gorm.DB, map[string]model.User) {
 	t.Helper()
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&model.Option{}, &model.User{}, &model.QuotaData{}))
+	require.NoError(t, db.AutoMigrate(&model.Option{}, &model.User{}, &model.QuotaData{}, &model.Log{}))
 
 	users := map[string]model.User{
 		"common": {
@@ -44,16 +44,22 @@ func setupEmailSettingsTest(t *testing.T) (*gorm.DB, map[string]model.User) {
 	}
 
 	oldDB := model.DB
+	oldLogDB := model.LOG_DB
 	oldDatabaseType := common.MainDatabaseType()
+	oldLogDatabaseType := common.LogDatabaseType()
 	common.OptionMapRWMutex.Lock()
 	oldOptions := common.OptionMap
 	common.OptionMap = map[string]string{}
 	common.OptionMapRWMutex.Unlock()
 	model.DB = db
+	model.LOG_DB = db
 	common.SetMainDatabaseType(common.DatabaseTypeSQLite)
+	common.SetLogDatabaseType(common.DatabaseTypeSQLite)
 	t.Cleanup(func() {
 		model.DB = oldDB
+		model.LOG_DB = oldLogDB
 		common.SetMainDatabaseType(oldDatabaseType)
+		common.SetLogDatabaseType(oldLogDatabaseType)
 		common.OptionMapRWMutex.Lock()
 		common.OptionMap = oldOptions
 		common.OptionMapRWMutex.Unlock()
@@ -83,6 +89,9 @@ func TestUpdateEmailSettingsConfigPersistsCompleteConfiguration(t *testing.T) {
 			{Frequency: DashboardReportFrequencyWeekly, SendTimes: []string{"18:00", "09:30"}, Weekday: 5, MonthDay: 15},
 			{Frequency: DashboardReportFrequencyDaily, SendTimes: []string{"23:00", "12:00"}, Weekday: 1, MonthDay: 1},
 		},
+		RiskUserEmailEnabled:      true,
+		RiskUserEmailLevels:       []string{model.UserRiskLevelHigh, model.UserRiskLevelMedium, model.UserRiskLevelHigh},
+		RiskUserEmailRecipientIDs: []int{users["admin"].Id, users["root"].Id},
 	}
 
 	updated, err := UpdateEmailSettingsConfig(input)
@@ -91,6 +100,8 @@ func TestUpdateEmailSettingsConfigPersistsCompleteConfiguration(t *testing.T) {
 	assert.Equal(t, expectedRecipients, updated.AccountQuotaEmailRecipientUserIDs)
 	assert.Equal(t, []int{users["root"].Id}, updated.ChannelAnomalyEmailRecipientIDs)
 	assert.Equal(t, expectedRecipients, updated.DashboardReportEmailRecipientIDs)
+	assert.Equal(t, []string{model.UserRiskLevelMedium, model.UserRiskLevelHigh}, updated.RiskUserEmailLevels)
+	assert.Equal(t, expectedRecipients, updated.RiskUserEmailRecipientIDs)
 	assert.Equal(t, DashboardReportFrequencyWeekly, updated.DashboardReportEmailFrequency)
 	assert.Equal(t, "09:30", updated.DashboardReportEmailSendTime)
 	require.Len(t, updated.DashboardReportEmailSchedules, 2)
@@ -101,7 +112,7 @@ func TestUpdateEmailSettingsConfigPersistsCompleteConfiguration(t *testing.T) {
 
 	var optionCount int64
 	require.NoError(t, db.Model(&model.Option{}).Count(&optionCount).Error)
-	assert.EqualValues(t, 16, optionCount)
+	assert.EqualValues(t, 19, optionCount)
 	assert.Equal(t, "true", common.OptionMap[common.LowBalanceEmailEnabledOptionKey])
 	expectedChannelRecipients, err := common.Marshal([]int{users["root"].Id})
 	require.NoError(t, err)
@@ -130,6 +141,8 @@ func TestGetEmailSettingsConfigFallsBackToRootRecipients(t *testing.T) {
 	assert.Equal(t, []int{users["root"].Id}, config.AccountQuotaEmailRecipientUserIDs)
 	assert.Equal(t, []int{users["root"].Id}, config.ChannelAnomalyEmailRecipientIDs)
 	assert.Equal(t, []int{users["root"].Id}, config.DashboardReportEmailRecipientIDs)
+	assert.Equal(t, []int{users["root"].Id}, config.RiskUserEmailRecipientIDs)
+	assert.Equal(t, []string{model.UserRiskLevelMedium, model.UserRiskLevelHigh}, config.RiskUserEmailLevels)
 	require.Len(t, config.DashboardReportEmailSchedules, 1)
 	assert.Equal(t, DashboardReportFrequencyDaily, config.DashboardReportEmailSchedules[0].Frequency)
 	assert.Equal(t, []string{"08:00"}, config.DashboardReportEmailSchedules[0].SendTimes)
@@ -144,15 +157,19 @@ func TestGetEmailSettingsConfigReturnsEmptyRecipientArrays(t *testing.T) {
 	assert.NotNil(t, config.AccountQuotaEmailRecipientUserIDs)
 	assert.NotNil(t, config.ChannelAnomalyEmailRecipientIDs)
 	assert.NotNil(t, config.DashboardReportEmailRecipientIDs)
+	assert.NotNil(t, config.RiskUserEmailRecipientIDs)
+	assert.NotNil(t, config.RiskUserEmailLevels)
 	assert.Empty(t, config.AccountQuotaEmailRecipientUserIDs)
 	assert.Empty(t, config.ChannelAnomalyEmailRecipientIDs)
 	assert.Empty(t, config.DashboardReportEmailRecipientIDs)
+	assert.Empty(t, config.RiskUserEmailRecipientIDs)
 
 	payload, err := common.Marshal(config)
 	require.NoError(t, err)
 	assert.Contains(t, string(payload), `"account_quota_email_recipient_user_ids":[]`)
 	assert.Contains(t, string(payload), `"channel_anomaly_email_recipient_user_ids":[]`)
 	assert.Contains(t, string(payload), `"dashboard_report_email_recipient_user_ids":[]`)
+	assert.Contains(t, string(payload), `"risk_user_email_recipient_user_ids":[]`)
 }
 
 func TestOperationalEmailRecipientSearchOnlyReturnsEnabledAdministrators(t *testing.T) {
