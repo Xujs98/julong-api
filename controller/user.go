@@ -369,9 +369,19 @@ func GetAllUsers(c *gin.Context) {
 	return
 }
 
-func SearchUsers(c *gin.Context) {
-	keyword := c.Query("keyword")
-	group := c.Query("group")
+type userSearchFilters struct {
+	keyword string
+	group   string
+	role    *int
+	status  *int
+	tagId   *int
+}
+
+func getUserSearchFilters(c *gin.Context) userSearchFilters {
+	filters := userSearchFilters{
+		keyword: c.Query("keyword"),
+		group:   c.Query("group"),
+	}
 	var role *int
 	if roleStr := c.Query("role"); roleStr != "" {
 		if parsed, err := strconv.Atoi(roleStr); err == nil {
@@ -390,9 +400,28 @@ func SearchUsers(c *gin.Context) {
 			tagId = &parsed
 		}
 	}
+	filters.role = role
+	filters.status = status
+	filters.tagId = tagId
+	return filters
+}
+
+func GetUserQuotaSummary(c *gin.Context) {
+	filters := getUserSearchFilters(c)
+	summary, err := model.GetUserQuotaSummary(filters.keyword, filters.group, filters.role, filters.status, filters.tagId)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+
+	common.ApiSuccess(c, summary)
+}
+
+func SearchUsers(c *gin.Context) {
+	filters := getUserSearchFilters(c)
 	pageInfo := common.GetPageQuery(c)
 	sortOptions := model.NewUserSortOptions(c.Query("sort_by"), c.Query("sort_order"))
-	users, total, err := model.SearchUsers(keyword, group, role, status, tagId, pageInfo.GetStartIdx(), pageInfo.GetPageSize(), sortOptions)
+	users, total, err := model.SearchUsers(filters.keyword, filters.group, filters.role, filters.status, filters.tagId, pageInfo.GetStartIdx(), pageInfo.GetPageSize(), sortOptions)
 	if err != nil {
 		common.ApiError(c, err)
 		return

@@ -1,6 +1,6 @@
 # Julong-API 开发文档
 
-最后更新：2026-07-28
+最后更新：2026-07-29
 
 本文档是本二开项目的强制开发记录。以后新增、修改或删除任何 API、组件、数据模型、配置项、路由、数据库行为或部署行为时，必须在同一次改动中同步更新本文档，并在“变更日志”中新增记录。
 
@@ -30,7 +30,7 @@
 | 用户今日 Token 与分组分析 | 已实现 | 用户详情同时显示总 Token 和按服务器本地自然日统计的今日 Token；root 数据看板按分组分析真实额度、请求数、Token 和去重用户数。 |
 | 邮件群发与条件提醒 | 已实现 | 运维页面支持立即群发、定时发送和订阅到期条件提醒；创建任务时可选择中英文系统模板、预览后套用，使用注册邮箱、逐用户记录结果，并通过数据库任务租约防止多实例重复调度。 |
 | 邮件设置与自动提醒 | 已实现 | 运维“邮件设置”统一管理订阅到期、余额不足、渠道账号额度、渠道异常、数据看板报表和风险用户提醒，并编辑、实时预览、恢复 10 类中英文模板；数据报表支持多规则、多发送时间和真实数据测试，风险提醒可多选中/高风险并指定管理员收件人。 |
-| 用户运营管理 | 已实现 | 用户列表支持自定义标签、内置中/高风险标签筛选、批量额度增减及可选邮件；用户详情展示今日消费、额度明细、已选分组实际扣费倍率及分组用量，并支持单用户在最终真实倍率上增减调整。 |
+| 用户运营管理 | 已实现 | 用户列表筛选栏在标签后展示全部或当前筛选用户的剩余额度总和与匹配人数，并支持按用户名/姓名/邮箱、分组、状态、角色和标签过滤；同时支持自定义标签、内置中/高风险标签筛选、批量额度增减及可选邮件。用户详情展示今日消费、额度明细、已选分组实际扣费倍率及分组用量，并支持单用户在最终真实倍率上增减调整。 |
 | 用户风险与设备管控 | 已实现 | 风险检测支持全局或逐用户开启，按 1/7/30 天请求、错误、退款、客户端断开、异常流和 IP 等信号评分；登录 IP 与设备面板支持识别设备、封禁设备并撤销对应会话。 |
 | 模型 Token 特殊倍率 | 已实现 | 分组定价可按用户分组、计费分组和模型分别增加输入、输出、缓存读取、缓存创建 Token；用户和管理员看到计费后 Token，管理员悬浮可查看真实 Token、原始费用及分组/模型倍率收益。 |
 | 日志与兑换码导出 | 已实现 | 使用日志支持下载本页、今日、自定义时间和全部记录，CSV 使用中文表头并防公式注入；兑换码支持新生成结果复制/下载及多选复制、下载、5 秒确认删除。 |
@@ -327,6 +327,7 @@ curl http://localhost:3000/api/error-reports \
 | --- | --- | --- | --- | --- | --- | --- |
 | GET | `/api/user/` | `controller.GetAllUsers` | 分页用户列表 | `p`, `page_size` | `PageInfo<User[]>` | 完成 |
 | GET | `/api/user/search` | `controller.SearchUsers` | 搜索用户 | `keyword`, `group`, `role`, `status`, `tag`（可多选）, `p`, `page_size` | `PageInfo<User[]>`，包含自定义标签和按风险报告计算的内置风险标签 | 完成 |
+| GET | `/api/user/quota-summary` | `controller.GetUserQuotaSummary` | 汇总全部或当前筛选用户的剩余额度 | `keyword`, `group`, `role`, `status`, `tag_id`；筛选语义与用户搜索一致 | `{total_quota:int64,user_count:int64}` | 完成；默认含列表可见的已删除用户，选择普通状态时排除已删除用户 |
 | GET | `/api/user/tags` | `controller.ListUserTags` | 标签列表 | 无 | 内置中风险/高风险标签加自定义 `UserTag[]` | 完成；内置标签不可修改或删除 |
 | POST | `/api/user/tags` | `controller.CreateUserTag` | 创建自定义标签 | `{name,color}`，名称最多 32 字符，颜色为 `#RRGGBB` | `UserTag` | 完成 |
 | PUT | `/api/user/tags/:tag_id` | `controller.UpdateUserTag` | 修改自定义标签 | path 正整数 `tag_id`；`{name,color}` | `UserTag` | 完成；内置负数 ID 不可修改 |
@@ -1071,7 +1072,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 | `/redemption-codes` | `_authenticated/redemption-codes/index.tsx` | 兑换码管理；新生成代码复制/下载，多选复制/下载/倒计时删除 | 用户；管理员全部，代理限自己；批量删除仅管理员/root | 完成 |
 | `/channels` | `_authenticated/channels/index.tsx` | 渠道管理 | 管理员/root | 完成 |
 | `/models/*` | `_authenticated/models/*` | 模型元数据/部署 | 管理员/root | 完成 |
-| `/users` | `_authenticated/users/index.tsx` | 用户管理；URL search 支持 `tag[]` 风险/自定义标签筛选，含标签、批量额度、风险和登录设备弹窗 | 管理员/root | 完成 |
+| `/users` | `_authenticated/users/index.tsx` | 用户管理；筛选栏在标签后展示随 URL search 实时变化的剩余额度总和与用户数，支持搜索、分组、状态、角色及 `tag[]` 风险/自定义标签筛选，含标签、批量额度、风险和登录设备弹窗 | 管理员/root | 完成 |
 | `/subscriptions` | `_authenticated/subscriptions/index.tsx` | 订阅管理 | 管理员/root | 完成 |
 | `/error-reports` | `_authenticated/error-reports/index.tsx` | 错误反馈列表 | 管理员/root | 完成 |
 | `/system-info` | `_authenticated/system-info/index.tsx` | 系统节点/任务 | Root | 完成 |
@@ -1091,7 +1092,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 | 分组 | 文件 | 用途 | 依赖 | 状态 |
 | --- | --- | --- | --- | --- |
 | UI primitives | `ui/accordion.tsx`、`alert-dialog.tsx`、`alert.tsx`、`aspect-ratio.tsx`、`avatar.tsx`、`badge.tsx`、`breadcrumb.tsx`、`button.tsx`、`button-group.tsx`、`calendar.tsx`、`card.tsx`、`carousel.tsx`、`chart.tsx`、`checkbox.tsx`、`collapsible.tsx`、`combobox.tsx`、`combobox-input.tsx`、`command.tsx`、`context-menu.tsx`、`dialog.tsx`、`drawer.tsx`、`empty.tsx`、`field.tsx`、`form.tsx`、`hover-card.tsx`、`input.tsx`、`input-group.tsx`、`input-otp.tsx`、`item.tsx`、`kbd.tsx`、`label.tsx`、`markdown.tsx`、`menubar.tsx`、`native-select.tsx`、`navigation-menu.tsx`、`pagination.tsx`、`popover.tsx`、`progress.tsx`、`radio-group.tsx`、`resizable.tsx`、`scroll-area.tsx`、`select.tsx`、`separator.tsx`、`sheet.tsx`、`sidebar.tsx`、`skeleton.tsx`、`slider.tsx`、`sonner.tsx`、`spinner.tsx`、`switch.tsx`、`table.tsx`、`tabs.tsx`、`textarea.tsx`、`titled-card.tsx`、`toggle.tsx`、`toggle-group.tsx`、`tooltip.tsx` | 可复用设计系统 primitives。关键参数通常透传到底层 Base UI/Radix-like primitive 并支持 `className`；Button 支持 variants/sizes/render/nativeButton。 | Base UI、Hugeicons/lucide、Tailwind、`cn` | 完成 |
-| Data table | `data-table/core/*`、`data-table/layout/*`、`data-table/toolbar/*`、`data-table/hooks/*`、`data-table/static/*` | 响应式表格系统：桌面表格、移动卡片、分页、工具栏、过滤器、视图模式、批量操作。 | TanStack Table、media query hooks、UI primitives | 完成 |
+| Data table | `data-table/core/*`、`data-table/layout/*`、`data-table/toolbar/*`、`data-table/hooks/*`、`data-table/static/*` | 响应式表格系统：桌面表格、移动卡片、分页、工具栏、过滤器、筛选项后扩展位、视图模式、批量操作。 | TanStack Table、media query hooks、UI primitives | 完成 |
 | Layout | `layout/components/*`、`layout/config/*`、`layout/lib/*`、`layout/types.ts` | 登录后/公开布局、侧边栏、顶部导航、SectionPageLayout、系统品牌。 | TanStack Router、sidebar config hooks、auth store | 完成 |
 | AI elements | `ai-elements/*` | Playground/chat 响应渲染、prompt input、artifact、reasoning、tool、sources、code block。 | React、markdown/shiki、AI SDK 风格组件 | 完成 |
 | Utility widgets | `announcement-popup.tsx`、`copy-button.tsx`、`confirm-dialog.tsx`、`date-picker.tsx`、`datetime-picker.tsx`、`empty-state.tsx`、`error-state.tsx`、`group-badge.tsx`、`json-editor.tsx`、`json-code-editor.tsx`、`language-switcher.tsx`、`long-text.tsx`、`masked-value-display.tsx`、`model-group-selector.tsx`、`multi-select.tsx`、`password-input.tsx`、`profile-dropdown.tsx`、`provider-badge.tsx`、`status-badge.tsx`、`table-id.tsx`、`tag-input.tsx`、`theme-switch.tsx`、`turnstile.tsx` | 跨功能控件和显示组件；`AnnouncementPopup` 读取 `/api/announcements`，仅弹出 `notificationMode=popup` 的公告，并按登录用户和公告内容签名在 localStorage 记录关闭状态。 | UI primitives、React Query、auth store、i18n、本地格式化工具 | 完成 |
@@ -1114,7 +1115,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 | `usage-logs` | `usage-logs-table.tsx`、`usage-logs-export-menu.tsx`、`cost-breakdown-tooltip.tsx`、普通/绘图/生图/任务 columns、倍率审计 libs | 普通消费日志、绘图、生图和媒体任务日志；下载菜单支持本页、今日、自定义时间和全部 CSV。用户和管理员均展示模型倍率调整后的 Token；管理员/root 悬浮 Tokens 查看真实 Token，悬浮费用查看原始费用及分组特殊倍率/模型倍率收益。原有普通用户倍率展示逻辑保持不变 | `/api/log*`、`/api/log/export`、`/api/log/self/export`、`/api/mj`、`/api/image-generation-logs*`、`/api/task` | 完成 |
 | `wallet` | recharge cards、subscription cards、affiliate rewards、redemption hook | 钱包充值、兑换码、订阅 | `/api/user/topup*`、`/api/subscription*`、支付 API | 完成 |
 | `redemption-codes` | `redemptions-generated-dialog.tsx`、`data-table-bulk-actions.tsx`、`redemptions-multi-delete-dialog.tsx`、表格和编辑弹窗 | 管理员/代理兑换码管理；刚生成的兑换码支持仅复制代码、复制名称和代码、一键下载；多选支持仅复制代码、下载和管理员 5 秒确认批量删除 | `/api/redemption*`、`POST /api/redemption/batch`、`/api/user/agent/topup-link` | 完成 |
-| `users` | `users-table.tsx`、`users-columns.tsx`、`users-mutate-drawer.tsx`、`user-detail-dialog.tsx`、`user-tags-dialog.tsx`、`user-batch-quota-dialog.tsx`、`user-risk-panel.tsx`、`user-login-access-panel.tsx`、`user-group-ratios-card.tsx` | 后台用户管理、标签筛选/标注、批量额度、代理详情和用户详情；详情含今日消费、总/今日 Token、额度明细、已选分组真实倍率及额度/Token、风险报告、登录 IP 与设备、上下文审计。编辑用户可在特殊规则后的最终真实倍率上增加或减少单用户调整，并实时预览已有分组结果 | `/api/user*`、`/api/user/tags*`、`/api/user/options*`、`/api/user/batch-quota`、`/api/user/:id/{usage-summary,quota-increases,risk,login-ips,login-devices,request-content}*` | 完成 |
+| `users` | `index.tsx`、`users-table.tsx`、`users-columns.tsx`、`users-mutate-drawer.tsx`、`user-detail-dialog.tsx`、`user-quota-summary-badge.tsx`、`user-tags-dialog.tsx`、`user-batch-quota-dialog.tsx`、`user-risk-panel.tsx`、`user-login-access-panel.tsx`、`user-group-ratios-card.tsx`、`lib/user-quota-summary.ts` | 后台用户管理、筛选余额汇总、标签筛选/标注、批量额度、代理详情和用户详情；余额指标位于标签筛选后并与表格 URL 筛选共用参数，默认统计全部列表用户。详情含今日消费、总/今日 Token、额度明细、已选分组真实倍率及额度/Token、风险报告、登录 IP 与设备、上下文审计。编辑用户可在特殊规则后的最终真实倍率上增加或减少单用户调整，并实时预览已有分组结果 | `/api/user*`、`GET /api/user/quota-summary`、`/api/user/tags*`、`/api/user/options*`、`/api/user/batch-quota`、`/api/user/:id/{usage-summary,quota-increases,risk,login-ips,login-devices,request-content}*` | 完成 |
 | `models` | metadata/deployment tables and drawers | 模型元数据和部署管理 | `/api/models*`、`/api/vendors*`、`/api/deployments*` | 完成 |
 | `subscriptions` | subscription table/drawers | 后台订阅计划/用户绑定 | `/api/subscription/admin*` | 完成 |
 | `system-settings` | 各一级菜单 section registries；`maintenance/{log-settings-section,update-checker-section}.tsx`、`models/group-ratio-form.tsx`、`model-token-ratio-editor.tsx`、邮件设置组件和 `ImageStorageSettings` | 管理员/root 运行时设置；系统维护展示 Julong 与已合并 New API 双版本并按上游版本检查更新；日志维护含全局风险检测；分组定价含模型 Token 特殊倍率；邮件设置维护数据报表及风险提醒；其余站点徽标、普通用户倍率展示、MinIO 生命周期等既有功能保持 | `/api/status`、`/api/option*`、`/api/email-settings*`、`/api/site-assets/logo*`、`/api/performance/image-storage*`、`/api/system-task/*` | 完成 |
@@ -1318,6 +1319,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 
 | 日期 | 变更 | 更新文件/API/模型 | 验证 |
 | --- | --- | --- | --- |
+| 2026-07-29 | 用户管理筛选栏在标签后新增剩余额度汇总，默认展示全部列表用户的剩余额度总和与人数；用户名/姓名/邮箱、分组、状态、角色、标签筛选变化时同步重算，内置风险标签与已删除用户语义和用户列表保持一致。 | `model.GetUserQuotaSummary/applyUserSearchFilters`、`controller.GetUserQuotaSummary`、`GET /api/user/quota-summary`、`users-table.tsx`、`user-quota-summary-badge.tsx`、`DataTableToolbar.afterFilters`、`lib/user-quota-summary.ts` | Model 多条件/空结果/软删除汇总测试、Controller 响应测试、风险标签汇总回归、前端筛选参数测试、TypeScript typecheck、目标文件 lint/format、`git diff --check`。 |
 | 2026-07-28 | 修复系统维护版本信息：建立矩龙版本 `v1.0.0-julong.1`，`VERSION` 作为 Docker/Makefile 构建版本来源，空版本会中止构建；后端默认版本同步，避免本地直接编译显示 `v0.0.0`。已合并 New API 版本继续由状态接口返回 `v1.0.0-rc.22` 和提交 `afe16c64c`。 | `VERSION`、`common.Version`、`Dockerfile`、`Dockerfile.dev`、`Makefile`、`GET /api/status` | 状态接口回归、版本构建参数、Docker 构建前置校验。 |
 | 2026-07-28 | 合并上游 `QuantumNous/new-api@afe16c64c`：引入独立 RelayKit 模块、通用工具调用计费与 Alpha Search、New API/Sub2API/Tencent TokenHub 渠道、每渠道 HTTP Transport 控制、参数化 SQL 日志、渠道与 JSON 编辑器改进及上游 CI；所有冲突优先保留 Julong 的模型 Token 倍率、收益审计、异步生图、风险/设备、邮件、日志导出和失败任务退款对账，再补 RelayKit DTO/类型兼容。系统维护新增 Julong 构建版本、已合并 New API 版本 `v1.0.0-rc.22`、提交 `afe16c64c` 和运行时间，GitHub 更新检查改为比较上游版本。 | `upstream/main@afe16c64c`、`relaykit/`、Relay/Service/Model/Web 上游改动、`common.UpstreamVersion/UpstreamCommit`、`GET /api/status`、`/system-settings/operations/update-checker`、`DEVELOPMENT.md` | RelayKit 独立编译、根模块编译、退款对账回归、状态接口和双版本组件测试、前端 typecheck/i18n/lint/build、格式及差异检查。 |
 | 2026-07-28 | 建立强制文档同步门禁并补录 7 月 27-28 日全部 Julong 功能：以后每个功能的 API、页面路由、配置、模型、迁移、组件和变更记录必须在同一次提交更新；上游同步时非冲突正常合入，任何冲突先保留 Julong 实现再补兼容，禁止用上游覆盖自有功能。 | `AGENTS.md`、`DEVELOPMENT.md` | 对照 `router/api-router.go`、系统设置 section registry、模型和 18 个功能提交逐项审计；文档格式检查纳入本次合并验证。 |

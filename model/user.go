@@ -405,35 +405,16 @@ func GetAllUsers(pageInfo *common.PageInfo, sortOptions ...UserSortOptions) (use
 	return users, total, nil
 }
 
-func SearchUsers(keyword string, group string, role *int, status *int, tagId *int, startIdx int, num int, sortOptions ...UserSortOptions) ([]*User, int64, error) {
-	var users []*User
-	var total int64
-	var err error
-	riskGeneratedAt := time.Now().Unix()
-	var riskReports map[int]*UserRiskReport
+type UserQuotaSummary struct {
+	TotalQuota int64 `json:"total_quota"`
+	UserCount  int64 `json:"user_count"`
+}
 
-	// 开始事务
-	tx := DB.Begin()
-	if tx.Error != nil {
-		return nil, 0, tx.Error
-	}
-	defer func() {
-		if r := recover(); r != nil {
-			tx.Rollback()
-		}
-	}()
-
-	// 构建基础查询
-	query := tx.Unscoped().Model(&User{})
-
-	// 构建搜索条件
+func applyUserSearchFilters(query *gorm.DB, keyword string, group string, role *int, status *int, tagId *int, riskGeneratedAt int64) (*gorm.DB, map[int]*UserRiskReport, error) {
 	likeCondition := "username LIKE ? OR email LIKE ? OR display_name LIKE ?"
 	likeArgs := []interface{}{"%" + keyword + "%", "%" + keyword + "%", "%" + keyword + "%"}
 
-	// 尝试将关键字转换为整数ID
-	keywordInt, err := strconv.Atoi(keyword)
-	if err == nil {
-		// 如果是数字，同时搜索ID和其他字段
+	if keywordInt, err := strconv.Atoi(keyword); err == nil {
 		likeCondition = "id = ? OR " + likeCondition
 		likeArgs = append([]interface{}{keywordInt}, likeArgs...)
 	}
@@ -452,40 +433,79 @@ func SearchUsers(keyword string, group string, role *int, status *int, tagId *in
 			query = query.Where("deleted_at IS NULL").Where("status = ?", *status)
 		}
 	}
-	if tagId != nil {
-		if riskTag, builtIn := GetBuiltInUserTag(*tagId); builtIn {
-			candidateQuery := query.Session(&gorm.Session{})
-			if !common.UserRiskDetectionEnabled {
-				candidateQuery = candidateQuery.Where("risk_detection_enabled = ?", true)
-			}
-			var candidateUserIds []int
-			if err = candidateQuery.Pluck("id", &candidateUserIds).Error; err != nil {
-				tx.Rollback()
-				return nil, 0, err
-			}
-			const riskQueryBatchSize = 500
-			riskReports = make(map[int]*UserRiskReport, len(candidateUserIds))
-			for start := 0; start < len(candidateUserIds); start += riskQueryBatchSize {
-				end := min(start+riskQueryBatchSize, len(candidateUserIds))
-				batchReports, reportErr := GetUserRiskReports(candidateUserIds[start:end], UserRiskTagWindowDays, riskGeneratedAt)
-				if reportErr != nil {
-					tx.Rollback()
-					return nil, 0, reportErr
-				}
-				for userId, report := range batchReports {
-					riskReports[userId] = report
-				}
-			}
-			matchedUserIds := make([]int, 0)
-			for _, userId := range candidateUserIds {
-				if report := riskReports[userId]; report != nil && report.Level == riskTag.RiskLevel {
-					matchedUserIds = append(matchedUserIds, userId)
-				}
-			}
-			query = query.Where("id IN ?", matchedUserIds)
-		} else {
-			query = query.Where("tag_id = ?", *tagId)
+
+	var riskReports map[int]*UserRiskReport
+	if tagId == nil {
+		return query, riskReports, nil
+	}
+	if riskTag, builtIn := GetBuiltInUserTag(*tagId); builtIn {
+		candidateQuery := query.Session(&gorm.Session{})
+		if !common.UserRiskDetectionEnabled {
+			candidateQuery = candidateQuery.Where("risk_detection_enabled = ?", true)
 		}
+		var candidateUserIds []int
+		if err := candidateQuery.Pluck("id", &candidateUserIds).Error; err != nil {
+			return nil, nil, err
+		}
+
+		const riskQueryBatchSize = 500
+		riskReports = make(map[int]*UserRiskReport, len(candidateUserIds))
+		for start := 0; start < len(candidateUserIds); start += riskQueryBatchSize {
+			end := min(start+riskQueryBatchSize, len(candidateUserIds))
+			batchReports, err := GetUserRiskReports(candidateUserIds[start:end], UserRiskTagWindowDays, riskGeneratedAt)
+			if err != nil {
+				return nil, nil, err
+			}
+			for userId, report := range batchReports {
+				riskReports[userId] = report
+			}
+		}
+
+		matchedUserIds := make([]int, 0)
+		for _, userId := range candidateUserIds {
+			if report := riskReports[userId]; report != nil && report.Level == riskTag.RiskLevel {
+				matchedUserIds = append(matchedUserIds, userId)
+			}
+		}
+		return query.Where("id IN ?", matchedUserIds), riskReports, nil
+	}
+
+	return query.Where("tag_id = ?", *tagId), riskReports, nil
+}
+
+func GetUserQuotaSummary(keyword string, group string, role *int, status *int, tagId *int) (*UserQuotaSummary, error) {
+	query, _, err := applyUserSearchFilters(DB.Unscoped().Model(&User{}), keyword, group, role, status, tagId, time.Now().Unix())
+	if err != nil {
+		return nil, err
+	}
+
+	var summary UserQuotaSummary
+	err = query.Select("COALESCE(SUM(quota), 0) AS total_quota, COUNT(*) AS user_count").Scan(&summary).Error
+	return &summary, err
+}
+
+func SearchUsers(keyword string, group string, role *int, status *int, tagId *int, startIdx int, num int, sortOptions ...UserSortOptions) ([]*User, int64, error) {
+	var users []*User
+	var total int64
+	var err error
+	riskGeneratedAt := time.Now().Unix()
+	var riskReports map[int]*UserRiskReport
+
+	// 开始事务
+	tx := DB.Begin()
+	if tx.Error != nil {
+		return nil, 0, tx.Error
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+		}
+	}()
+
+	query, riskReports, err := applyUserSearchFilters(tx.Unscoped().Model(&User{}), keyword, group, role, status, tagId, riskGeneratedAt)
+	if err != nil {
+		tx.Rollback()
+		return nil, 0, err
 	}
 
 	// 获取总数

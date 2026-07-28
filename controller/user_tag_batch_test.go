@@ -119,6 +119,9 @@ func TestBuiltInRiskTagsAreReadOnlyAndFilterUsersBySevenDayRisk(t *testing.T) {
 	assert.Equal(t, users[0].Id, mediumUsers[0].Id)
 	require.NotNil(t, mediumUsers[0].RiskTag)
 	assert.Equal(t, model.UserTagRiskMediumId, mediumUsers[0].RiskTag.Id)
+	mediumSummary, err := model.GetUserQuotaSummary("", "", nil, nil, &mediumRiskTagId)
+	require.NoError(t, err)
+	assert.EqualValues(t, 1, mediumSummary.UserCount)
 
 	highRiskTagId := model.UserTagRiskHighId
 	highUsers, total, err := model.SearchUsers("", "", nil, nil, &highRiskTagId, 0, 20)
@@ -128,6 +131,9 @@ func TestBuiltInRiskTagsAreReadOnlyAndFilterUsersBySevenDayRisk(t *testing.T) {
 	assert.Equal(t, users[1].Id, highUsers[0].Id)
 	require.NotNil(t, highUsers[0].RiskTag)
 	assert.Equal(t, model.UserTagRiskHighId, highUsers[0].RiskTag.Id)
+	highSummary, err := model.GetUserQuotaSummary("", "", nil, nil, &highRiskTagId)
+	require.NoError(t, err)
+	assert.EqualValues(t, 1, highSummary.UserCount)
 
 	common.UserRiskDetectionEnabled = false
 	mediumUsers, total, err = model.SearchUsers("", "", nil, nil, &mediumRiskTagId, 0, 20)

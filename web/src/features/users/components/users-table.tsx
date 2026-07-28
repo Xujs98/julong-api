@@ -32,15 +32,17 @@ import {
 import { useMediaQuery } from '@/hooks'
 import { useTableUrlState } from '@/hooks/use-table-url-state'
 
-import { getUsers, searchUsers } from '../api'
+import { getUserQuotaSummary, getUsers, searchUsers } from '../api'
 import {
   USER_STATUS,
   getUserStatusOptions,
   getUserRoleOptions,
   isUserDeleted,
 } from '../constants'
+import { getUserQuotaSummaryParams } from '../lib/user-quota-summary'
 import type { User, UserSortBy, UserTag } from '../types'
 import { DataTableBulkActions } from './data-table-bulk-actions'
+import { UserQuotaSummaryBadge } from './user-quota-summary-badge'
 import { useUsersColumns } from './users-columns'
 import { useUsers } from './users-provider'
 
@@ -111,6 +113,13 @@ export function UsersTable(props: UsersTableProps) {
     (columnFilters.find((filter) => filter.id === 'tag_id')?.value as
       | string[]
       | undefined) ?? []
+  const quotaSummaryParams = getUserQuotaSummaryParams({
+    filter: globalFilter,
+    group: groupFilter,
+    role: roleFilter,
+    status: statusFilter,
+    tag: tagFilter,
+  })
 
   const sortParams = useMemo(() => {
     const activeSort = sorting[0]
@@ -186,6 +195,16 @@ export function UsersTable(props: UsersTableProps) {
       }
     },
     placeholderData: (previousData) => previousData,
+  })
+  const quotaSummaryQuery = useQuery({
+    queryKey: ['users', 'quota-summary', quotaSummaryParams, refreshTrigger],
+    queryFn: async () => {
+      const response = await getUserQuotaSummary(quotaSummaryParams)
+      if (!response.success || !response.data) {
+        throw new Error(response.message || t('Failed to load users'))
+      }
+      return response.data
+    },
   })
 
   const users = data?.items || []
@@ -276,6 +295,12 @@ export function UsersTable(props: UsersTableProps) {
             singleSelect: true,
           },
         ],
+        afterFilters: (
+          <UserQuotaSummaryBadge
+            summary={quotaSummaryQuery.data}
+            isFetching={quotaSummaryQuery.isFetching}
+          />
+        ),
       }}
       getRowClassName={(row, { isMobile }) =>
         getUserRowClassName(row.original, isMobile)

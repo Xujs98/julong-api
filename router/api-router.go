@@ -146,6 +146,7 @@ func SetApiRouter(router *gin.Engine) {
 				adminRoute.GET("/topup", controller.GetAllTopUps)
 				adminRoute.POST("/topup/complete", controller.AdminCompleteTopUp)
 				adminRoute.GET("/search", controller.SearchUsers)
+				adminRoute.GET("/quota-summary", controller.GetUserQuotaSummary)
 				adminRoute.GET("/tags", controller.ListUserTags)
 				adminRoute.POST("/tags", controller.CreateUserTag)
 				adminRoute.PUT("/tags/:tag_id", controller.UpdateUserTag)

@@ -41,6 +41,8 @@ import type {
   BatchQuotaAdjustResult,
   UserRiskReport,
   UserLoginDevice,
+  UserQuotaSummary,
+  UserQuotaSummaryParams,
 } from './types'
 
 // ============================================================================
@@ -93,6 +95,13 @@ export async function searchUsers(
   if (sort_by) queryParams.set('sort_by', sort_by)
   if (sort_order) queryParams.set('sort_order', sort_order)
   const res = await api.get(`/api/user/search?${queryParams.toString()}`)
+  return res.data
+}
+
+export async function getUserQuotaSummary(
+  params: UserQuotaSummaryParams
+): Promise<ApiResponse<UserQuotaSummary>> {
+  const res = await api.get('/api/user/quota-summary', { params })
   return res.data
 }
 

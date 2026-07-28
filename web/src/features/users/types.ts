@@ -143,6 +143,19 @@ export interface SearchUsersParams {
   sort_order?: UserSortOrder
 }
 
+export interface UserQuotaSummaryParams {
+  keyword?: string
+  group?: string
+  role?: string
+  status?: string
+  tag_id?: string
+}
+
+export interface UserQuotaSummary {
+  total_quota: number
+  user_count: number
+}
+
 export interface UserFormData {
   username: string
   display_name: string
