@@ -137,12 +137,15 @@ func loginMethodFromContext(c *gin.Context) string {
 }
 
 // recordLoginAudit 记录登录成功审计日志（对所有用户启用，仅记录成功，不记录失败）。
-func recordLoginAudit(user *model.User, c *gin.Context) {
+func recordLoginAudit(user *model.User, c *gin.Context, deviceID string) {
 	method := loginMethodFromContext(c)
 	ip := c.ClientIP()
 	extra := map[string]interface{}{
 		"login_method": method,
 		"user_agent":   c.Request.UserAgent(),
+	}
+	if deviceID != "" {
+		extra["device_id"] = deviceID
 	}
 	content := fmt.Sprintf("Logged in successfully via %s", method)
 	model.RecordLoginLog(user.Id, user.Username, content, ip, "login", map[string]interface{}{
@@ -169,6 +172,7 @@ func setupLoginAtAuthVersion(user *model.User, expectedAuthVersion int64, c *gin
 		common.ApiError(c, err)
 		return
 	}
+	deviceID := service.ResolveLoginDeviceID(c)
 	var bundle *service.AuthBundle
 	if expectedAuthVersion > 0 {
 		bundle, err = service.CreateLoginSessionAtAuthVersion(
@@ -177,6 +181,7 @@ func setupLoginAtAuthVersion(user *model.User, expectedAuthVersion int64, c *gin
 			loginMethodFromContext(c),
 			c.ClientIP(),
 			c.Request.UserAgent(),
+			deviceID,
 		)
 	} else {
 		bundle, err = service.CreateLoginSession(
@@ -184,6 +189,7 @@ func setupLoginAtAuthVersion(user *model.User, expectedAuthVersion int64, c *gin
 			loginMethodFromContext(c),
 			c.ClientIP(),
 			c.Request.UserAgent(),
+			deviceID,
 		)
 	}
 	if err != nil {
@@ -192,8 +198,9 @@ func setupLoginAtAuthVersion(user *model.User, expectedAuthVersion int64, c *gin
 	}
 	model.UpdateUserLastLogin(user.Id, c.ClientIP())
 	service.WriteRefreshCookie(c, bundle.RefreshToken)
+	service.WriteDeviceCookie(c, deviceID)
 	setAuthNoStore(c)
-	recordLoginAudit(user, c)
+	recordLoginAudit(user, c, deviceID)
 	c.JSON(http.StatusOK, gin.H{
 		"message": "",
 		"success": true,

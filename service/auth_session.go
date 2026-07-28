@@ -13,7 +13,10 @@ import (
 	"github.com/google/uuid"
 )
 
-const RefreshCookieName = "new_api_refresh"
+const (
+	RefreshCookieName = "new_api_refresh"
+	DeviceCookieName  = "new_api_device"
+)
 
 var (
 	ErrLoginSessionInvalid  = errors.New("login session is invalid")
@@ -29,6 +32,7 @@ type LoginSessionView struct {
 	LoginMethod  string `json:"login_method"`
 	IP           string `json:"ip"`
 	UserAgent    string `json:"user_agent"`
+	DeviceID     string `json:"device_id"`
 	CreatedAt    int64  `json:"created_at"`
 	LastActiveAt int64  `json:"last_active_at"`
 	ExpiresAt    int64  `json:"expires_at"`
@@ -42,18 +46,26 @@ type AuthBundle struct {
 	RefreshToken    string           `json:"-"`
 }
 
-func CreateLoginSession(userID int, loginMethod, ip, userAgent string) (*AuthBundle, error) {
-	return createLoginSession(userID, 0, loginMethod, ip, userAgent)
+func CreateLoginSession(userID int, loginMethod, ip, userAgent string, deviceIDs ...string) (*AuthBundle, error) {
+	deviceID := ""
+	if len(deviceIDs) > 0 {
+		deviceID = deviceIDs[0]
+	}
+	return createLoginSession(userID, 0, loginMethod, ip, userAgent, deviceID)
 }
 
-func CreateLoginSessionAtAuthVersion(userID int, expectedAuthVersion int64, loginMethod, ip, userAgent string) (*AuthBundle, error) {
+func CreateLoginSessionAtAuthVersion(userID int, expectedAuthVersion int64, loginMethod, ip, userAgent string, deviceIDs ...string) (*AuthBundle, error) {
 	if expectedAuthVersion <= 0 {
 		return nil, ErrLoginSessionInvalid
 	}
-	return createLoginSession(userID, expectedAuthVersion, loginMethod, ip, userAgent)
+	deviceID := ""
+	if len(deviceIDs) > 0 {
+		deviceID = deviceIDs[0]
+	}
+	return createLoginSession(userID, expectedAuthVersion, loginMethod, ip, userAgent, deviceID)
 }
 
-func createLoginSession(userID int, expectedAuthVersion int64, loginMethod, ip, userAgent string) (*AuthBundle, error) {
+func createLoginSession(userID int, expectedAuthVersion int64, loginMethod, ip, userAgent, deviceID string) (*AuthBundle, error) {
 	user, err := model.GetUserCache(userID)
 	if err != nil {
 		return nil, err
@@ -63,6 +75,19 @@ func createLoginSession(userID int, expectedAuthVersion int64, loginMethod, ip, 
 	}
 	if expectedAuthVersion > 0 && user.AuthVersion != expectedAuthVersion {
 		return nil, ErrLoginSessionRevoked
+	}
+	if strings.TrimSpace(deviceID) != "" {
+		deviceID, err = model.NormalizeDeviceID(deviceID)
+		if err != nil {
+			return nil, ErrLoginSessionInvalid
+		}
+		blocked, err := model.IsUserDeviceBlocked(userID, deviceID)
+		if err != nil {
+			return nil, err
+		}
+		if blocked {
+			return nil, model.ErrUserDeviceBlocked
+		}
 	}
 	now := time.Now().Unix()
 	activeCount, err := model.CountActiveUserSessions(userID, now)
@@ -93,6 +118,7 @@ func createLoginSession(userID int, expectedAuthVersion int64, loginMethod, ip, 
 		LoginMethod:     strings.TrimSpace(loginMethod),
 		IP:              truncateAuthMetadata(ip, 64),
 		UserAgent:       truncateAuthMetadata(userAgent, 512),
+		DeviceID:        deviceID,
 		CreatedAt:       now,
 		LastActiveAt:    now,
 		ExpiresAt:       time.Unix(now, 0).Add(LoginSessionTTL).Unix(),
@@ -102,6 +128,17 @@ func createLoginSession(userID int, expectedAuthVersion int64, loginMethod, ip, 
 	}
 	if err := model.CreateUserSession(session); err != nil {
 		return nil, err
+	}
+	if deviceID != "" {
+		blocked, blockedErr := model.IsUserDeviceBlocked(userID, deviceID)
+		if blockedErr != nil {
+			_, _ = model.RevokeUserSession(userID, session.SID, "device_check_failed")
+			return nil, blockedErr
+		}
+		if blocked {
+			_, _ = model.RevokeUserSession(userID, session.SID, "device_blocked")
+			return nil, model.ErrUserDeviceBlocked
+		}
 	}
 	bundle, err := issueAuthBundle(session, session.SID+"."+refreshSecret, true)
 	if err != nil {
@@ -312,6 +349,38 @@ func WriteRefreshCookie(c *gin.Context, rawToken string) {
 	})
 }
 
+func ResolveLoginDeviceID(c *gin.Context) string {
+	if c != nil {
+		if value, err := c.Cookie(DeviceCookieName); err == nil {
+			if normalized, normalizeErr := model.NormalizeDeviceID(value); normalizeErr == nil {
+				return normalized
+			}
+		}
+	}
+	return uuid.NewString()
+}
+
+func WriteDeviceCookie(c *gin.Context, deviceID string) {
+	if c == nil {
+		return
+	}
+	normalized, err := model.NormalizeDeviceID(deviceID)
+	if err != nil {
+		return
+	}
+	const maxAge = 400 * 24 * 60 * 60
+	http.SetCookie(c.Writer, &http.Cookie{
+		Name:     DeviceCookieName,
+		Value:    normalized,
+		Path:     "/",
+		MaxAge:   maxAge,
+		Expires:  time.Now().Add(maxAge * time.Second),
+		HttpOnly: true,
+		Secure:   common.SessionCookieSecure,
+		SameSite: http.SameSiteLaxMode,
+	})
+}
+
 func ClearRefreshCookie(c *gin.Context) {
 	http.SetCookie(c.Writer, &http.Cookie{
 		Name:     RefreshCookieName,
@@ -352,6 +421,7 @@ func sessionView(session *model.UserSession, current bool) LoginSessionView {
 		LoginMethod:  session.LoginMethod,
 		IP:           session.IP,
 		UserAgent:    session.UserAgent,
+		DeviceID:     session.DeviceID,
 		CreatedAt:    session.CreatedAt,
 		LastActiveAt: session.LastActiveAt,
 		ExpiresAt:    session.ExpiresAt,
@@ -391,6 +461,8 @@ func authSessionErrorCode(err error) (int, string) {
 		return http.StatusConflict, "AUTH_SESSION_LIMIT"
 	case errors.Is(err, model.ErrUserSessionIssuanceLimit):
 		return http.StatusTooManyRequests, "AUTH_SESSION_ISSUANCE_LIMIT"
+	case errors.Is(err, model.ErrUserDeviceBlocked):
+		return http.StatusForbidden, "AUTH_DEVICE_BLOCKED"
 	case errors.Is(err, ErrLoginSessionMismatch):
 		return http.StatusConflict, "AUTH_SESSION_MISMATCH"
 	case errors.Is(err, ErrRefreshRace):

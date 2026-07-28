@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -14,6 +16,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
 	"github.com/go-redis/redis/v8"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
@@ -32,7 +35,7 @@ func setupAuthSessionTestDB(t *testing.T) *model.User {
 	sqlDB, err := db.DB()
 	require.NoError(t, err)
 	sqlDB.SetMaxOpenConns(1)
-	require.NoError(t, db.AutoMigrate(&model.User{}, &model.UserSession{}, &model.AuthFlow{}))
+	require.NoError(t, db.AutoMigrate(&model.User{}, &model.UserSession{}, &model.BlockedDevice{}, &model.AuthFlow{}))
 	model.DB = db
 	common.RedisEnabled = false
 	common.UserSessionActiveLimit = common.DefaultUserSessionActiveLimit
@@ -130,6 +133,65 @@ func TestCreateLoginSessionEnforcesActiveLimitAcrossAuthVersions(t *testing.T) {
 	var count int64
 	require.NoError(t, model.DB.Model(&model.UserSession{}).Count(&count).Error)
 	assert.Equal(t, int64(50), count)
+}
+
+func TestCreateLoginSessionRejectsBlockedDevice(t *testing.T) {
+	useTestSessionSecret(t)
+	user := setupAuthSessionTestDB(t)
+	deviceID := uuid.NewString()
+	require.NoError(t, model.BlockUserDevices(user.Id, []string{deviceID}, 99, "test"))
+
+	_, err := CreateLoginSession(user.Id, "password", "127.0.0.1", "test-agent", deviceID)
+	assert.ErrorIs(t, err, model.ErrUserDeviceBlocked)
+	var count int64
+	require.NoError(t, model.DB.Model(&model.UserSession{}).Count(&count).Error)
+	assert.Zero(t, count)
+}
+
+func TestCreateLoginSessionRevokesDeviceBlockedDuringCreation(t *testing.T) {
+	useTestSessionSecret(t)
+	user := setupAuthSessionTestDB(t)
+	deviceID := uuid.NewString()
+	callbackName := "test:block_device_during_session_create"
+	require.NoError(t, model.DB.Callback().Create().Before("gorm:create").Register(callbackName, func(tx *gorm.DB) {
+		if tx.Statement != nil && tx.Statement.Schema != nil && tx.Statement.Schema.Table == "user_sessions" {
+			result := tx.Session(&gorm.Session{NewDB: true}).Exec(
+				"INSERT INTO blocked_devices (user_id, device_id, operator_id, reason, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+				user.Id, deviceID, 99, "concurrent block", time.Now().Unix(), time.Now().Unix(),
+			)
+			if result.Error != nil {
+				tx.AddError(result.Error)
+			}
+		}
+	}))
+	t.Cleanup(func() { _ = model.DB.Callback().Create().Remove(callbackName) })
+
+	_, err := CreateLoginSession(user.Id, "password", "127.0.0.1", "test-agent", deviceID)
+	assert.ErrorIs(t, err, model.ErrUserDeviceBlocked)
+	var session model.UserSession
+	require.NoError(t, model.DB.First(&session).Error)
+	assert.Equal(t, model.UserSessionStatusRevoked, session.Status)
+	assert.Equal(t, "device_blocked", session.RevokedReason)
+}
+
+func TestDeviceCookiePersistsStableIdentifier(t *testing.T) {
+	deviceID := uuid.NewString()
+	request := httptest.NewRequest(http.MethodGet, "/", nil)
+	request.AddCookie(&http.Cookie{Name: DeviceCookieName, Value: deviceID})
+	recorder := httptest.NewRecorder()
+	context, _ := gin.CreateTestContext(recorder)
+	context.Request = request
+
+	assert.Equal(t, deviceID, ResolveLoginDeviceID(context))
+	WriteDeviceCookie(context, deviceID)
+	cookies := recorder.Result().Cookies()
+	require.Len(t, cookies, 1)
+	assert.Equal(t, DeviceCookieName, cookies[0].Name)
+	assert.Equal(t, deviceID, cookies[0].Value)
+	assert.Equal(t, "/", cookies[0].Path)
+	assert.True(t, cookies[0].HttpOnly)
+	assert.Equal(t, http.SameSiteLaxMode, cookies[0].SameSite)
+	assert.GreaterOrEqual(t, cookies[0].MaxAge, 365*24*60*60)
 }
 
 func TestCreateLoginSessionEnforcesIssuanceLimitAcrossAllStatuses(t *testing.T) {

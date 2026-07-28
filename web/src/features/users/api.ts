@@ -40,6 +40,7 @@ import type {
   BatchQuotaAdjustPayload,
   BatchQuotaAdjustResult,
   UserRiskReport,
+  UserLoginDevice,
 } from './types'
 
 // ============================================================================
@@ -316,6 +317,25 @@ export async function updateUserLoginIPs(
 ): Promise<ApiResponse> {
   const res = await api.put(`/api/user/${userId}/login-ips`, {
     ips,
+    blocked,
+  })
+  return res.data
+}
+
+export async function getUserLoginDevices(
+  userId: number
+): Promise<ApiResponse<UserLoginDevice[]>> {
+  const res = await api.get(`/api/user/${userId}/login-devices`)
+  return res.data
+}
+
+export async function updateUserLoginDevices(
+  userId: number,
+  deviceIds: string[],
+  blocked: boolean
+): Promise<ApiResponse<{ revoked_count: number }>> {
+  const res = await api.put(`/api/user/${userId}/login-devices`, {
+    device_ids: deviceIds,
     blocked,
   })
   return res.data

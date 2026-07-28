@@ -300,6 +300,16 @@ export interface UserLoginIP {
   shared_user_count: number
 }
 
+export interface UserLoginDevice {
+  device_id: string
+  user_agent: string
+  last_login_at: number
+  login_count: number
+  active_session_count: number
+  ips: string[]
+  blocked: boolean
+}
+
 export type UserRequestContentStatus = 'pending' | 'success' | 'error'
 
 export interface UserRequestContentLog {

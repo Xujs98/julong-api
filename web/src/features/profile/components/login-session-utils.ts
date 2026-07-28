@@ -32,11 +32,11 @@ export function sessionDevice(
 
   let system = ''
   if (userAgent.includes('Windows')) system = 'Windows'
-  else if (userAgent.includes('Mac OS')) system = 'macOS'
   else if (userAgent.includes('Android')) system = 'Android'
   else if (userAgent.includes('iPhone') || userAgent.includes('iPad')) {
     system = 'iOS'
-  } else if (userAgent.includes('Linux')) system = 'Linux'
+  } else if (userAgent.includes('Mac OS')) system = 'macOS'
+  else if (userAgent.includes('Linux')) system = 'Linux'
   return system ? `${browser} · ${system}` : browser
 }
 

@@ -64,6 +64,7 @@ export interface LoginSession {
   login_method: string
   ip: string
   user_agent: string
+  device_id?: string
   created_at: number
   last_active_at: number
   expires_at: number

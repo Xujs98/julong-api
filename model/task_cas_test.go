@@ -38,6 +38,7 @@ func TestMain(m *testing.M) {
 		&Task{},
 		&User{},
 		&BlockedIP{},
+		&BlockedDevice{},
 		&UserSession{},
 		&AuthFlow{},
 		&ExternalIdentityClaim{},
@@ -71,6 +72,7 @@ func truncateTables(t *testing.T) {
 	t.Cleanup(func() {
 		DB.Exec("DELETE FROM tasks")
 		DB.Exec("DELETE FROM blocked_ips")
+		DB.Exec("DELETE FROM blocked_devices")
 		DB.Exec("DELETE FROM auth_flows")
 		DB.Exec("DELETE FROM external_identity_claims")
 		DB.Exec("DELETE FROM user_sessions")

@@ -18,7 +18,7 @@ const (
 	UserSessionStatusRevoking = "revoking"
 	UserSessionStatusRevoked  = "revoked"
 
-	userSessionCacheSchema      = 1
+	userSessionCacheSchema      = 2
 	userSessionListLimit        = 100
 	userSessionRevokeBatchSize  = 500
 	userSessionCleanupScanLimit = 1000
@@ -51,6 +51,7 @@ type UserSession struct {
 	LoginMethod         string `json:"login_method" gorm:"type:varchar(32);not null"`
 	IP                  string `json:"ip" gorm:"type:varchar(64)"`
 	UserAgent           string `json:"user_agent" gorm:"type:text"`
+	DeviceID            string `json:"device_id" gorm:"column:device_id;type:varchar(64);index"`
 	CreatedAt           int64  `json:"created_at" gorm:"autoCreateTime;column:created_at;index:idx_user_sessions_user_created,priority:2"`
 	LastActiveAt        int64  `json:"last_active_at" gorm:"type:bigint;not null;column:last_active_at"`
 	ExpiresAt           int64  `json:"expires_at" gorm:"type:bigint;not null;column:expires_at;index:idx_user_sessions_user_status_expiry,priority:3;index:idx_user_sessions_expires_at"`
@@ -76,6 +77,7 @@ type userSessionCacheEntry struct {
 	LoginMethod     string
 	IP              string
 	UserAgent       string
+	DeviceID        string
 	CreatedAt       int64
 	LastActiveAt    int64
 	ExpiresAt       int64
@@ -94,6 +96,7 @@ func (session *UserSession) cacheEntry() *userSessionCacheEntry {
 		LoginMethod:     session.LoginMethod,
 		IP:              session.IP,
 		UserAgent:       session.UserAgent,
+		DeviceID:        session.DeviceID,
 		CreatedAt:       session.CreatedAt,
 		LastActiveAt:    session.LastActiveAt,
 		ExpiresAt:       session.ExpiresAt,
@@ -113,6 +116,7 @@ func (entry *userSessionCacheEntry) session() *UserSession {
 		LoginMethod:     entry.LoginMethod,
 		IP:              entry.IP,
 		UserAgent:       entry.UserAgent,
+		DeviceID:        entry.DeviceID,
 		CreatedAt:       entry.CreatedAt,
 		LastActiveAt:    entry.LastActiveAt,
 		ExpiresAt:       entry.ExpiresAt,
@@ -324,17 +328,18 @@ redis.call('HSET', KEYS[1],
   'SID', ARGV[1], 'UserID', ARGV[2], 'Version', ARGV[3],
   'UserAuthVersion', ARGV[4], 'Status', ARGV[5],
   'LoginMethod', ARGV[6], 'IP', ARGV[7], 'UserAgent', ARGV[8],
-  'CreatedAt', ARGV[9], 'LastActiveAt', ARGV[10], 'ExpiresAt', ARGV[11],
-  'RevokedAt', ARGV[12], 'RevokedReason', ARGV[13], 'CacheSchema', ARGV[14])
+  'DeviceID', ARGV[9], 'CreatedAt', ARGV[10], 'LastActiveAt', ARGV[11],
+  'ExpiresAt', ARGV[12], 'RevokedAt', ARGV[13], 'RevokedReason', ARGV[14],
+  'CacheSchema', ARGV[15])
 if ARGV[5] == 'active' then
-  redis.call('PEXPIREAT', KEYS[1], ARGV[15])
+  redis.call('PEXPIREAT', KEYS[1], ARGV[16])
 else
-  redis.call('PEXPIRE', KEYS[1], ARGV[15])
+  redis.call('PEXPIRE', KEYS[1], ARGV[16])
 end
 return 1`
 	result, err := common.RDB.Eval(context.Background(), script, []string{userSessionCacheKey(entry.SID)},
 		entry.SID, entry.UserID, entry.Version, entry.UserAuthVersion, entry.Status,
-		entry.LoginMethod, entry.IP, entry.UserAgent, entry.CreatedAt, entry.LastActiveAt,
+		entry.LoginMethod, entry.IP, entry.UserAgent, entry.DeviceID, entry.CreatedAt, entry.LastActiveAt,
 		entry.ExpiresAt, entry.RevokedAt, entry.RevokedReason, entry.CacheSchema, redisExpiration,
 	).Int()
 	if err != nil {
@@ -702,14 +707,25 @@ func AdvanceUserSessionAuthVersion(userID int, sid string, expectedSessionVersio
 }
 
 func RevokeOtherUserSessions(userID int, currentSID, reason string) (int64, error) {
-	return revokeUserSessions(userID, currentSID, reason)
+	return revokeUserSessions(userID, currentSID, nil, reason)
 }
 
 func RevokeAllUserSessions(userID int, reason string) (int64, error) {
-	return revokeUserSessions(userID, "", reason)
+	return revokeUserSessions(userID, "", nil, reason)
 }
 
-func revokeUserSessions(userID int, excludedSID, reason string) (int64, error) {
+func RevokeUserSessionsByDeviceIDs(userID int, deviceIds []string, reason string) (int64, error) {
+	normalized, err := NormalizeDeviceIDs(deviceIds)
+	if err != nil {
+		return 0, err
+	}
+	if len(normalized) == 0 {
+		return 0, nil
+	}
+	return revokeUserSessions(userID, "", normalized, reason)
+}
+
+func revokeUserSessions(userID int, excludedSID string, deviceIds []string, reason string) (int64, error) {
 	if userID <= 0 {
 		return 0, ErrUserSessionInvalid
 	}
@@ -719,6 +735,9 @@ func revokeUserSessions(userID int, excludedSID, reason string) (int64, error) {
 		query := DB.Where("user_id = ? AND status = ? AND expires_at > ?", userID, UserSessionStatusActive, now)
 		if excludedSID != "" {
 			query = query.Where("sid <> ?", excludedSID)
+		}
+		if len(deviceIds) > 0 {
+			query = query.Where("device_id IN ?", deviceIds)
 		}
 		var candidates []UserSession
 		if err := query.Order("sid").Limit(userSessionRevokeBatchSize).Find(&candidates).Error; err != nil {

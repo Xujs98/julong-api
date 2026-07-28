@@ -22,7 +22,7 @@ func TestAuthLogoutRejectsRefreshCookieSessionMismatch(t *testing.T) {
 	previousSecret := common.SessionSecret
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&model.User{}, &model.UserSession{}, &model.BlockedIP{}))
+	require.NoError(t, db.AutoMigrate(&model.User{}, &model.UserSession{}, &model.BlockedIP{}, &model.BlockedDevice{}))
 	model.DB = db
 	common.RedisEnabled = false
 	common.SessionSecret = "auth-logout-mismatch-test-secret"
@@ -87,6 +87,12 @@ func TestWriteAuthSessionErrorMapsSessionGrowthLimits(t *testing.T) {
 			expectedStatus: http.StatusTooManyRequests,
 			expectedCode:   "AUTH_SESSION_ISSUANCE_LIMIT",
 		},
+		{
+			name:           "blocked device",
+			err:            model.ErrUserDeviceBlocked,
+			expectedStatus: http.StatusForbidden,
+			expectedCode:   "AUTH_DEVICE_BLOCKED",
+		},
 	}
 
 	for _, test := range tests {
@@ -115,7 +121,7 @@ func TestSessionLimitDoesNotRecordRejectedLoginAsSuccessful(t *testing.T) {
 	previousIssuanceWindow := common.UserSessionIssuanceWindowSeconds
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&model.User{}, &model.UserSession{}, &model.BlockedIP{}))
+	require.NoError(t, db.AutoMigrate(&model.User{}, &model.UserSession{}, &model.BlockedIP{}, &model.BlockedDevice{}))
 	model.DB = db
 	common.RedisEnabled = false
 	common.UserSessionActiveLimit = 1
