@@ -101,6 +101,7 @@ const (
 )
 
 var LogConsumeEnabled = true
+var UserRiskDetectionEnabled = false
 var UserLogGroupRatioDisplayEnabled = true
 var UserLogGroupRatioDisplayMode = UserLogGroupRatioDisplayModeSystem
 var UserLogGroupRatioManualValue = 1.0

@@ -110,6 +110,9 @@ const OPERATIONS_SECTIONS = [
     build: (settings: OperationsSettings) => (
       <LogSettingsSection
         defaultEnabled={Boolean(settings.LogConsumeEnabled)}
+        defaultUserRiskDetectionEnabled={Boolean(
+          settings.UserRiskDetectionEnabled
+        )}
         defaultUserLogGroupRatioDisplayEnabled={Boolean(
           settings.UserLogGroupRatioDisplayEnabled
         )}

@@ -10,6 +10,7 @@ func TestOptionAllowedForSystemSettingsAction(t *testing.T) {
 		{"SystemName", "site.system-info", true},
 		{"SystemName", "operations.logs", false},
 		{"ImageGenerationLogEnabled", "operations.logs", true},
+		{"UserRiskDetectionEnabled", "operations.logs", true},
 		{"UserLogGroupRatioDisplayEnabled", "operations.logs", true},
 		{"UserLogGroupRatioDisplayMode", "operations.logs", true},
 		{"UserLogGroupRatioManualValue", "operations.logs", true},

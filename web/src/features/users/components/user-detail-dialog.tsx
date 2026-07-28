@@ -82,6 +82,7 @@ import type { User, UserLoginIP } from '../types'
 import { userDetailDialogLayoutClasses } from './user-detail-layout'
 import { UserGroupRatiosCard } from './user-group-ratios-card'
 import { UserRequestContentPanel } from './user-request-content-panel'
+import { UserRiskPanel } from './user-risk-panel'
 import { useUsers } from './users-provider'
 
 const RECENT_LOG_LIMIT = 20
@@ -680,6 +681,7 @@ export function UserDetailDialog() {
           >
             <TabsTrigger value='info'>{t('Basic Information')}</TabsTrigger>
             <TabsTrigger value='logs'>{t('Usage Logs')}</TabsTrigger>
+            <TabsTrigger value='risk'>{t('Risk detection')}</TabsTrigger>
             <TabsTrigger value='quota-details'>
               {t('Quota details')}
             </TabsTrigger>
@@ -764,6 +766,10 @@ export function UserDetailDialog() {
                   <TableBody>{logRows}</TableBody>
                 </Table>
               </div>
+            </TabsContent>
+
+            <TabsContent value='risk' className='p-4 sm:p-6'>
+              <UserRiskPanel userId={user?.id} />
             </TabsContent>
 
             <TabsContent value='quota-details' className='p-4 sm:p-6'>

@@ -19,9 +19,10 @@ For commercial licensing, please contact support@quantumnous.com
 import { useQueryClient, useIsFetching } from '@tanstack/react-query'
 import { useNavigate, getRouteApi } from '@tanstack/react-router'
 import type { Table } from '@tanstack/react-table'
-import { Eye, EyeOff } from 'lucide-react'
+import { Download, Eye, EyeOff, Loader2 } from 'lucide-react'
 import { useState, useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -38,9 +39,11 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 
+import { downloadUsageLogs } from '../api'
 import { LOG_TYPE_ALL_VALUE, LOG_TYPE_FILTERS } from '../constants'
+import { buildUsageLogExportParams } from '../lib/export'
 import { buildSearchParams } from '../lib/filter'
-import { getDefaultTimeRange } from '../lib/utils'
+import { buildApiParams, getDefaultTimeRange } from '../lib/utils'
 import type { CommonLogFilters } from '../types'
 import { CommonLogsStats } from './common-logs-stats'
 import { CompactDateTimeRangePicker } from './compact-date-time-range-picker'
@@ -119,6 +122,7 @@ export function CommonLogsFilterBar<TData>(
   const { isAdminView: isAdmin } = useLogsViewScope()
   const { sensitiveVisible, setSensitiveVisible } = useUsageLogsContext()
   const fetchingLogs = useIsFetching({ queryKey: ['logs'] })
+  const [exporting, setExporting] = useState(false)
 
   const searchState = useMemo<CommonLogDraft>(() => {
     const { start, end } = getDefaultTimeRange()
@@ -288,6 +292,61 @@ export function CommonLogsFilterBar<TData>(
       </TooltipContent>
     </Tooltip>
   )
+  const handleDownload = useCallback(async () => {
+    setExporting(true)
+    try {
+      const apiParams = buildApiParams({
+        page: 1,
+        pageSize: 1,
+        searchParams,
+        columnFilters: props.table.getState().columnFilters,
+        isAdmin,
+      })
+      const params = buildUsageLogExportParams(apiParams)
+      const result = await downloadUsageLogs(params, isAdmin)
+      const url = URL.createObjectURL(result.blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = result.filename
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      URL.revokeObjectURL(url)
+      if (result.truncated) {
+        toast.warning(
+          t('Export limited to first {{count}} records', {
+            count: result.limit,
+          })
+        )
+      } else {
+        toast.success(t('Usage logs downloaded'))
+      }
+    } catch {
+      toast.error(t('Failed to download usage logs'))
+    } finally {
+      setExporting(false)
+    }
+  }, [isAdmin, props.table, searchParams, t])
+  const downloadButton = (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <Button
+            type='button'
+            variant='ghost'
+            size='icon'
+            onClick={handleDownload}
+            disabled={exporting}
+            aria-label={t('Download CSV')}
+            className='text-muted-foreground hover:text-foreground size-7'
+          />
+        }
+      >
+        {exporting ? <Loader2 className='animate-spin' /> : <Download />}
+      </TooltipTrigger>
+      <TooltipContent>{t('Download CSV')}</TooltipContent>
+    </Tooltip>
+  )
 
   const dateRangeFilter = (
     <LogsFilterField wide>
@@ -413,7 +472,12 @@ export function CommonLogsFilterBar<TData>(
     <LogsFilterToolbar
       table={props.table}
       stats={statsBar}
-      actionStart={sensitiveToggle}
+      actionStart={
+        <div className='flex items-center gap-1'>
+          {sensitiveToggle}
+          {downloadButton}
+        </div>
+      }
       primaryFilters={
         <>
           {dateRangeFilter}

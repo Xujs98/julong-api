@@ -49,6 +49,7 @@ func InitOptionMap() {
 	common.OptionMap["AutomaticDisableChannelEnabled"] = strconv.FormatBool(common.AutomaticDisableChannelEnabled)
 	common.OptionMap["AutomaticEnableChannelEnabled"] = strconv.FormatBool(common.AutomaticEnableChannelEnabled)
 	common.OptionMap["LogConsumeEnabled"] = strconv.FormatBool(common.LogConsumeEnabled)
+	common.OptionMap["UserRiskDetectionEnabled"] = strconv.FormatBool(common.UserRiskDetectionEnabled)
 	common.OptionMap["UserLogGroupRatioDisplayEnabled"] = strconv.FormatBool(common.UserLogGroupRatioDisplayEnabled)
 	common.OptionMap["UserLogGroupRatioDisplayMode"] = common.UserLogGroupRatioDisplayMode
 	common.OptionMap["UserLogGroupRatioManualValue"] = strconv.FormatFloat(common.UserLogGroupRatioManualValue, 'f', -1, 64)
@@ -349,6 +350,8 @@ func updateOptionMap(key string, value string) (err error) {
 			common.AutomaticEnableChannelEnabled = boolValue
 		case "LogConsumeEnabled":
 			common.LogConsumeEnabled = boolValue
+		case "UserRiskDetectionEnabled":
+			common.UserRiskDetectionEnabled = boolValue
 		case "UserLogGroupRatioDisplayEnabled":
 			common.UserLogGroupRatioDisplayEnabled = boolValue
 		case "ImageGenerationLogEnabled":

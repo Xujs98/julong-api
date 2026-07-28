@@ -224,6 +224,52 @@ export interface UserUsageSummary {
   group_usage?: Record<string, UserGroupUsage>
 }
 
+export type UserRiskLevel = 'low' | 'medium' | 'high'
+
+export type UserRiskSignalCode =
+  | 'sensitive_word_attempts'
+  | 'failed_request_rate'
+  | 'client_abort'
+  | 'abnormal_stream'
+  | 'failed_refunds'
+  | 'refund_after_output'
+  | 'multiple_ips'
+
+export interface UserRiskSignal {
+  code: UserRiskSignalCode
+  severity: UserRiskLevel
+  score: number
+  count: number
+  last_seen: number
+}
+
+export interface UserRiskReport {
+  user_id: number
+  enabled: boolean
+  global_enabled: boolean
+  user_enabled: boolean
+  window_days: 1 | 7 | 30
+  start_time: number
+  end_time: number
+  generated_at: number
+  score: number
+  level: UserRiskLevel
+  summary: {
+    total_requests: number
+    error_count: number
+    error_rate: number
+    refund_count: number
+    refund_quota: number
+    failed_refund_count: number
+    refund_after_output_count: number
+    sensitive_word_attempts: number
+    client_abort_count: number
+    abnormal_stream_count: number
+    unique_ip_count: number
+  }
+  signals: UserRiskSignal[]
+}
+
 export interface UserGroupUsage {
   ratio: number
   quota: number

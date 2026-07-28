@@ -362,10 +362,26 @@ func RecordLog(userId int, logType int, content string) {
 }
 
 func RecordQuotaIncreaseLog(userId int, quota int, source string, content string) {
+	recordQuotaIncreaseLog(userId, quota, source, content, "", nil)
+}
+
+func RecordQuotaIncreaseLogWithAudit(userId int, quota int, source string, content string, requestId string, audit map[string]interface{}) {
+	recordQuotaIncreaseLog(userId, quota, source, content, requestId, audit)
+}
+
+func recordQuotaIncreaseLog(userId int, quota int, source string, content string, requestId string, audit map[string]interface{}) {
 	if userId <= 0 || quota <= 0 {
 		return
 	}
 	username, _ := GetUsernameById(userId, false)
+	other := map[string]interface{}{
+		"source": source,
+	}
+	if len(audit) > 0 {
+		other["admin_info"] = map[string]interface{}{
+			"refund_audit": audit,
+		}
+	}
 	log := &Log{
 		UserId:    userId,
 		Username:  username,
@@ -373,9 +389,8 @@ func RecordQuotaIncreaseLog(userId int, quota int, source string, content string
 		Type:      LogTypeQuotaIncrease,
 		Content:   content,
 		Quota:     quota,
-		Other: common.MapToJsonStr(map[string]interface{}{
-			"source": source,
-		}),
+		RequestId: requestId,
+		Other:     common.MapToJsonStr(other),
 	}
 	if err := createLog(log); err != nil {
 		common.SysLog("failed to record quota increase log: " + err.Error())

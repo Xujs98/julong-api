@@ -70,7 +70,7 @@ func optionAllowedForSystemSettingsAction(key, action string) bool {
 			common.ChannelAnomalyEmailRecipientUserIDsOptionKey,
 		},
 		"operations.worker":      {"WorkerUrl", "WorkerValidKey", "WorkerAllowHttpImageRequestEnabled"},
-		"operations.logs":        {"LogConsumeEnabled", "UserLogGroupRatioDisplayEnabled", "UserLogGroupRatioDisplayMode", "UserLogGroupRatioManualValue", "ImageGenerationLogEnabled", "ImageGenerationLogRetentionDays", "ImageGenerationLogPollingIntervalSeconds", "ImageGenerationLogImageAuthWhitelistEnabled", "ImageGenerationLogImageAuthWhitelist"},
+		"operations.logs":        {"LogConsumeEnabled", "UserRiskDetectionEnabled", "UserLogGroupRatioDisplayEnabled", "UserLogGroupRatioDisplayMode", "UserLogGroupRatioManualValue", "ImageGenerationLogEnabled", "ImageGenerationLogRetentionDays", "ImageGenerationLogPollingIntervalSeconds", "ImageGenerationLogImageAuthWhitelistEnabled", "ImageGenerationLogImageAuthWhitelist"},
 		"operations.performance": {"performance_setting.disk_cache_enabled", "performance_setting.disk_cache_threshold_mb", "performance_setting.disk_cache_max_size_mb", "performance_setting.disk_cache_path", "performance_setting.monitor_enabled", "performance_setting.monitor_cpu_threshold", "performance_setting.monitor_memory_threshold", "performance_setting.monitor_disk_threshold"},
 	}
 	for _, allowedKey := range allowed[action] {

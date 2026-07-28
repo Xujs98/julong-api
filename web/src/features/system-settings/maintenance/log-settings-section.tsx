@@ -82,6 +82,7 @@ import type { LogCleanupTask } from '../types'
 
 const logSettingsSchema = z.object({
   LogConsumeEnabled: z.boolean(),
+  UserRiskDetectionEnabled: z.boolean(),
   UserLogGroupRatioDisplayEnabled: z.boolean(),
   UserLogGroupRatioDisplayMode: z.enum(['system', 'pricing_group', 'manual']),
   UserLogGroupRatioManualValue: z.number().min(0),
@@ -96,6 +97,7 @@ type LogSettingsFormValues = z.infer<typeof logSettingsSchema>
 
 type LogSettingsSectionProps = {
   defaultEnabled: boolean
+  defaultUserRiskDetectionEnabled: boolean
   defaultUserLogGroupRatioDisplayEnabled: boolean
   defaultUserLogGroupRatioDisplayMode: 'system' | 'pricing_group' | 'manual'
   defaultUserLogGroupRatioManualValue: number
@@ -760,6 +762,7 @@ function isActiveLogCleanupTask(task: LogCleanupTask | null) {
 
 export function LogSettingsSection({
   defaultEnabled,
+  defaultUserRiskDetectionEnabled,
   defaultUserLogGroupRatioDisplayEnabled,
   defaultUserLogGroupRatioDisplayMode,
   defaultUserLogGroupRatioManualValue,
@@ -775,6 +778,7 @@ export function LogSettingsSection({
     resolver: zodResolver(logSettingsSchema),
     defaultValues: {
       LogConsumeEnabled: defaultEnabled,
+      UserRiskDetectionEnabled: defaultUserRiskDetectionEnabled,
       UserLogGroupRatioDisplayEnabled: defaultUserLogGroupRatioDisplayEnabled,
       UserLogGroupRatioDisplayMode: defaultUserLogGroupRatioDisplayMode,
       UserLogGroupRatioManualValue: defaultUserLogGroupRatioManualValue,
@@ -822,6 +826,7 @@ export function LogSettingsSection({
   useEffect(() => {
     form.reset({
       LogConsumeEnabled: defaultEnabled,
+      UserRiskDetectionEnabled: defaultUserRiskDetectionEnabled,
       UserLogGroupRatioDisplayEnabled: defaultUserLogGroupRatioDisplayEnabled,
       UserLogGroupRatioDisplayMode: defaultUserLogGroupRatioDisplayMode,
       UserLogGroupRatioManualValue: defaultUserLogGroupRatioManualValue,
@@ -835,6 +840,7 @@ export function LogSettingsSection({
     })
   }, [
     defaultEnabled,
+    defaultUserRiskDetectionEnabled,
     defaultUserLogGroupRatioDisplayEnabled,
     defaultUserLogGroupRatioDisplayMode,
     defaultUserLogGroupRatioManualValue,
@@ -930,6 +936,10 @@ export function LogSettingsSection({
       {
         key: 'LogConsumeEnabled',
         value: values.LogConsumeEnabled,
+      },
+      {
+        key: 'UserRiskDetectionEnabled',
+        value: values.UserRiskDetectionEnabled,
       },
       {
         key: 'UserLogGroupRatioDisplayEnabled',
@@ -1060,6 +1070,32 @@ export function LogSettingsSection({
                   <FormDescription>
                     {t(
                       'Track per-request consumption to power usage analytics. Keeping this on increases database writes.'
+                    )}
+                  </FormDescription>
+                </SettingsSwitchContent>
+                <FormControl>
+                  <Switch
+                    checked={field.value}
+                    onCheckedChange={field.onChange}
+                  />
+                </FormControl>
+                <FormMessage />
+              </SettingsSwitchItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name='UserRiskDetectionEnabled'
+            render={({ field }) => (
+              <SettingsSwitchItem>
+                <SettingsSwitchContent>
+                  <FormLabel>
+                    {t('Enable risk detection for all users')}
+                  </FormLabel>
+                  <FormDescription>
+                    {t(
+                      'Analyze request failures, disconnects, refunds, sensitive attempts, and IP activity for every user. Individual users can still be enabled when this is off.'
                     )}
                   </FormDescription>
                 </SettingsSwitchContent>

@@ -155,6 +155,8 @@ func SetApiRouter(router *gin.Engine) {
 				adminRoute.POST("/batch-quota", controller.BatchAdjustUserQuota)
 				adminRoute.GET("/agent-detail/:id", controller.AdminGetAgentDetail)
 				adminRoute.GET("/:id/usage-summary", controller.AdminGetUserUsageSummary)
+				adminRoute.GET("/:id/risk", controller.AdminGetUserRiskReport)
+				adminRoute.PUT("/:id/risk", controller.AdminUpdateUserRiskDetection)
 				adminRoute.GET("/:id/quota-increases", controller.AdminGetUserQuotaIncreaseLogs)
 				adminRoute.GET("/:id/login-ips", controller.AdminGetUserLoginIPs)
 				adminRoute.PUT("/:id/login-ips", controller.AdminUpdateUserLoginIPs)
@@ -362,11 +364,13 @@ func SetApiRouter(router *gin.Engine) {
 		}
 		logRoute := apiRouter.Group("/log")
 		logRoute.GET("/", middleware.AdminAuth(), controller.GetAllLogs)
+		logRoute.GET("/export", middleware.AdminAuth(), controller.ExportAllLogs)
 		logRoute.GET("/stat", middleware.AdminAuth(), controller.GetLogsStat)
 		logRoute.GET("/self/stat", middleware.UserAuth(), controller.GetLogsSelfStat)
 		logRoute.GET("/channel_affinity_usage_cache", middleware.AdminAuth(), controller.GetChannelAffinityUsageCacheStats)
 		logRoute.GET("/search", middleware.AdminAuth(), controller.SearchAllLogs)
 		logRoute.GET("/self", middleware.UserAuth(), controller.GetUserLogs)
+		logRoute.GET("/self/export", middleware.UserAuth(), controller.ExportUserLogs)
 		logRoute.GET("/self/search", middleware.UserAuth(), middleware.SearchRateLimit(), controller.SearchUserLogs)
 
 		systemTaskRoute := apiRouter.Group("/system-task")

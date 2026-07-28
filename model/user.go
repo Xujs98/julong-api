@@ -119,6 +119,7 @@ type User struct {
 	LastLoginAt                  int64                      `json:"last_login_at" gorm:"default:0;column:last_login_at"`
 	LastLoginIP                  string                     `json:"last_login_ip" gorm:"type:varchar(45);default:'';column:last_login_ip"`
 	RequestContentLoggingEnabled bool                       `json:"-" gorm:"type:bool;column:request_content_logging_enabled"`
+	RiskDetectionEnabled         bool                       `json:"-" gorm:"type:bool;column:risk_detection_enabled"`
 	SharedIPUserCount            int64                      `json:"shared_ip_user_count,omitempty" gorm:"-:all"`
 	LastLoginIPBlocked           bool                       `json:"last_login_ip_blocked,omitempty" gorm:"-:all"`
 	AuthVersion                  int64                      `json:"-" gorm:"type:bigint;not null;default:1;column:auth_version"`

@@ -39,6 +39,7 @@ import type {
   PageData,
   BatchQuotaAdjustPayload,
   BatchQuotaAdjustResult,
+  UserRiskReport,
 } from './types'
 
 // ============================================================================
@@ -263,6 +264,30 @@ export async function getUserUsageSummary(
   const res = await api.get(`/api/user/${userId}/usage-summary`, {
     params: userGroup ? { user_group: userGroup } : undefined,
   })
+  return res.data
+}
+
+export async function getUserRiskReport(
+  userId: number,
+  days: 1 | 7 | 30
+): Promise<ApiResponse<UserRiskReport>> {
+  const res = await api.get(`/api/user/${userId}/risk`, {
+    params: { days },
+  })
+  return res.data
+}
+
+export async function updateUserRiskDetection(
+  userId: number,
+  enabled: boolean
+): Promise<
+  ApiResponse<{
+    enabled: boolean
+    global_enabled: boolean
+    user_enabled: boolean
+  }>
+> {
+  const res = await api.put(`/api/user/${userId}/risk`, { enabled })
   return res.data
 }
 

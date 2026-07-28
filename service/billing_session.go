@@ -104,13 +104,54 @@ func (s *BillingSession) Refund(c *gin.Context) {
 	subscriptionId := s.relayInfo.SubscriptionId
 	userId := s.relayInfo.UserId
 	funding := s.funding
+	requestId := s.relayInfo.RequestId
+	responseBytes := 0
+	clientDisconnected := false
+	if c != nil {
+		if c.Writer != nil {
+			responseBytes = max(0, c.Writer.Size())
+		}
+		if c.Request != nil {
+			clientDisconnected = c.Request.Context().Err() != nil
+		}
+	}
+	refundAfterOutput := responseBytes > 0 && (s.relayInfo.SendResponseCount > 0 || s.relayInfo.ReceivedResponseCount > 0)
+	refundAudit := map[string]interface{}{
+		"client_disconnected":     clientDisconnected,
+		"is_stream":               s.relayInfo.IsStream,
+		"received_response_count": s.relayInfo.ReceivedResponseCount,
+		"refund_after_output":     refundAfterOutput,
+		"response_bytes":          responseBytes,
+		"sent_response_count":     s.relayInfo.SendResponseCount,
+	}
+	if s.relayInfo.RequestURLPath != "" {
+		refundAudit["request_path"] = s.relayInfo.RequestURLPath
+	}
+	if s.relayInfo.StreamStatus != nil {
+		refundAudit["stream_end_reason"] = string(s.relayInfo.StreamStatus.EndReason)
+	}
+	if s.relayInfo.LastError != nil {
+		refundAudit["error_code"] = s.relayInfo.LastError.GetErrorCode()
+		refundAudit["status_code"] = s.relayInfo.LastError.StatusCode
+	}
+	if refundAfterOutput {
+		logger.LogWarn(c, fmt.Sprintf("failed request refund after response output: user=%d request=%s bytes=%d received=%d sent=%d",
+			userId, requestId, responseBytes, s.relayInfo.ReceivedResponseCount, s.relayInfo.SendResponseCount))
+	}
 
 	gopool.Go(func() {
 		// 1) 退还资金来源
 		if err := funding.Refund(); err != nil {
 			common.SysLog("error refunding billing source: " + err.Error())
 		} else if funding.Source() == BillingSourceWallet && tokenConsumed > 0 {
-			model.RecordQuotaIncreaseLog(userId, tokenConsumed, model.QuotaIncreaseSourceRefund, fmt.Sprintf("请求失败，返还预扣额度 %s", logger.LogQuota(tokenConsumed)))
+			model.RecordQuotaIncreaseLogWithAudit(
+				userId,
+				tokenConsumed,
+				model.QuotaIncreaseSourceRefund,
+				fmt.Sprintf("请求失败，返还预扣额度 %s", logger.LogQuota(tokenConsumed)),
+				requestId,
+				refundAudit,
+			)
 		}
 		if extraReserved > 0 && funding.Source() == BillingSourceSubscription && subscriptionId > 0 {
 			if err := model.PostConsumeUserSubscriptionDelta(subscriptionId, -int64(extraReserved)); err != nil {

@@ -21,17 +21,21 @@ import (
 
 // 辅助函数
 func HandleStreamFormat(c *gin.Context, info *relaycommon.RelayInfo, data string, forceFormat bool, thinkToContent bool) error {
-	info.SendResponseCount++
-
+	var err error
 	switch info.RelayFormat {
 	case types.RelayFormatOpenAI:
-		return sendStreamData(c, info, data, forceFormat, thinkToContent)
+		err = sendStreamData(c, info, data, forceFormat, thinkToContent)
 	case types.RelayFormatClaude:
-		return handleClaudeFormat(c, data, info)
+		err = handleClaudeFormat(c, data, info)
 	case types.RelayFormatGemini:
-		return handleGeminiFormat(c, data, info)
+		err = handleGeminiFormat(c, data, info)
+	default:
+		return nil
 	}
-	return nil
+	if err == nil {
+		info.SendResponseCount++
+	}
+	return err
 }
 
 func handleClaudeFormat(c *gin.Context, data string, info *relaycommon.RelayInfo) error {

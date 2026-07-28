@@ -94,6 +94,33 @@ export const getUserLogStats = (
   params: Omit<GetLogStatsParams, 'username' | 'channel'> = {}
 ) => fetchLogStats('/api/log', params, false)
 
+export async function downloadUsageLogs(
+  params: Omit<GetLogsParams, 'p' | 'page_size'>,
+  isAdmin: boolean
+): Promise<{
+  blob: Blob
+  filename: string
+  truncated: boolean
+  limit: number
+}> {
+  const path = isAdmin ? '/api/log/export' : '/api/log/self/export'
+  const response = await api.get(path, {
+    params,
+    responseType: 'blob',
+    disableDuplicate: true,
+  })
+  const disposition = String(response.headers['content-disposition'] || '')
+  const filenameMatch = disposition.match(/filename="?([^";]+)"?/i)
+  return {
+    blob: response.data as Blob,
+    filename:
+      filenameMatch?.[1] ||
+      `usage-logs-${new Date().toISOString().slice(0, 10)}.csv`,
+    truncated: response.headers['x-export-truncated'] === 'true',
+    limit: Number(response.headers['x-export-row-limit']) || 5000,
+  }
+}
+
 export async function getUserInfo(
   userId: number
 ): Promise<{ success: boolean; message?: string; data?: UserInfo }> {

@@ -45,6 +45,7 @@ const defaultOperationsSettings: OperationsSettings = {
   WorkerValidKey: '',
   WorkerAllowHttpImageRequestEnabled: false,
   LogConsumeEnabled: false,
+  UserRiskDetectionEnabled: false,
   UserLogGroupRatioDisplayEnabled: true,
   UserLogGroupRatioDisplayMode: 'system',
   UserLogGroupRatioManualValue: 1,

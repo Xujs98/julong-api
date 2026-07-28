@@ -355,6 +355,7 @@ export type OperationsSettings = {
   WorkerValidKey: string
   WorkerAllowHttpImageRequestEnabled: boolean
   LogConsumeEnabled: boolean
+  UserRiskDetectionEnabled: boolean
   UserLogGroupRatioDisplayEnabled: boolean
   UserLogGroupRatioDisplayMode: 'system' | 'pricing_group' | 'manual'
   UserLogGroupRatioManualValue: number
