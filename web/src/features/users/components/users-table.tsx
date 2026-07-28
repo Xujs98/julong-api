@@ -42,7 +42,7 @@ import {
 import { getUserQuotaSummaryParams } from '../lib/user-quota-summary'
 import type { User, UserSortBy, UserTag } from '../types'
 import { DataTableBulkActions } from './data-table-bulk-actions'
-import { UserQuotaSummaryBadge } from './user-quota-summary-badge'
+import { UserQuotaSummaryControl } from './user-quota-summary-control'
 import { useUsersColumns } from './users-columns'
 import { useUsers } from './users-provider'
 
@@ -296,7 +296,7 @@ export function UsersTable(props: UsersTableProps) {
           },
         ],
         afterFilters: (
-          <UserQuotaSummaryBadge
+          <UserQuotaSummaryControl
             summary={quotaSummaryQuery.data}
             isFetching={quotaSummaryQuery.isFetching}
           />

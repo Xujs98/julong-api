@@ -43,6 +43,7 @@ import type {
   UserLoginDevice,
   UserQuotaSummary,
   UserQuotaSummaryParams,
+  UserQuotaSummarySettings,
 } from './types'
 
 // ============================================================================
@@ -102,6 +103,42 @@ export async function getUserQuotaSummary(
   params: UserQuotaSummaryParams
 ): Promise<ApiResponse<UserQuotaSummary>> {
   const res = await api.get('/api/user/quota-summary', { params })
+  return res.data
+}
+
+export async function getUserQuotaSummarySettings(): Promise<
+  ApiResponse<UserQuotaSummarySettings>
+> {
+  const res = await api.get('/api/user/quota-summary/settings')
+  return res.data
+}
+
+export async function updateUserQuotaSummarySettings(
+  excludedUserIds: number[]
+): Promise<ApiResponse<UserQuotaSummarySettings>> {
+  const res = await api.put('/api/user/quota-summary/settings', {
+    excluded_user_ids: excludedUserIds,
+  })
+  return res.data
+}
+
+export async function searchUserQuotaSummaryOptions(
+  keyword: string,
+  page: number,
+  pageSize: number
+): Promise<ApiResponse<PageData<UserManagementOption>>> {
+  const res = await api.get('/api/user/quota-summary/users', {
+    params: { keyword, p: page, page_size: pageSize },
+  })
+  return res.data
+}
+
+export async function resolveUserQuotaSummaryOptions(
+  userIds: number[]
+): Promise<ApiResponse<UserManagementOption[]>> {
+  const res = await api.post('/api/user/quota-summary/users/resolve', {
+    user_ids: userIds,
+  })
   return res.data
 }
 

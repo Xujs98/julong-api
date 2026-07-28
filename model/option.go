@@ -102,6 +102,7 @@ func InitOptionMap() {
 	common.OptionMap[common.RiskUserEmailLevelsOptionKey] = `["medium","high"]`
 	common.OptionMap[common.RiskUserEmailRecipientUserIDsOptionKey] = "[]"
 	common.OptionMap[common.RiskUserEmailDispatchStateOptionKey] = "{}"
+	common.OptionMap[common.UserQuotaSummaryExcludedUserIDsOptionKey] = "[]"
 	common.OptionMap["Notice"] = ""
 	common.OptionMap["About"] = ""
 	common.OptionMap["HomePageContent"] = ""

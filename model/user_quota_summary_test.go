@@ -1,6 +1,8 @@
 package model
 
 import (
+	"fmt"
+	"sort"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
@@ -8,8 +10,29 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func resetUserQuotaSummarySettingsForTest(t *testing.T) {
+	t.Helper()
+	common.OptionMapRWMutex.Lock()
+	if common.OptionMap == nil {
+		common.OptionMap = make(map[string]string)
+	}
+	previous, existed := common.OptionMap[common.UserQuotaSummaryExcludedUserIDsOptionKey]
+	common.OptionMap[common.UserQuotaSummaryExcludedUserIDsOptionKey] = "[]"
+	common.OptionMapRWMutex.Unlock()
+	t.Cleanup(func() {
+		common.OptionMapRWMutex.Lock()
+		if existed {
+			common.OptionMap[common.UserQuotaSummaryExcludedUserIDsOptionKey] = previous
+		} else {
+			delete(common.OptionMap, common.UserQuotaSummaryExcludedUserIDsOptionKey)
+		}
+		common.OptionMapRWMutex.Unlock()
+	})
+}
+
 func TestGetUserQuotaSummaryAppliesUserListFilters(t *testing.T) {
 	truncateTables(t)
+	resetUserQuotaSummarySettingsForTest(t)
 	users := []User{
 		{Username: "alice", DisplayName: "Alice", Email: "alice@example.com", Password: "password", Role: common.RoleCommonUser, Status: common.UserStatusEnabled, Group: "default", Quota: 100, TagId: 7, AffCode: "quota-summary-alice"},
 		{Username: "bob", DisplayName: "Bob", Email: "bob@example.com", Password: "password", Role: common.RoleAdminUser, Status: common.UserStatusDisabled, Group: "vip", Quota: 200, TagId: 7, AffCode: "quota-summary-bob"},
@@ -55,4 +78,55 @@ func TestGetUserQuotaSummaryAppliesUserListFilters(t *testing.T) {
 			assert.Equal(t, test.userCount, summary.UserCount)
 		})
 	}
+}
+
+func TestUserQuotaSummarySettingsPersistAndExcludeSelectedUsers(t *testing.T) {
+	truncateTables(t)
+	resetUserQuotaSummarySettingsForTest(t)
+	users := []User{
+		{Username: "quota-user", Password: "password", Role: common.RoleCommonUser, Status: common.UserStatusEnabled, Group: "default", Quota: 100, AffCode: "quota-settings-user"},
+		{Username: "quota-admin", Password: "password", Role: common.RoleAdminUser, Status: common.UserStatusEnabled, Group: "default", Quota: 200, AffCode: "quota-settings-admin"},
+		{Username: "quota-root", Password: "password", Role: common.RoleRootUser, Status: common.UserStatusEnabled, Group: "default", Quota: 300, AffCode: "quota-settings-root"},
+		{Username: "quota-deleted", Password: "password", Role: common.RoleCommonUser, Status: common.UserStatusEnabled, Group: "default", Quota: 400, AffCode: "quota-settings-deleted"},
+	}
+	require.NoError(t, DB.Create(&users).Error)
+	require.NoError(t, DB.Delete(&users[3]).Error)
+
+	excludedUserIds := []int{users[3].Id, users[0].Id, users[3].Id, 0}
+	settings, err := UpdateUserQuotaSummarySettings(excludedUserIds)
+	require.NoError(t, err)
+	expectedIds := []int{users[0].Id, users[3].Id}
+	sort.Ints(expectedIds)
+	assert.Equal(t, expectedIds, settings.ExcludedUserIds)
+
+	loadedSettings, err := GetUserQuotaSummarySettings()
+	require.NoError(t, err)
+	assert.Equal(t, expectedIds, loadedSettings.ExcludedUserIds)
+	var option Option
+	require.NoError(t, DB.First(&option, "key = ?", common.UserQuotaSummaryExcludedUserIDsOptionKey).Error)
+	assert.Equal(t, fmt.Sprintf("[%d,%d]", expectedIds[0], expectedIds[1]), option.Value)
+
+	summary, err := GetUserQuotaSummary("", "", nil, nil, nil)
+	require.NoError(t, err)
+	assert.EqualValues(t, 500, summary.TotalQuota)
+	assert.EqualValues(t, 2, summary.UserCount)
+
+	options, total, err := SearchUserQuotaSummaryOptions("quota-", 0, 20)
+	require.NoError(t, err)
+	assert.EqualValues(t, 4, total)
+	require.Len(t, options, 4)
+	resolved, err := ResolveUserQuotaSummaryOptions([]int{users[1].Id, users[2].Id, users[3].Id})
+	require.NoError(t, err)
+	require.Len(t, resolved, 3)
+}
+
+func TestUpdateUserQuotaSummarySettingsRejectsMissingUsers(t *testing.T) {
+	truncateTables(t)
+	resetUserQuotaSummarySettingsForTest(t)
+
+	_, err := UpdateUserQuotaSummarySettings([]int{999999})
+	assert.EqualError(t, err, "部分用户不存在")
+	settings, getErr := GetUserQuotaSummarySettings()
+	require.NoError(t, getErr)
+	assert.Empty(t, settings.ExcludedUserIds)
 }

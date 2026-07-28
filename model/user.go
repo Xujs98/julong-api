@@ -478,6 +478,13 @@ func GetUserQuotaSummary(keyword string, group string, role *int, status *int, t
 	if err != nil {
 		return nil, err
 	}
+	settings, err := GetUserQuotaSummarySettings()
+	if err != nil {
+		return nil, err
+	}
+	if len(settings.ExcludedUserIds) > 0 {
+		query = query.Where("id NOT IN ?", settings.ExcludedUserIds)
+	}
 
 	var summary UserQuotaSummary
 	err = query.Select("COALESCE(SUM(quota), 0) AS total_quota, COUNT(*) AS user_count").Scan(&summary).Error

@@ -39,7 +39,7 @@ export function UserQuotaSummaryBadge(props: UserQuotaSummaryBadgeProps) {
       aria-live='polite'
     >
       <span className='min-w-0 flex-1 truncate'>
-        {t('Remaining quota')}:{' '}
+        {t('Total remaining quota')}:{' '}
         <strong>
           {props.summary ? formatQuota(props.summary.total_quota) : '--'}
         </strong>

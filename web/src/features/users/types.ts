@@ -156,6 +156,10 @@ export interface UserQuotaSummary {
   user_count: number
 }
 
+export interface UserQuotaSummarySettings {
+  excluded_user_ids: number[]
+}
+
 export interface UserFormData {
   username: string
   display_name: string

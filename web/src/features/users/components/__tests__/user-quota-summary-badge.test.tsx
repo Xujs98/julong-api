@@ -57,7 +57,7 @@ await i18n.use(initReactI18next).init({
   resources: {
     en: {
       translation: {
-        'Remaining quota': 'Remaining quota',
+        'Total remaining quota': 'Total remaining quota',
         Users: 'Users',
       },
     },
@@ -90,7 +90,7 @@ describe('user quota summary badge', () => {
       )
     })
 
-    assert.match(container.textContent ?? '', /Remaining quota/)
+    assert.match(container.textContent ?? '', /Total remaining quota/)
     assert.match(container.textContent ?? '', /12 Users/)
     const badge = container.firstElementChild
     assert.ok(badge)

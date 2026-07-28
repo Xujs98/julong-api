@@ -158,6 +158,7 @@ const (
 	RiskUserEmailLevelsOptionKey                  = "RiskUserEmailLevels"
 	RiskUserEmailRecipientUserIDsOptionKey        = "RiskUserEmailRecipientUserIDs"
 	RiskUserEmailDispatchStateOptionKey           = "RiskUserEmailDispatchState"
+	UserQuotaSummaryExcludedUserIDsOptionKey      = "UserQuotaSummaryExcludedUserIDs"
 )
 
 var GitHubClientId = ""
