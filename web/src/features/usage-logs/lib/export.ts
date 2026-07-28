@@ -18,9 +18,49 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import type { GetLogsParams } from '../types'
 
+export type UsageLogExportSelection =
+  | { scope: 'page' }
+  | { scope: 'today'; now?: Date }
+  | { scope: 'custom'; start: Date; end: Date }
+  | { scope: 'all' }
+
 export function buildUsageLogExportParams(
-  params: GetLogsParams
-): Omit<GetLogsParams, 'p' | 'page_size'> {
-  const { p: _page, page_size: _pageSize, ...filters } = params
-  return filters
+  params: GetLogsParams,
+  selection: UsageLogExportSelection
+): GetLogsParams {
+  const exportParams = { ...params }
+
+  if (selection.scope === 'page') return exportParams
+
+  delete exportParams.p
+  delete exportParams.page_size
+
+  if (selection.scope === 'all') {
+    delete exportParams.start_timestamp
+    delete exportParams.end_timestamp
+    return exportParams
+  }
+
+  if (selection.scope === 'today') {
+    const start = new Date(selection.now ?? new Date())
+    start.setHours(0, 0, 0, 0)
+    const end = new Date(start)
+    end.setHours(23, 59, 59, 999)
+    exportParams.start_timestamp = Math.floor(start.getTime() / 1000)
+    exportParams.end_timestamp = Math.floor(end.getTime() / 1000)
+    return exportParams
+  }
+
+  const startTimestamp = selection.start.getTime()
+  const endTimestamp = selection.end.getTime()
+  if (
+    !Number.isFinite(startTimestamp) ||
+    !Number.isFinite(endTimestamp) ||
+    startTimestamp > endTimestamp
+  ) {
+    throw new RangeError('Invalid usage log export time range')
+  }
+  exportParams.start_timestamp = Math.floor(startTimestamp / 1000)
+  exportParams.end_timestamp = Math.floor(endTimestamp / 1000)
+  return exportParams
 }

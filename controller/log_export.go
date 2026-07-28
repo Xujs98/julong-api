@@ -16,6 +16,12 @@ import (
 
 const usageLogExportLimit = 5000
 
+type usageLogExportWindow struct {
+	startIdx  int
+	pageSize  int
+	paginated bool
+}
+
 func ExportAllLogs(c *gin.Context) {
 	exportUsageLogs(c, true)
 }
@@ -33,6 +39,7 @@ func exportUsageLogs(c *gin.Context, isAdmin bool) {
 	group := c.Query("group")
 	requestId := c.Query("request_id")
 	upstreamRequestId := c.Query("upstream_request_id")
+	exportWindow := getUsageLogExportWindow(c)
 
 	var logs []*model.Log
 	var total int64
@@ -46,8 +53,8 @@ func exportUsageLogs(c *gin.Context, isAdmin bool) {
 			modelName,
 			c.Query("username"),
 			tokenName,
-			0,
-			usageLogExportLimit,
+			exportWindow.startIdx,
+			exportWindow.pageSize,
 			channel,
 			group,
 			requestId,
@@ -61,8 +68,8 @@ func exportUsageLogs(c *gin.Context, isAdmin bool) {
 			endTimestamp,
 			modelName,
 			tokenName,
-			0,
-			usageLogExportLimit,
+			exportWindow.startIdx,
+			exportWindow.pageSize,
 			group,
 			requestId,
 			upstreamRequestId,
@@ -80,9 +87,30 @@ func exportUsageLogs(c *gin.Context, isAdmin bool) {
 	}
 	filename := fmt.Sprintf("usage-logs-%s.csv", time.Now().UTC().Format("20060102-150405"))
 	c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
-	c.Header("X-Export-Row-Limit", strconv.Itoa(usageLogExportLimit))
-	c.Header("X-Export-Truncated", strconv.FormatBool(total > int64(len(logs))))
+	c.Header("X-Export-Row-Limit", strconv.Itoa(exportWindow.pageSize))
+	c.Header("X-Export-Truncated", strconv.FormatBool(!exportWindow.paginated && total > int64(len(logs))))
 	c.Data(200, "text/csv; charset=utf-8", payload)
+}
+
+func getUsageLogExportWindow(c *gin.Context) usageLogExportWindow {
+	window := usageLogExportWindow{pageSize: usageLogExportLimit}
+	page, pageErr := strconv.Atoi(c.Query("p"))
+	pageSize, pageSizeErr := strconv.Atoi(c.Query("page_size"))
+	if pageErr != nil || pageSizeErr != nil || page < 1 || pageSize < 1 {
+		return window
+	}
+	if pageSize > usageLogExportLimit {
+		pageSize = usageLogExportLimit
+	}
+	maxInt := int(^uint(0) >> 1)
+	if page-1 > maxInt/pageSize {
+		window.startIdx = maxInt
+	} else {
+		window.startIdx = (page - 1) * pageSize
+	}
+	window.pageSize = pageSize
+	window.paginated = true
+	return window
 }
 
 func renderUsageLogsCSV(logs []*model.Log) ([]byte, error) {
@@ -90,25 +118,25 @@ func renderUsageLogsCSV(logs []*model.Log) ([]byte, error) {
 	buffer.WriteString("\xEF\xBB\xBF")
 	writer := csv.NewWriter(&buffer)
 	if err := writer.Write([]string{
-		"ID",
-		"Time",
-		"Type",
-		"Username",
-		"Token Name",
-		"Model",
-		"Group",
-		"Prompt Tokens",
-		"Completion Tokens",
-		"Quota",
-		"Channel ID",
-		"Channel Name",
-		"IP",
-		"Stream",
-		"Duration Seconds",
-		"Request ID",
-		"Upstream Request ID",
-		"Content",
-		"Other",
+		"日志 ID",
+		"时间",
+		"类型",
+		"用户名",
+		"令牌名称",
+		"模型",
+		"分组",
+		"输入 Token",
+		"输出 Token",
+		"额度",
+		"渠道 ID",
+		"渠道名称",
+		"IP 地址",
+		"流式请求",
+		"用时（秒）",
+		"请求 ID",
+		"上游请求 ID",
+		"内容",
+		"其他",
 	}); err != nil {
 		return nil, err
 	}

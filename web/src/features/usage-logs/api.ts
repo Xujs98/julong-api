@@ -95,7 +95,7 @@ export const getUserLogStats = (
 ) => fetchLogStats('/api/log', params, false)
 
 export async function downloadUsageLogs(
-  params: Omit<GetLogsParams, 'p' | 'page_size'>,
+  params: GetLogsParams,
   isAdmin: boolean
 ): Promise<{
   blob: Blob
