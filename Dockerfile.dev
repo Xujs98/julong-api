@@ -19,7 +19,9 @@ COPY . .
 RUN mkdir -p web/dist && \
     echo '<!doctype html><html><head><title>dev</title></head><body>use frontend dev server</body></html>' > web/dist/index.html
 
-RUN go build -ldflags "-s -w -X 'github.com/QuantumNous/new-api/common.Version=$(cat VERSION)'" -o new-api
+RUN JULONG_VERSION="$(tr -d '[:space:]' < VERSION)" \
+    && test -n "${JULONG_VERSION}" \
+    && go build -ldflags "-s -w -X github.com/QuantumNous/new-api/common.Version=${JULONG_VERSION}" -o new-api
 
 FROM debian:bookworm-slim
 

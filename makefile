@@ -1,5 +1,6 @@
 WEB_DIR = ./web
 API_DIR = .
+JULONG_VERSION := $(strip $(shell cat VERSION))
 DEV_WEB_PORT ?= 5173
 DEV_COMPOSE_FILE = docker-compose.dev.yml
 DEV_POSTGRES_SERVICE = postgres
@@ -8,20 +9,23 @@ DEV_POSTGRES_DB = new-api
 DEV_POSTGRES_USER = root
 DEV_SQLITE_PATH ?= one-api.db
 
-.PHONY: all build-web build-all-web start-api dev dev-api dev-api-rebuild dev-web reset-setup test
+.PHONY: all check-version build-web build-all-web start-api dev dev-api dev-api-rebuild dev-web reset-setup test
 
 all: build-all-web start-api
 
-build-web:
+check-version:
+	@test -n "$(JULONG_VERSION)" || (echo "VERSION must not be empty" && exit 1)
+
+build-web: check-version
 	@echo "Building web frontend..."
 	@cd $(WEB_DIR) && bun install --frozen-lockfile
-	@cd $(WEB_DIR) && DISABLE_ESLINT_PLUGIN='true' VITE_REACT_APP_VERSION=$$(cat ../VERSION) bun run build
+	@cd $(WEB_DIR) && DISABLE_ESLINT_PLUGIN='true' VITE_REACT_APP_VERSION="$(JULONG_VERSION)" bun run build
 
 build-all-web: build-web
 
-start-api:
+start-api: check-version
 	@echo "Starting api dev server..."
-	@cd $(API_DIR) && go run main.go &
+	@cd $(API_DIR) && go run -ldflags "-X github.com/QuantumNous/new-api/common.Version=$(JULONG_VERSION)" main.go &
 
 dev-api:
 	@echo "Starting api services (docker)..."

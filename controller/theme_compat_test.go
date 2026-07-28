@@ -47,6 +47,8 @@ func TestGetStatusAdvertisesDefaultDashboard(t *testing.T) {
 	assert.Equal(t, "default", payload.Data["theme"])
 	assert.Equal(t, common.Version, payload.Data["version"])
 	assert.Equal(t, common.Version, payload.Data["julong_version"])
+	assert.NotEmpty(t, payload.Data["julong_version"])
+	assert.NotEqual(t, "v0.0.0", payload.Data["julong_version"])
 	assert.Equal(t, common.UpstreamVersion, payload.Data["upstream_version"])
 	assert.Equal(t, common.UpstreamCommit, payload.Data["upstream_commit"])
 }
