@@ -41,6 +41,7 @@ import {
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuTrigger,
@@ -180,32 +181,34 @@ export function UsageLogsExportMenu<TData>(
           />
           <TooltipContent>{t('Download CSV')}</TooltipContent>
           <DropdownMenuContent align='end' className='w-44'>
-            <DropdownMenuLabel>{t('Download CSV')}</DropdownMenuLabel>
-            <DropdownMenuItem
-              disabled={exporting}
-              onClick={() => void exportLogs({ scope: 'page' })}
-            >
-              <List />
-              {t('Current page')}
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              disabled={exporting}
-              onClick={() => void exportLogs({ scope: 'today' })}
-            >
-              <CalendarDays />
-              {t('Today')}
-            </DropdownMenuItem>
-            <DropdownMenuItem disabled={exporting} onClick={openCustomRange}>
-              <CalendarRange />
-              {t('Select time range')}
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              disabled={exporting}
-              onClick={() => void exportLogs({ scope: 'all' })}
-            >
-              <Database />
-              {t('All records')}
-            </DropdownMenuItem>
+            <DropdownMenuGroup>
+              <DropdownMenuLabel>{t('Download CSV')}</DropdownMenuLabel>
+              <DropdownMenuItem
+                disabled={exporting}
+                onClick={() => void exportLogs({ scope: 'page' })}
+              >
+                <List />
+                {t('Current page')}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={exporting}
+                onClick={() => void exportLogs({ scope: 'today' })}
+              >
+                <CalendarDays />
+                {t('Today')}
+              </DropdownMenuItem>
+              <DropdownMenuItem disabled={exporting} onClick={openCustomRange}>
+                <CalendarRange />
+                {t('Select time range')}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={exporting}
+                onClick={() => void exportLogs({ scope: 'all' })}
+              >
+                <Database />
+                {t('All records')}
+              </DropdownMenuItem>
+            </DropdownMenuGroup>
           </DropdownMenuContent>
         </DropdownMenu>
       </Tooltip>
