@@ -65,6 +65,7 @@ import {
 import type { LogOtherData } from '../../types'
 import { CostBreakdownTooltip } from '../cost-breakdown-tooltip'
 import { DetailsDialog } from '../dialogs/details-dialog'
+import { LogCostDisplay } from '../log-cost-display'
 import { ModelBadge } from '../model-badge'
 import { TimingMetricsCell, StreamTpsCell } from '../timing-metrics-cell'
 import { useUsageLogsContext } from '../usage-logs-provider'
@@ -80,12 +81,6 @@ function formatRatioCompact(ratio: number | undefined): string {
   return ratio % 1 === 0
     ? String(ratio)
     : ratio.toFixed(4).replace(/\.?0+$/, '')
-}
-
-function splitQuotaDisplay(value: string): { prefix: string; amount: string } {
-  const match = value.match(/^([^0-9+\-.,\s]+)(.+)$/)
-  if (!match) return { prefix: '', amount: value }
-  return { prefix: match[1], amount: match[2] }
 }
 
 function buildDetailSegments(
@@ -822,49 +817,13 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
         const other = parseLogOther(log.other)
         const isSubscription = other?.billing_source === 'subscription'
         const revenueItems = getBillingRevenueItems(other, isAdmin)
+        const costDisplay = <LogCostDisplay quota={quota} other={other} />
 
-        if (isSubscription) {
-          return (
-            <CostBreakdownTooltip
-              trigger={
-                <StatusBadge
-                  label={t('Subscription')}
-                  variant='success'
-                  size='sm'
-                  copyable={false}
-                  className='cursor-help'
-                />
-              }
-              subscriptionQuota={quota}
-              revenueItems={revenueItems}
-            />
-          )
-        }
-
-        const quotaStr = formatLogQuota(quota)
-        const quotaDisplay = splitQuotaDisplay(quotaStr)
-
-        const costBadge = (
-          <div className='flex flex-col gap-0.5'>
-            <span
-              className={cn(
-                'border-border/80 bg-muted/60 inline-flex h-6 w-fit items-center rounded-md border px-2 [font-family:var(--font-body)] text-sm leading-none font-semibold tabular-nums',
-                revenueItems.length > 0 && 'cursor-help'
-              )}
-            >
-              {quotaDisplay.prefix && (
-                <span className='mr-1'>{quotaDisplay.prefix}</span>
-              )}
-              <span>{quotaDisplay.amount}</span>
-            </span>
-          </div>
-        )
-
-        if (revenueItems.length === 0) return costBadge
+        if (revenueItems.length === 0) return costDisplay
         return (
           <CostBreakdownTooltip
-            trigger={costBadge}
-            subscriptionQuota={null}
+            trigger={<div className='w-fit cursor-help'>{costDisplay}</div>}
+            subscriptionQuota={isSubscription ? quota : null}
             revenueItems={revenueItems}
           />
         )

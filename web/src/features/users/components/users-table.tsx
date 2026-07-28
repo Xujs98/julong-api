@@ -237,6 +237,7 @@ export function UsersTable(props: UsersTableProps) {
       applyHeaderSize
       toolbarProps={{
         searchPlaceholder: t('Filter by username, name or email...'),
+        searchDebounceMs: 500,
         filters: [
           {
             columnId: 'status',

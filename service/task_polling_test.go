@@ -11,9 +11,10 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
-	"github.com/QuantumNous/new-api/dto"
+	taskdto "github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/bytedance/gopkg/util/gopool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -37,9 +38,9 @@ func (a *sunoFailurePollingAdaptor) Init(_ *relaycommon.RelayInfo) {}
 
 func (a *sunoFailurePollingAdaptor) FetchTask(_ string, _ string, body map[string]any, _ string) (*http.Response, error) {
 	taskIDs, _ := body["ids"].([]string)
-	items := make([]dto.SunoDataResponse, 0, len(taskIDs))
+	items := make([]taskdto.SunoDataResponse, 0, len(taskIDs))
 	for _, taskID := range taskIDs {
-		items = append(items, dto.SunoDataResponse{
+		items = append(items, taskdto.SunoDataResponse{
 			TaskID:     taskID,
 			Status:     string(model.TaskStatusFailure),
 			FailReason: a.failReason,
@@ -47,8 +48,8 @@ func (a *sunoFailurePollingAdaptor) FetchTask(_ string, _ string, body map[strin
 		})
 	}
 
-	responseBody, err := common.Marshal(dto.TaskResponse[[]dto.SunoDataResponse]{
-		Code: dto.TaskSuccessCode,
+	responseBody, err := common.Marshal(taskdto.TaskResponse[[]taskdto.SunoDataResponse]{
+		Code: taskdto.TaskSuccessCode,
 		Data: items,
 	})
 	if err != nil {
@@ -91,8 +92,8 @@ func (a *taskPollingFetchAdaptor) FetchTask(_ string, _ string, body map[string]
 		}
 	}
 
-	response := dto.TaskResponse[model.Task]{
-		Code: dto.TaskSuccessCode,
+	response := taskdto.TaskResponse[model.Task]{
+		Code: taskdto.TaskSuccessCode,
 		Data: model.Task{
 			TaskID:   taskID,
 			Status:   model.TaskStatusInProgress,
@@ -395,7 +396,7 @@ func TestUpdateSunoTasksStalePollsRefundExactlyOnce(t *testing.T) {
 	task.Platform = constant.TaskPlatformSuno
 	task.Status = model.TaskStatusInProgress
 	task.Progress = "50%"
-	task.SubmitTime = model.TaskRefundLegacyCutoff
+	task.SubmitTime = time.Now().Unix()
 	task.PrivateData.UpstreamTaskID = upstreamTaskID
 	require.NoError(t, model.DB.Create(task).Error)
 
@@ -497,4 +498,48 @@ func TestSweepUnrefundedFailedTasksRestoresMarkerAfterFundingFailure(t *testing.
 	assert.Zero(t, afterSuccessfulRetry.Quota)
 	assert.Equal(t, subscriptionUsed-int64(taskQuota), getSubscriptionUsed(t, subscriptionID))
 	assert.Equal(t, int64(1), countLogs(t))
+}
+
+func TestSweepTimedOutTasksHonorsRefundRolloutBoundary(t *testing.T) {
+	truncate(t)
+
+	const (
+		userID          = 403
+		initialQuota    = 10_000
+		legacyTaskQuota = 1_800
+		modernTaskQuota = 1_200
+	)
+	seedUser(t, userID, initialQuota)
+
+	legacyTask := makeTask(userID, 0, legacyTaskQuota, 0, BillingSourceWallet, 0)
+	legacyTask.TaskID = "legacy_timeout_without_refund"
+	legacyTask.Progress = "50%"
+	legacyTask.SubmitTime = model.TaskRefundLegacyCutoff - 1
+	require.NoError(t, model.DB.Create(legacyTask).Error)
+
+	modernTask := makeTask(userID, 0, modernTaskQuota, 0, BillingSourceWallet, 0)
+	modernTask.TaskID = "modern_timeout_with_refund"
+	modernTask.Progress = "50%"
+	modernTask.SubmitTime = model.TaskRefundLegacyCutoff
+	require.NoError(t, model.DB.Create(modernTask).Error)
+
+	previousTimeout := constant.TaskTimeoutMinutes
+	constant.TaskTimeoutMinutes = 1
+	t.Cleanup(func() { constant.TaskTimeoutMinutes = previousTimeout })
+
+	sweepTimedOutTasks(context.Background())
+
+	var reloadedLegacy model.Task
+	var reloadedModern model.Task
+	require.NoError(t, model.DB.First(&reloadedLegacy, legacyTask.ID).Error)
+	require.NoError(t, model.DB.First(&reloadedModern, modernTask.ID).Error)
+	assert.EqualValues(t, model.TaskStatusFailure, reloadedLegacy.Status)
+	assert.EqualValues(t, model.TaskStatusFailure, reloadedModern.Status)
+	assert.Zero(t, reloadedLegacy.Quota)
+	assert.Zero(t, reloadedModern.Quota)
+	assert.Contains(t, reloadedLegacy.FailReason, "旧系统遗留任务")
+	assert.Contains(t, reloadedModern.FailReason, "任务超时")
+	assert.Equal(t, initialQuota+modernTaskQuota, getUserQuota(t, userID))
+	assert.Equal(t, int64(2), countLogs(t))
+	assert.Equal(t, int64(1), countQuotaIncreaseLogs(t, userID))
 }

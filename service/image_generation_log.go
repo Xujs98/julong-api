@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -17,10 +16,10 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
-	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/relaykit/dto"
 
 	"github.com/gin-gonic/gin"
 )
@@ -114,7 +113,7 @@ func RecordCapturedImageGenerationLog(c *gin.Context, info *relaycommon.RelayInf
 		return
 	}
 
-	encoded, err := json.Marshal(refs)
+	encoded, err := common.Marshal(refs)
 	if err != nil {
 		logger.LogError(c, "failed to encode generated image refs: "+err.Error())
 		return
@@ -217,7 +216,7 @@ func CompleteImageGenerationTask(taskId string, userId int, responseBody []byte)
 		if len(refs) == 0 {
 			return fmt.Errorf("image generation response contains no images")
 		}
-		encodedRefs, marshalErr := json.Marshal(refs)
+		encodedRefs, marshalErr := common.Marshal(refs)
 		if marshalErr != nil {
 			return marshalErr
 		}

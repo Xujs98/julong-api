@@ -1,6 +1,6 @@
 # Julong-API 开发文档
 
-最后更新：2026-07-26
+最后更新：2026-07-28
 
 本文档是本二开项目的强制开发记录。以后新增、修改或删除任何 API、组件、数据模型、配置项、路由、数据库行为或部署行为时，必须在同一次改动中同步更新本文档，并在“变更日志”中新增记录。
 
@@ -8,7 +8,8 @@
 
 - 当前代码是唯一事实来源。如果本文档和代码不一致，必须先按当前代码修正文档，再继续开发。
 - 每次 API 变更必须同步更新 API 清单、请求/响应说明、权限说明和变更日志。
-- 每次前端组件、页面、交互变更必须同步更新组件清单或对应功能模块说明。
+- 每次前端组件、页面、交互或页面路由变更必须同步更新前端路由、组件清单或对应功能模块说明。
+- 功能代码与 `DEVELOPMENT.md` 必须在同一次提交中完成；API 或页面路由未登记时，该功能视为未完成。
 - 每次数据库模型、字段或迁移行为变更必须同步更新数据模型和迁移注意事项。
 - 前端 i18n 语言包禁止手动直接编辑。新增或修改翻译必须通过临时脚本 `web/scripts/add-missing-keys.mjs` 写入，然后运行 `bun run i18n:sync`，最后删除临时脚本。
 - `web/src/routeTree.gen.ts` 是 TanStack Router 工具链/typecheck 生成文件。除非生成不可用且改动完全机械明确，否则不要手动编辑。
@@ -21,14 +22,18 @@
 | 后端 Gin API | 进行中 | 保留上游核心功能，并叠加 Julong 二开功能。本地后端通常监听 `:3000`。 |
 | 默认前端 UI | 进行中 | React 19 + Rsbuild + TanStack Router，代码在 `web`。本地开发服务通常是 `:5173`。 |
 | Classic 前端 | 已移除 | 跟随上游架构调整，只保留 `web/` 单一前端。 |
-| 上游同步 | 已完成 | 2026-07-25 合并 `QuantumNous/new-api@84a79b68`，保留 Julong 定制功能。 |
+| 上游同步 | 已完成 | 2026-07-28 合并 `QuantumNous/new-api@afe16c64c`（发行版 `v1.0.0-rc.22` 及其后续主线提交），保留 Julong 定制功能和失败任务退款对账。 |
 | Docker 部署 | 进行中 | `docker-compose.yml` 使用 `qq1371446705/julong-api:latest`，包含 Postgres、Redis，宿主端口 `3388`。 |
 | 代理功能 | 已实现，仍需持续 QA | 代理折扣、代理生成兑换码、代理所属用户、代理充值链接、退款日志等。 |
 | 错误反馈工单 | 已实现 | 500 页面跳转 `/error-report`，管理员/root 在 `/error-reports` 查看。 |
 | 用户详情、IP 与请求内容审计 | 已实现 | 后台用户详情显示登录 IP 历史并支持多选封禁/解封；用户列表标记共享 IP 和已封 IP；管理员/root 可按用户开启新请求的上下文与提示词记录。 |
 | 用户今日 Token 与分组分析 | 已实现 | 用户详情同时显示总 Token 和按服务器本地自然日统计的今日 Token；root 数据看板按分组分析真实额度、请求数、Token 和去重用户数。 |
 | 邮件群发与条件提醒 | 已实现 | 运维页面支持立即群发、定时发送和订阅到期条件提醒；创建任务时可选择中英文系统模板、预览后套用，使用注册邮箱、逐用户记录结果，并通过数据库任务租约防止多实例重复调度。 |
-| 邮件设置与自动提醒 | 已实现 | 运维“邮件设置”统一管理订阅到期、余额不足、渠道账号额度和渠道异常提醒，并编辑、实时预览、恢复 7 类中英文模板；渠道异常只在系统自动异常关闭时通知，手动关闭不发送。 |
+| 邮件设置与自动提醒 | 已实现 | 运维“邮件设置”统一管理订阅到期、余额不足、渠道账号额度、渠道异常、数据看板报表和风险用户提醒，并编辑、实时预览、恢复 10 类中英文模板；数据报表支持多规则、多发送时间和真实数据测试，风险提醒可多选中/高风险并指定管理员收件人。 |
+| 用户运营管理 | 已实现 | 用户列表支持自定义标签、内置中/高风险标签筛选、批量额度增减及可选邮件；用户详情展示今日消费、额度明细、已选分组实际扣费倍率及分组用量，并支持单用户在最终真实倍率上增减调整。 |
+| 用户风险与设备管控 | 已实现 | 风险检测支持全局或逐用户开启，按 1/7/30 天请求、错误、退款、客户端断开、异常流和 IP 等信号评分；登录 IP 与设备面板支持识别设备、封禁设备并撤销对应会话。 |
+| 模型 Token 特殊倍率 | 已实现 | 分组定价可按用户分组、计费分组和模型分别增加输入、输出、缓存读取、缓存创建 Token；用户和管理员看到计费后 Token，管理员悬浮可查看真实 Token、原始费用及分组/模型倍率收益。 |
+| 日志与兑换码导出 | 已实现 | 使用日志支持下载本页、今日、自定义时间和全部记录，CSV 使用中文表头并防公式注入；兑换码支持新生成结果复制/下载及多选复制、下载、5 秒确认删除。 |
 | 兑换码搜索 | 已实现 | 后台兑换码支持按兑换码 key、生成者用户名/显示名、名称、ID、状态搜索。 |
 | 签到额度预览 | 已实现 | 计费与支付中的签到奖励输入框显示格式化额度预览。 |
 | 生图日志与异步生图 | 已实现 | 开启生图日志后，`async: true` 立即创建 `pending` 日志并返回任务 ID，支持 API Key 轮询、状态更新、图片读取和后台 JSON 详情；关闭日志时退回同步且不存图。 |
@@ -169,8 +174,10 @@ docker compose up -d
 | `UserLogGroupRatioDisplayEnabled` | `common/constants.go`、`model/log.go`、`log-settings-section.tsx` | 普通用户使用日志是否显示令牌分组倍率 | 默认 `true`；关闭后 `/api/log/self` 和 Token 日志响应剥离 `group_ratio`、`user_group_ratio`，管理员/root 日志不受影响。 |
 | `UserLogGroupRatioDisplayMode` | 同上、`setting/ratio_setting/group_ratio.go` | 新使用日志的用户展示倍率快照来源 | `system` 保存请求实际倍率（默认）；`pricing_group` 保存日志产生时的基础定价分组倍率；`manual` 保存当时配置的统一手动倍率。普通用户单条日志响应的 `quota/prompt_tokens/completion_tokens` 及缓存 Tokens 按“展示倍率 / 真实倍率”换算；顶部“用量”保持数据库真实扣费、RPM 保持真实请求数，TPM 按最近 60 秒各日志快照换算。模式变更只影响后续新日志，不改写历史日志，也不参与实际扣费。 |
 | `UserLogGroupRatioManualValue` | 同上 | 手动模式写入新日志的展示倍率 | 默认 `1`，必须为大于等于 `0` 的有效数字；保存到 `Log.UserDisplayGroupRatio` 后不再随全局配置变化。 |
+| `UserRiskDetectionEnabled` | `common/constants.go`、`model/option.go`、`user_risk.go`、`log-settings-section.tsx` | 全局启用用户风险评估 | 默认 `false`；开启后全部用户进入风险评估，关闭时仍可通过 `User.risk_detection_enabled` 单独开启指定用户。只聚合既有日志，不拦截 Relay 请求。 |
 | `ModelSquareGroupRatioDisplayMode` | `common/constants.go`、`controller/pricing.go`、`group-ratio-form.tsx` | 模型广场使用哪种分组倍率展示价格 | `actual`（默认）包含当前登录用户命中的特殊倍率规则；`pricing_group` 始终使用“分组定价”的基础倍率并忽略用户特殊倍率。只改变 `/api/pricing` 展示数据，不改变实际扣费。 |
 | `TokenGroupRatioDisplayMode` | `common/constants.go`、`controller/group.go`、`group-ratio-form.tsx` | API 密钥令牌分组选择器展示哪种倍率 | `actual`（默认）展示当前用户命中的特殊倍率；`pricing_group` 始终展示基础定价分组倍率。只改变 `/api/user/self/groups` 返回的展示倍率，不改变实际扣费。 |
+| `group_ratio_setting.model_token_ratio` | `setting/ratio_setting/group_ratio.go`、`types/model_token_adjustment.go`、`model-token-ratio-editor.tsx` | 模型 Token 特殊倍率规则 | JSON 层级为“用户分组 → 计费分组 → 模型”；输入、输出、缓存读取、缓存创建各自可选，配置值 `x` 按 `1+x` 乘到真实 Token，单项范围 `0-100`。影响实际 Token 计费并在日志 `other.admin_info.model_token_adjustment` 保存真实/计费后 Token 审计。 |
 | `ImageGenerationLogEnabled` | `common/constants.go`、`model/option.go`、`log-settings-section.tsx` | 是否记录生图请求并启用本地异步生图 | Root 或获授权管理员配置，默认 `false`；关闭时 `async: true` 退回同步，不创建任务、不捕获或保存图片。 |
 | `ImageGenerationLogRetentionDays` | 同上、`service/image_generation_log.go` | 生图日志及本地图片自动保留天数 | 默认 `30`，范围 `0-3650`；`0` 表示永久保留，每小时至多触发一次过期清理。 |
 | `ImageGenerationLogPollingIntervalSeconds` | `common/constants.go`、`model/option.go`、`log-settings-section.tsx` | 未完成生图任务的前端轮询频率 | 默认 `15` 秒，允许 `5-3600` 秒；同时通过 `/api/status` 和任务响应公开。 |
@@ -184,7 +191,9 @@ docker compose up -d
 | `LowBalanceEmailEnabled` / `LowBalanceEmailThreshold` / `LowBalanceEmailRechargeURL` | `service/email_settings.go`、`service/quota.go`、`email-alert-settings.tsx` | 用户钱包或订阅额度不足邮件 | 默认关闭；系统阈值默认沿用 `QuotaRemindThreshold`，用户个人通知阈值优先；充值 URL 留空时回退钱包页。只控制 Email，Webhook/Bark/Gotify 保持用户原配置。 |
 | `AccountQuotaEmailEnabled` / `AccountQuotaEmailThreshold` / `AccountQuotaEmailRecipientUserIDs` | `service/email_settings.go`、`controller/channel-billing.go`、`model/channel.go` | 渠道账号余额不足提醒 | 默认关闭、阈值默认 `5`；渠道余额首次查询已低于阈值或从阈值上方跌破时发送，持续低余额不重复发送；收件人只能选择状态正常且有邮箱的管理员/root，空列表回退全部 root。 |
 | `ChannelAnomalyEmailEnabled` / `ChannelAnomalyEmailRecipientUserIDs` | `service/email_settings.go`、`service/channel.go` | 渠道异常自动关闭提醒 | 默认关闭；仅 `DisableChannel` 自动封禁成功后发送，管理员手动关闭渠道不发送；收件人规则同账号额度提醒。 |
-| `EmailTemplates` | `service/email_template.go`、`controller/email_template.go`、`email-template-settings-section.tsx` | 自定义系统邮件模板 JSON | 中文兼容旧键 `{event:{subject,content}}`，英文使用 `{event::en:{subject,content}}`，无需迁移。事件为 `notification.general`、`auth.verify_code`、`auth.password_reset`、`subscription.expiry_reminder`、`balance.low`、`account.quota_alert`、`channel.anomaly_disabled`；每个事件提供 `zh/en`。主题最长 255 字节且禁止换行，HTML 最长 200000 字节，只允许事件声明占位符；`notification.general` 和 `subscription.expiry_reminder` 可在邮件群发中选择、预览并套用。 |
+| `DashboardReportEmail*` | `common/constants.go`、`service/dashboard_report_email.go`、`email-alert-settings.tsx` | 数据看板定时报表 | 包含总开关、管理员/root 收件人和 `DashboardReportEmailSchedules` JSON；最多 20 条日报/周报/月报规则，每条最多 12 个 `HH:mm` 时间，调度历史保存 90 天用于幂等。报表读取真实消费、额度、请求、Token、活跃用户/模型/渠道/分组、用户统计、Top 模型和分组分析。 |
+| `RiskUserEmail*` | `common/constants.go`、`service/risk_user_email.go`、`email-alert-settings.tsx` | 风险用户邮件提醒 | 默认关闭；`RiskUserEmailLevels` 可多选 `medium/high`，收件人仅允许有效管理员/root。系统只通知新进入或风险等级升级的用户，状态保存在 `RiskUserEmailDispatchState`；测试接口发送当前真实评估数据。 |
+| `EmailTemplates` | `service/email_template.go`、`controller/email_template.go`、`email-template-settings-section.tsx` | 自定义系统邮件模板 JSON | 中文兼容旧键 `{event:{subject,content}}`，英文使用 `{event::en:{subject,content}}`，无需迁移。10 个事件为 `notification.general`、`auth.verify_code`、`auth.password_reset`、`subscription.expiry_reminder`、`balance.low`、`account.quota_alert`、`channel.anomaly_disabled`、`dashboard.report`、`user.risk_detected`、`user.quota_adjustment`；每个事件提供 `zh/en` 图片式卡片 UI。主题最长 255 字节且禁止换行，HTML 最长 200000 字节，只允许事件声明占位符。 |
 | `Logo` | `model/option.go`、`controller/site_asset.go`、`system-info-section.tsx` | 站点徽标 URL | 可继续填写 HTTP/HTTPS 或根路径 URL；本地上传成功后保存为 `/api/site-assets/logo/<随机文件名>`。只有通用 Option 保存成功才会正式应用，新地址通过 `/api/status.logo` 下发，替换/清空时自动删除旧的本地徽标。 |
 | `SITE_ASSET_STORAGE_DIR` | `controller/site_asset.go` | 覆盖站点上传资源目录 | 默认 `site-assets`；Docker `WORKDIR /data` 下对应持久化卷 `/data/site-assets`。徽标文件使用 32 位随机十六进制文件名、`0640` 权限和同目录原子重命名。 |
 
@@ -245,7 +254,7 @@ type ApiResponse<T> = {
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | GET | `/api/setup` | `controller.GetSetup` | 读取安装/初始化状态 | 无 | setup 元数据 | 公开 | 完成 |
 | POST | `/api/setup` | `controller.PostSetup` | 初始化安装 | setup payload | success | 公开 + body limit | 完成 |
-| GET | `/api/status` | `controller.GetStatus` | 系统状态/健康检查 | 无 | status 对象；包含 `custom_endpoints`、`image_generation_log_polling_interval_seconds`；公告启用时仅含当前有效且面向所有用户的 `announcements`，并返回 `announcements_enabled` | 公开 | 完成 |
+| GET | `/api/status` | `controller.GetStatus` | 系统状态/健康检查 | 无 | status 对象；`version` 与 `julong_version` 返回当前 Julong 构建版本，`upstream_version`/`upstream_commit` 返回已合并 New API 版本与提交；另含 `custom_endpoints`、`image_generation_log_polling_interval_seconds`，公告启用时仅含当前有效且面向所有用户的 `announcements` 和 `announcements_enabled` | 公开 | 完成 |
 | GET | `/api/announcements` | `controller.GetUserAnnouncements` | 获取当前用户可见公告 | 无 | 已展示、时间有效且命中套餐/余额 OR-AND 条件的 `Announcement[]` | 登录用户 | 完成 |
 | GET | `/api/uptime/status` | `controller.GetUptimeKumaStatus` | Uptime Kuma 集成 | 无 | uptime 状态 | 公开 | 完成 |
 | GET | `/api/notice` | `controller.GetNotice` | 站点公告 | 无 | 内容 | 公开 | 完成 |
@@ -317,16 +326,29 @@ curl http://localhost:3000/api/error-reports \
 | 方法 | 路径 | Handler | 用途 | 参数/请求体 | 响应 | 状态 |
 | --- | --- | --- | --- | --- | --- | --- |
 | GET | `/api/user/` | `controller.GetAllUsers` | 分页用户列表 | `p`, `page_size` | `PageInfo<User[]>` | 完成 |
-| GET | `/api/user/search` | `controller.SearchUsers` | 搜索用户 | `keyword`, `group`, `role`, `status`, `p`, `page_size` | `PageInfo<User[]>` | 完成 |
+| GET | `/api/user/search` | `controller.SearchUsers` | 搜索用户 | `keyword`, `group`, `role`, `status`, `tag`（可多选）, `p`, `page_size` | `PageInfo<User[]>`，包含自定义标签和按风险报告计算的内置风险标签 | 完成 |
+| GET | `/api/user/tags` | `controller.ListUserTags` | 标签列表 | 无 | 内置中风险/高风险标签加自定义 `UserTag[]` | 完成；内置标签不可修改或删除 |
+| POST | `/api/user/tags` | `controller.CreateUserTag` | 创建自定义标签 | `{name,color}`，名称最多 32 字符，颜色为 `#RRGGBB` | `UserTag` | 完成 |
+| PUT | `/api/user/tags/:tag_id` | `controller.UpdateUserTag` | 修改自定义标签 | path 正整数 `tag_id`；`{name,color}` | `UserTag` | 完成；内置负数 ID 不可修改 |
+| DELETE | `/api/user/tags/:tag_id` | `controller.DeleteUserTag` | 删除自定义标签并解除用户关联 | path 正整数 `tag_id` | success | 完成；内置标签不可删除 |
+| PUT | `/api/user/:id/tag` | `controller.UpdateUserTagAssignment` | 给单个用户标注或清除自定义标签 | `{tag_id}`；`0` 清除 | success | 完成；角色层级校验 |
+| GET | `/api/user/options` | `controller.SearchUserManagementOptions` | 批量额度用户选择器搜索 | `keyword`, `p`, `page_size` | 当前操作者可管理的用户最小信息分页 | 完成 |
+| POST | `/api/user/options/resolve` | `controller.ResolveUserManagementOptions` | 回显批量额度已选用户 | `{user_ids:number[]}` | 当前操作者可管理的用户最小信息数组 | 完成 |
+| POST | `/api/user/batch-quota` | `controller.BatchAdjustUserQuota` | 批量增加或减少用户额度 | `{mode,value,all_users,user_ids,send_email,email_locale,email_subject,email_content}` | `{adjusted_count,email_success_count,email_skipped_count,email_failed_count}` | 完成；单事务调整可管理用户，增加额度写额度明细，可选真实 SMTP 通知 |
 | GET | `/api/user/:id` | `controller.GetUser` | 可编辑用户详情 | path `id` | `User`（包含 `last_login_at`、`last_login_ip`） | 完成；管理员/root，同级/更高角色受限 |
 | POST | `/api/user/` | `controller.CreateUser` | 创建用户 | `UserFormData` | `User` | 完成 |
 | PUT | `/api/user/` | `controller.UpdateUser` | 更新用户 | `UserFormData & {id}` | partial `User` | 完成 |
 | DELETE | `/api/user/:id` | `controller.DeleteUser` | 删除用户 | path `id` | success | 完成 |
 | POST | `/api/user/manage` | `controller.ManageUser` | 晋升/降级/启用/禁用/删除/额度调整；`disable` 同时封禁全部已知登录 IP | `{id,action,...}` | partial `User` | 完成 |
 | GET | `/api/user/agent-detail/:id` | `controller.AdminGetAgentDetail` | 代理详情弹窗 | path `id` | `{agent,users,redemptions}` | 完成 |
-| GET | `/api/user/:id/usage-summary` | `controller.AdminGetUserUsageSummary` | 用户详情弹窗总 Token 和今日 Token 消耗 | path `id` | `{total_tokens:number,today_tokens:number}` | 完成；管理员仅可查看低权限用户，root 可查看全部 |
+| GET | `/api/user/:id/usage-summary` | `controller.AdminGetUserUsageSummary` | 用户详情总 Token、今日 Token/消费和已选计费分组的实际倍率/用量 | path `id`；可选 `user_group` 用于编辑预览 | `{total_tokens,today_tokens,today_quota,base_group_ratios,group_ratios,group_usage}` | 完成；仅返回该用户 API Key 实际选择过的分组，倍率包含特殊规则和单用户调整 |
+| GET | `/api/user/:id/quota-increases` | `controller.AdminGetUserQuotaIncreaseLogs` | 用户“额度明细”分页 | path `id`；`p`, `page_size` | `PageInfo<QuotaIncreaseLog[]>` | 完成；记录兑换码、签到、管理员调整、在线充值、退款、注册/邀请奖励等增加额度来源 |
+| GET | `/api/user/:id/risk` | `controller.AdminGetUserRiskReport` | 计算用户风险报告 | path `id`；`days=1|7|30`，默认 7 | `UserRiskReport`，包含开关状态、0-100 分、`low/medium/high`、汇总和信号 | 完成；全局和单用户开关均关闭时返回禁用的低风险报告 |
+| PUT | `/api/user/:id/risk` | `controller.AdminUpdateUserRiskDetection` | 单独开启或关闭用户风险评估 | `{enabled:boolean}` | `{enabled,global_enabled,user_enabled}` | 完成；全局开启时单用户关闭不覆盖全局 |
 | GET | `/api/user/:id/login-ips` | `controller.AdminGetUserLoginIPs` | 用户历史登录 IP、登录次数、最后使用时间、封禁和共享状态 | path `id` | `UserLoginIPStat[]` | 完成；管理员仅可查看低权限用户，root 可查看全部 |
 | PUT | `/api/user/:id/login-ips` | `controller.AdminUpdateUserLoginIPs` | 批量封禁或解封登录 IP | path `id`；`{ips:string[],blocked:boolean}`，1-100 个标准 IPv4/IPv6 | success | 完成；管理员仅可操作低权限用户，root 可操作全部；非法 IP 返回参数错误 |
+| GET | `/api/user/:id/login-devices` | `controller.AdminGetUserLoginDevices` | 用户登录设备、UA、关联 IP、会话和封禁状态 | path `id` | `UserLoginDeviceStat[]`，最多聚合 100 个设备 | 完成 |
+| PUT | `/api/user/:id/login-devices` | `controller.AdminUpdateUserLoginDevices` | 批量封禁或解封用户设备 | `{device_ids:string[],blocked:boolean}`，1-100 个 UUID | `{revoked_count}` | 完成；封禁时立即撤销对应活跃会话 |
 | GET | `/api/user/:id/request-content` | `controller.AdminListUserRequestContentLogs` | 读取指定用户的请求内容记录开关和最近记录摘要 | path `id` | `{enabled:boolean,items:UserRequestContentLog[],max_items:50}`；列表不返回压缩正文 | 完成；管理员仅可查看低权限用户，root 可查看全部 |
 | PUT | `/api/user/:id/request-content` | `controller.AdminUpdateUserRequestContentLogging` | 按用户开启或关闭后续请求内容记录 | path `id`；JSON `{enabled:boolean}` | `{enabled:boolean}` | 完成；仅影响新请求，写管理审计日志 |
 | GET | `/api/user/:id/request-content/:log_id` | `controller.AdminGetUserRequestContentLog` | 读取并解压单条已脱敏请求 JSON | path `id/log_id` | `{log:UserRequestContentLog,content:any}` | 完成；校验记录所属用户，查看动作写管理审计日志 |
@@ -455,6 +477,7 @@ curl 'http://localhost:3000/api/user/1/usage-summary' \
 | GET | `/api/redemption/search` | `controller.SearchRedemptions` | 搜索兑换码 | `keyword`, `status`, `p`, `page_size` | `PageInfo<Redemption[]>` | 完成；搜索 ID、名称、key、生成者用户名/显示名 |
 | GET | `/api/redemption/:id` | `controller.GetRedemption` | 兑换码详情 | path `id` | `Redemption` | 完成 |
 | POST | `/api/redemption/` | `controller.AddRedemption` | 创建兑换码 | `{name,quota,count,expired_time}` | generated keys | 完成；代理扣费规则生效 |
+| POST | `/api/redemption/batch` | `controller.DeleteRedemptionBatch` | 批量删除兑换码 | `{ids:number[]}`，1-100 个正整数，自动去重 | 删除条数 | 完成；仅管理员/root，前端强制 5 秒确认 |
 | PUT | `/api/redemption/` | `controller.UpdateRedemption` | 更新兑换码/状态 | `Redemption` payload | `Redemption` | 完成 |
 | DELETE | `/api/redemption/invalid` | `controller.DeleteInvalidRedemption` | 删除无效/已用/过期兑换码 | 无 | count | 完成 |
 | DELETE | `/api/redemption/:id` | `controller.DeleteRedemption` | 删除单个兑换码 | path `id` | success | 完成；未使用的代理兑换码退还 `agent_charge` |
@@ -479,8 +502,10 @@ curl 'http://localhost:3000/api/redemption/search?keyword=agent001&p=1&page_size
 | 方法 | 路径 | Handler | 用途 | 权限 | 状态 |
 | --- | --- | --- | --- | --- | --- |
 | GET | `/api/log/` | `controller.GetAllLogs` | 管理员日志；保留请求真实 `group_ratio/user_group_ratio` 和持久化的 `user_display_group_ratio`，并在 `other` 中附加当前普通用户倍率显示开关和值 | 管理员/root | 完成 |
+| GET | `/api/log/export` | `controller.ExportAllLogs` | 导出管理员当前筛选、本页、今日、自定义时间或全部日志 CSV | 与 `/api/log/` 相同筛选；本页增加 `p/page_size` | UTF-8 BOM CSV，中文表头；`X-Export-Row-Limit`、`X-Export-Truncated` | 管理员/root；单次最多 5000 行 |
 | GET | `/api/log/stat` | `controller.GetLogsStat` | 管理员日志统计 | 管理员/root | 完成 |
 | GET | `/api/log/self` | `controller.GetUserLogs` | 当前用户日志；总开关打开时返回每条日志保存的 `user_display_group_ratio` 快照，关闭时剥离倍率；非系统展示倍率下，单条日志响应中的费用和 Tokens 按快照换算，但不回写数据库 | 用户 | 完成 |
+| GET | `/api/log/self/export` | `controller.ExportUserLogs` | 导出当前用户当前筛选、本页、今日、自定义时间或全部日志 CSV | 与 `/api/log/self` 相同筛选；本页增加 `p/page_size` | UTF-8 BOM CSV，中文表头；`X-Export-Row-Limit`、`X-Export-Truncated` | 用户；强制当前用户范围，单次最多 5000 行 |
 | GET | `/api/log/self/stat` | `controller.GetLogsSelfStat` | 当前用户统计；`quota` 为真实用量、RPM 为真实请求数，TPM 按各日志持久化展示倍率换算 | 用户 | 完成 |
 | GET | `/api/log/search` | `controller.SearchAllLogs` | 已废弃搜索接口 | 管理员/root | 已废弃 |
 | GET | `/api/log/self/search` | `controller.SearchUserLogs` | 已废弃用户搜索接口 | 用户 | 已废弃 |
@@ -500,6 +525,10 @@ curl 'http://localhost:3000/api/redemption/search?keyword=agent001&p=1&page_size
 - 管理员/root 的 `/api/log/` 保留日志原始 `other.group_ratio`、`other.user_group_ratio` 和持久化展示快照，前端据此同时展示“实际倍率”和“用户展示倍率”。`other.user_group_ratio_display_enabled/value` 仅为响应辅助字段，不写回数据库。
 - 普通用户 `/api/log/self` 和 Token `/api/log/token` 不返回真实倍率。总开关打开时将持久化快照映射为展示倍率，关闭时剥离倍率；列表响应副本中的 `quota`、输入/输出 Tokens、缓存 Tokens 和 `fee_quota` 按快照倍率换算。旧日志的快照字段为 `NULL`，只能回退到该日志自身保存的真实倍率，绝不按当前手动值或当前分组定价重新计算。
 - `/api/log/self/stat` 的“用量”继续读取真实 `sum(quota)`，RPM 继续统计真实请求数；仅 TPM 按最近 60 秒日志的快照倍率换算。`/api/log/stat` 管理员统计保持全部真实。
+- 命中模型 Token 特殊倍率时，日志表的输入/输出/缓存 Tokens 保存并展示计费后的 Token；管理员/root 的 `other.admin_info.model_token_adjustment` 同时保存 `actual` 真实 Token、`billed` 计费 Token 和各项增量配置，前端仅在悬浮 Tokens 时展示真实值。
+- 管理员/root 的费用悬浮从 `other.admin_info.billing_revenue` 读取 `original_quota`、`group_special_ratio` 和 `model_token_adjustment`，展示原来的费用、分组特殊倍率收益和模型倍率收益；该审计不改变已结算额度。
+
+日志导出复用列表查询和权限范围，不创建临时文件。CSV 固定包含日志 ID、时间、类型、用户、令牌、模型、分组、输入/输出 Token、额度、渠道、IP、流式、用时、请求 ID、内容和其他字段；所有以 `= + - @` 开头的单元格会添加单引号，防止电子表格公式注入。未带有效 `p/page_size` 时导出筛选范围内前 5000 行，并通过 `X-Export-Truncated: true` 提示截断。
 
 `GET /api/data/groups` 请求参数：必填 query `start_timestamp`、`end_timestamp`（Unix 秒，均大于 0 且结束时间不早于开始时间）；可选 `username` 精确筛选用户，`default_time` 仅为前端兼容参数。成功响应如下，`items[].user_count` 是分组内 `COUNT(DISTINCT user_id)`，`totals.user_count` 是整个时间范围内全局去重用户数，不会把跨分组用户重复相加：
 
@@ -750,18 +779,20 @@ curl 'https://api.julongkj.top/v1/images/generations/img_xxx/images/0/presign?ex
 
 | 方法 | 路径 | Handler | 用途 | 请求参数 | 响应 `data` | 权限/错误处理 | 状态 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| GET | `/api/email-settings/config` | `controller.GetEmailSettingsConfig` | 读取订阅到期、余额不足、账号额度和渠道异常提醒配置 | 无 | `EmailSettingsConfig`；收件人为空时响应自动回显 root ID | 无权限 401/403；无有效 root 或数据库错误时 `success:false` | 完成 |
-| PUT | `/api/email-settings/config` | `controller.UpdateEmailSettingsConfig` | 原子保存全部邮件提醒配置 | `EmailSettingsConfig`；阈值必须非负，充值 URL 为空或有效 HTTP(S)，两类收件人各最多 100 个 | 归一化后的完整配置 | 收件人必须是状态正常、未删除、有邮箱的管理员/root；任一校验/写入失败时整组配置不落库 | 完成 |
+| GET | `/api/email-settings/config` | `controller.GetEmailSettingsConfig` | 读取订阅到期、余额不足、账号额度、渠道异常、数据报表和风险用户提醒配置 | 无 | `EmailSettingsConfig`；四类运维收件人为空时响应自动回显 root ID | 无权限 401/403；无有效 root 或数据库错误时 `success:false` | 完成 |
+| PUT | `/api/email-settings/config` | `controller.UpdateEmailSettingsConfig` | 原子保存全部邮件提醒配置 | `EmailSettingsConfig`；阈值非负，URL 合法；报表最多 20 条规则、每条 12 个时间；风险等级限 `medium/high`；各收件人最多 100 个 | 归一化后的完整配置 | 运维收件人必须是状态正常、未删除、有邮箱的管理员/root；任一校验/写入失败时整组配置不落库 | 完成 |
 | GET/PUT | `/api/email-settings` | `controller.GetEmailSettingsConfig/UpdateEmailSettingsConfig` | 兼容旧前端的邮件提醒配置读写别名，行为与 `/config` 完全一致 | 与对应 `/config` 接口相同 | 与对应 `/config` 接口相同 | 与对应 `/config` 接口相同 | 完成 |
 | GET | `/api/email-settings/recipients` | `controller.SearchEmailSettingsRecipients` | 搜索运维告警收件人 | query：`keyword` 按 ID/用户名/邮箱模糊匹配，`p/page_size` 分页 | `{page,page_size,total,items:[{id,username,display_name,email}]}` | 只返回有效管理员/root；数据库错误 `success:false` | 完成 |
 | POST | `/api/email-settings/recipients/resolve` | `controller.ResolveEmailSettingsRecipients` | 按 ID 回显已选运维收件人 | `{user_ids:number[]}`，最多 100 个 | 有效管理员/root 最小信息数组 | 无效/普通/禁用用户被过滤；数据库错误 `success:false` | 完成 |
 | POST | `/api/email-settings/channel-anomaly/test` | `controller.SendChannelAnomalyTestEmail` | 使用当前渠道异常模板和真实 SMTP 发送测试邮件，不修改任何渠道状态 | `{recipient_user_ids:number[]}`，最多 100 个；空数组回退有效 root | `{recipient_count:number}` | 收件人必须是有效管理员/root；模板、SMTP 或发送失败返回 `success:false`，已成功发送数量只在全部成功后返回 | 完成 |
+| POST | `/api/email-settings/dashboard-report/test` | `controller.SendDashboardReportTestEmail` | 使用当前数据报表模板和当前真实看板数据发送测试邮件 | `{recipient_user_ids:number[]}`，最多 100 个；空数组回退有效 root | `{recipient_count,period,scheduled_time?}` | 只允许有效管理员/root；测试不写调度历史，不影响下次定时发送 | 完成 |
+| POST | `/api/email-settings/risk-user/test` | `controller.SendRiskUserTestEmail` | 按当前选择风险等级发送真实风险用户测试报表 | `{recipient_user_ids:number[],risk_levels:("medium"|"high")[]}` | `{recipient_count,risk_user_count,levels}` | 只允许有效管理员/root；读取真实 7 日风险报告，不写自动通知状态 | 完成 |
 | GET | `/api/email-settings/templates` | `controller.ListEmailTemplates` | 读取全部事件和 `zh/en` 模板、事件说明及占位符 | 无 | `EmailTemplate[]`；含 `event/locale/label/description/category/campaign_compatible/placeholders/subject/content/is_custom` | 无权限 401/403；损坏自定义 JSON 自动回退对应语言内置模板并记录系统错误 | 完成 |
 | PUT | `/api/email-settings/templates/:event` | `controller.UpdateEmailTemplate` | 保存指定事件、语言的主题和 HTML | path `event`；body `{locale:"zh"|"en",subject:string,content:string}` | 保存后的 `EmailTemplate`，`is_custom=true` | 不支持事件、空内容、主题换行/超长、正文超长或未声明占位符时 `success:false`；数据库失败不更新内存 | 完成 |
 | POST | `/api/email-settings/templates/:event/preview` | `controller.PreviewEmailTemplate` | 使用对应语言安全样例变量渲染未保存模板 | path `event`；body 同更新 | `{subject,content}` | 与保存执行相同校验；前端使用净化隔离 HTML 容器预览 | 完成 |
 | POST | `/api/email-settings/templates/:event/reset` | `controller.ResetEmailTemplate` | 删除指定事件、语言自定义值并恢复内置模板 | path `event`；body `{locale:"zh"|"en"}` | 默认 `EmailTemplate`，`is_custom=false` | 不支持事件或 Option 持久化失败时 `success:false` | 完成 |
 
-模板占位符由 `service/email_template.go:emailTemplateDefinitions` 按事件声明。公共字段是 `{{system_name}}`（系统名称）、`{{username}}`（用户名）、`{{display_name}}`（显示名称）、`{{email}}`（用户邮箱）；验证码增加 `{{verification_code}}`、`{{expires_in_minutes}}`；密码重置增加 `{{reset_url}}`、`{{expires_in_minutes}}`；订阅到期增加 `{{subscription_name}}`、`{{subscription_end_time}}`、`{{days_remaining}}`；余额不足增加 `{{balance_type}}`、`{{current_balance}}`、`{{warning_threshold}}`、`{{recharge_url}}`；账号额度增加渠道 ID/名称/类型、当前余额、阈值和查询时间；渠道异常增加渠道地址、异常原因和关闭时间。HTML 运行时变量经实体转义，`system_name` 始终使用服务器当前值。
+模板占位符由 `service/email_template.go:emailTemplateDefinitions` 按事件声明。公共字段是 `{{system_name}}`（系统名称）、`{{username}}`（用户名）、`{{display_name}}`（显示名称）、`{{email}}`（用户邮箱）；验证码增加 `{{verification_code}}`、`{{expires_in_minutes}}`；密码重置增加 `{{reset_url}}`、`{{expires_in_minutes}}`；订阅到期增加 `{{subscription_name}}`、`{{subscription_end_time}}`、`{{days_remaining}}`；余额不足增加 `{{balance_type}}`、`{{current_balance}}`、`{{warning_threshold}}`、`{{recharge_url}}`；账号额度增加渠道 ID/名称/类型、当前余额、阈值和查询时间；渠道异常增加渠道地址、异常原因和关闭时间；数据报表增加报表类型/区间、总消费/额度/请求/Token、活跃用户/模型/渠道/分组、Top 模型、用户统计和分组分析；风险提醒增加风险等级、用户明细、统计窗口和发现时间；批量额度调整增加调整模式、调整值、调整前后额度和管理员。HTML 运行时变量经实体转义，`system_name` 始终使用服务器当前值。
 
 ```bash
 # 读取和原子保存邮件提醒配置
@@ -953,15 +984,17 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 
 | 模型 | 文件 | 表用途 | 关键字段和约束 | 关系/说明 | 状态 |
 | --- | --- | --- | --- | --- | --- |
-| `User` | `model/user.go` | Dashboard 用户 | `id`、唯一索引 `username`、`password`、`display_name`、`role`、`status`、`email`、`quota`、`used_quota`、`request_count`、`group`、唯一 `aff_code`、`inviter_id`、`is_agent`、`agent_discount`、`agent_topup_link`、`stripe_customer`、`last_login_at`、IPv4/IPv6 `last_login_ip`、`request_content_logging_enabled bool`、`auth_version bigint default 1`、时间戳 | 请求内容开关零值/默认值为关闭并同步至 Redis 用户鉴权缓存；列表/详情必须隐藏 password/access token 和该内部开关。登录成功统一在 `setupLogin` 更新时间/IP；密码、角色和状态等敏感变更提升 `auth_version` 并撤销旧会话；`shared_ip_user_count`、`last_login_ip_blocked`、`AdminPermissions` 均为 transient 字段。 | 活跃 |
-| `UserSession` | `model/user_session.go` | Dashboard 服务端登录会话 | 主键 `sid varchar(64)`；索引 `user_id/status/expires_at`；`version`、`user_auth_version`、状态、refresh HMAC、登录方式、IP、User-Agent、创建/活跃/过期/撤销时间 | 不保存 refresh 明文；短期 access token 必须同时通过会话版本和用户认证版本校验。支持 Redis 缓存、令牌轮换重用检测和批量撤销。 | 上游同步，活跃 |
+| `User` | `model/user.go` | Dashboard 用户 | 既有身份/额度/分组字段；新增 `group_ratio_adjustment_enabled bool`、`group_ratio_adjustment float64`、索引 `tag_id`、`risk_detection_enabled bool`；保留 `request_content_logging_enabled`、`auth_version`、登录时间/IP | 单用户倍率调整在特殊分组规则得到最终倍率后做加减，结果必须有限且不小于 0，并同步 Redis 鉴权缓存；风险开关和请求内容开关默认关闭；`tag`、`risk_tag`、共享 IP/封禁状态和权限均为 transient。 | 活跃 |
+| `UserSession` | `model/user_session.go` | Dashboard 服务端登录会话 | 主键 `sid varchar(64)`；索引 `user_id/status/expires_at`；`version`、`user_auth_version`、状态、refresh HMAC、登录方式、IP、User-Agent、`device_id`、创建/活跃/过期/撤销时间 | 浏览器持久化设备 UUID 并随登录/刷新提交；短期 access token 同时校验会话与用户认证版本。设备封禁会撤销该用户对应设备的活跃会话。 | 上游同步，活跃 |
 | `AuthFlow` | `model/auth_flow.go` | OAuth、2FA、Passkey、Telegram 等一次性认证流程 | `id`；唯一 `token_hash`；索引 `purpose/expires_at`；`provider`、`intent`、`user_id`、`session_id`、内部 payload、`consumed_at` | 只保存不透明 flow token 的 HMAC；消费操作防重放并带过期校验。 | 上游同步，活跃 |
 | `ExternalIdentityClaim` | `model/external_identity_claim.go` | 外部身份唯一归属 | `provider+subject` 和 `provider+user_id` 两组唯一索引；`created_at` | 当前用于 Telegram 等外部身份原子占用，避免同一身份绑定多个用户；迁移时回填已有 Telegram 绑定。 | 上游同步，活跃 |
 | `BlockedIP` | `model/blocked_ip.go` | 全局 IP 黑名单 | 唯一 `ip varchar(45)`、索引 `user_id` 来源用户、索引 `operator_id` 操作者、`reason varchar(255)`、创建/更新时间 | IP 经 `net.ParseIP` 标准化；封禁状态使用 Redis 或 60 秒本地缓存。普通用户登录、注册、Dashboard 会话和 API Token 鉴权均拦截；管理员/root Dashboard 登录豁免。 | 活跃 |
+| `BlockedDevice` | `model/blocked_device.go` | 按用户封禁 Dashboard 登录设备 | `user_id+device_id` 唯一索引；`device_id varchar(64)` UUID、`operator_id`、`reason varchar(255)`、时间戳 | 设备封禁仅作用于指定用户，登录和刷新时校验；封禁接口同步撤销该设备活跃会话，解封不自动恢复旧会话。 | 活跃 |
+| `UserTag` | `model/user_tag.go` | 用户自定义标签 | `id`、唯一 `name varchar(32)`、`color char(7)`、时间戳 | 用户通过 `User.tag_id` 关联；删除标签时事务清空关联。中风险 ID `-1`、高风险 ID `-2` 是按风险报告动态生成的内置 transient 标签，不写表且不可修改/删除。 | 活跃 |
 | `Token` | `model/token.go` | API keys | `id`、`user_id`、`key`、`name`、额度字段、模型限制、group、allow IPs | Relay 鉴权和计费使用。 | 活跃 |
 | `Channel` | `model/channel.go` | 上游 provider 渠道 | `id`、`type`、`key`、`base_url`、`models`、`group`、状态、priority/weight、计费/override 字段 | 由 distributor middleware 选择。敏感 key 需要脱敏。 | 活跃 |
 | `Ability` | `model/ability.go` | 渠道/模型能力映射 | channel/model/group enabled 字段 | 用于模型可用性和路由。 | 活跃 |
-| `Log` | `model/log.go` | 使用日志和审计日志 | `id`、`user_id`、`created_at`、`type`、`content`、`username`、`token_name`、`model_name`、`quota`、`prompt_tokens`、`completion_tokens`、`channel_id`、`ip`、`request_id`、`upstream_request_id`、可空 `user_display_group_ratio`、`other` | 可位于独立日志库/ClickHouse。`user_display_group_ratio` 是日志创建时面向用户的展示倍率快照，只供响应格式化和 UI 展示使用；实际扣费仍由 `quota` 及计费服务完成。`GetUserLoginIPStats` 聚合登录 IP、次数和最后时间；`SumUserUsedToken` 提供总 Token，`SumUserUsedTokenBetween` 按半开时间区间汇总消费 Token。 | 活跃 |
+| `Log` | `model/log.go` | 使用日志和审计日志 | 既有消费字段、可空 `user_display_group_ratio`、JSON `other`；`type=8` 为额度增加明细 | 模型 Token 倍率后的计费 Token写入 Token 列，真实/计费后 Token 保存到 `other.admin_info.model_token_adjustment`；原费用和两类倍率收益保存到 `admin_info.billing_revenue`，非管理员响应剥离。额度增加日志记录来源和额度，风险报告直接聚合既有日志信号。 | 活跃 |
 | `ImageGenerationLog` / `ImageGenerationImage` | `model/image_generation_log.go` | 同步生图日志与本地异步任务 | 日志含 `id`；索引 `task_id/status/user_id/username/token_id/channel_id/model_name/request_id/created_at/updated_at`；`prompt/size/quality/image_count/quota/use_time`；内部 `images/response` JSON。`ImageGenerationImage` JSON 字段为 `type/value/bucket/mime_type/sha256/size/revised_prompt`，`type` 支持 `local/remote/minio`。 | 任务属于一个 User/Token；MinIO 元数据写入现有 `images` 文本 JSON，不新增数据库列或表。旧 local/remote JSON 继续兼容；AutoMigrate 无额外迁移。 | 活跃 |
 | `UserRequestContentLog` | `model/user_request_content_log.go` | 按用户留存 Relay 请求上下文与提示词 | `id int` 主键；`user_id int` 与 `created_at int64` 组成排序索引；唯一 `request_id varchar(64)`；`model_name/token_name varchar(191)`、`request_path varchar(255)`、索引 `status varchar(16)`、`error_message text`、`original_size/captured_size int`、`truncated bool`、`compressed_json []byte` | 逻辑上属于 `User`，硬删除用户时同步删除；不建立数据库外键以兼容现有删除流程。正文先脱敏、限制为 4 MiB，再 gzip 存主库；创建和清理旧记录位于同一事务，每用户只保留最近 50 条。 | 活跃 |
 | `EmailCampaign` | `model/email_campaign.go` | 邮件群发、定时和条件任务 | `id bigint` 主键；`name varchar(128)`、`subject varchar(255)`、`content text`；索引 `mode`；`target_type`、JSON 文本 `target_user_ids`；`trigger_type/trigger_days`；`scheduled_at/next_run_at/last_run_at bigint`；`status+next_run_at` 复合索引；`created_by` 索引；累计收件/成功/失败/跳过数、`last_error`、时间戳 | 状态为 `draft/scheduled/active/running/completed/partial_failed/paused`。立即和定时任务执行一次；条件任务完成后恢复 `active` 并把 `next_run_at` 推迟 24 小时。 | 活跃 |
@@ -979,7 +1012,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 | `SubscriptionOrder` | `model/subscription.go` | 订阅支付订单 | order id/user/plan/payment status 字段 | 支付回调使用。 | 活跃 |
 | `UserSubscription` | `model/subscription.go` | 用户有效订阅 | user/plan/quota/period/status，以及生图日志权限和条数快照字段 | 创建订阅时从套餐复制权益；多个有效订阅任一为 0 则无限，否则取最大条数。 | 活跃 |
 | `SubscriptionPreConsumeRecord` | `model/subscription.go` | 订阅预扣记录 | subscription/request/pre/post quota 字段 | 请求结算使用。 | 活跃 |
-| `Option` | `model/option.go` | 运行时设置 | `key`、`value` | Root 或获授权管理员通过设置 API 修改；`EmailTemplates` 保存双语系统邮件模板，9 个邮件提醒 Key 保存开关、阈值、充值 URL 和管理员/root 收件人 JSON。`UpdateOption` 先写数据库，`UpdateOptionsBulk` 在单事务中保存关联配置并在成功后统一更新内存。 | 活跃 |
+| `Option` | `model/option.go` | 运行时设置 | `key`、`value` | `EmailTemplates` 保存 10 类双语模板；数据报表规则/90 日幂等历史、风险邮件等级/通知状态、全局风险开关和模型 Token 倍率 JSON 均复用 Option，不新增专用表。`UpdateOptionsBulk` 在单事务中保存关联配置并在成功后统一更新内存。 | 活跃 |
 | `Setup` | `model/setup.go` | 安装/初始化状态 | setup timestamp/status | `/api/setup`。 | 活跃 |
 | `PasskeyCredential` | `model/passkey.go` | WebAuthn 凭据 | user/credential 字段 | Passkey 登录。 | 活跃 |
 | `TwoFA` / `TwoFABackupCode` | `model/twofa.go` | 2FA 密钥和备份码 | user secret/status/codes | 2FA 登录和管理员重置。 | 活跃 |
@@ -987,7 +1020,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 | `UserOAuthBinding` | `model/user_oauth_binding.go` | OAuth 账号绑定 | user/provider/external id | 用户/管理员解绑。 | 活跃 |
 | `PerfMetric` | `model/perf_metric.go` | 性能采样 | route/model/provider/time/error/cache 字段 | 公开性能指标/定价页。 | 活跃 |
 | `SystemInstance` | `model/system_instance.go` | 运行节点 | node name/status/time 字段 | 多实例状态。 | 活跃 |
-| `SystemTask` / `SystemTaskLock` | `model/system_task.go` | 后台维护任务 | task id/type/status/payload/state/lock；`image_storage_cleanup` 用于 MinIO 图片清理；`email_campaign_dispatch` 扫描邮件任务；`subscription_expiry_email` 扫描系统 7/3/1 到期提醒 | 数据库活动键和租约保证同一任务类型在多节点只执行一次；普通邮件调度约每 15 秒检查，系统到期提醒开启并配置 SMTP 后每小时执行一次。 | 活跃 |
+| `SystemTask` / `SystemTaskLock` | `model/system_task.go` | 后台维护任务 | task id/type/status/payload/state/lock；含 MinIO 清理、邮件群发、订阅到期、`dashboard_report_email` 和 `risk_user_email` | 数据库活动键和租约保证同一任务类型在多节点只执行一次；数据报表按配置的多规则/多时间调度并以 Option 历史幂等，风险邮件只通知新进入或升级到所选风险等级的用户。 | 活跃 |
 | `CasbinRule` / `AuthzRole` | `model/casbin_rule.go`、`model/authz_role.go` | 细粒度管理员权限 | casbin p/v 字段和角色分配 | Admin authz catalog。 | 活跃 |
 | `ErrorReport` | `model/error_report.go` | 500 页面反馈 | `id`、`created_at`、索引 `user_id`、`username`、`title`、`message`、`page_url`、`error_status`、`user_agent`、`stack`、`ip` | Julong 二开。已加入两种迁移流程。 | 活跃 |
 | `QuotaData` / `FlowQuotaData` | `model/usedata.go`、`model/usedata_flow.go` | Dashboard 聚合用量 | `user_id/username/model_name/created_at/use_group/token_id/channel_id/node_name/count/quota/token_used`，以及可空 `user_display_quota/user_display_token_used` | 真实 `quota/token_used` 供管理员/root 看板使用；展示列在消费日志产生时按同一倍率快照计算，供普通用户模型分析和分流看板使用。`GetQuotaDataGroupByUseGroup` 以 `use_group` 聚合真实额度/请求/Token，并用 `COUNT(DISTINCT user_id)` 计算分组及全局用户数。`GroupQuotaData/GroupQuotaDataTotals/GroupQuotaDataAnalytics` 仅为查询响应结构，不建表。 | 活跃 |
@@ -1000,7 +1033,9 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 
 - 新增持久化模型时，必须同时加入 `model/main.go` 的 `migrateDB()` 和 `migrateDBFast()`。
 - `EmailCampaign`、`EmailDelivery` 已同时加入标准和快速 AutoMigrate。升级启动会自动创建 `email_campaigns`、`email_deliveries` 及索引，不修改用户、订阅、余额和既有日志；SQLite、MySQL、PostgreSQL 均使用 GORM 兼容类型，无需手工 SQL。部署前仍应备份主库。
-- 邮件设置重构不新增表或字段：7 类双语模板及 9 个提醒配置项保存到既有 `options` 表，订阅提醒发送记录复用 `email_deliveries` 且 `campaign_id=0`。中文模板继续使用旧事件键，英文新增 `event::en` 键；旧模板 JSON 无需转换。SQLite、MySQL、PostgreSQL 均无需手工迁移。
+- 邮件设置扩展不新增表或字段：10 类双语模板、数据报表多规则/调度历史和风险邮件状态均保存到既有 `options` 表；订阅提醒发送记录继续复用 `email_deliveries` 且 `campaign_id=0`。中文模板继续使用旧事件键，英文使用 `event::en` 键；旧模板和旧单条报表频率/时间配置会自动兼容，无需手工迁移。
+- 用户运营与风控升级由主库 AutoMigrate 新增 `users.group_ratio_adjustment_enabled`、`users.group_ratio_adjustment`、`users.tag_id`、`users.risk_detection_enabled`、`user_sessions.device_id`，并创建 `user_tags`、`blocked_devices`。均使用 GORM 通用字段和索引，兼容 SQLite、MySQL、PostgreSQL；旧用户字段零值表示倍率不调整、无标签、单用户风险检测关闭。
+- 模型 Token 特殊倍率、计费收益审计、额度增加明细和风险评分不新增日志列：规则存 `options`，真实/计费后 Token 与收益审计存 `Log.other.admin_info`，额度明细复用 `logs` 并使用 `type=8`。ClickHouse 无需增加字段。
 - 请求内容审计升级由 `AutoMigrate` 新增 `users.request_content_logging_enabled` 和 `user_request_content_logs`；三种数据库均由 GORM 映射 `[]byte`（SQLite/MySQL 为二进制列、PostgreSQL 为 `bytea`），无需手写方言 SQL。旧用户字段零值为关闭，部署后不会自动记录历史或新请求；Redis 用户缓存 schema 已由 2 升至 3，旧缓存会自动失效并从主库重建。
 - 日志表结构变化可能还需要更新 `migrateLOGDB()`。
 - `Log.user_display_group_ratio` 由 `migrateLOGDB()` 自动迁移：SQLite/MySQL/PostgreSQL 使用 GORM `AutoMigrate` 补充可空浮点列，ClickHouse 使用 `ALTER TABLE logs ADD COLUMN IF NOT EXISTS user_display_group_ratio Nullable(Float64)`；旧记录保持 `NULL` 并仅回退到该记录自身 `other` 中保存的真实倍率，不读取当前展示配置。
@@ -1033,14 +1068,18 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 | `/wallet` | `_authenticated/wallet/index.tsx` | 钱包、充值、兑换码 | 用户 | 完成 |
 | `/profile` | `_authenticated/profile/index.tsx` | 个人资料/安全 | 用户 | 完成 |
 | `/agent-users` | `_authenticated/agent-users/index.tsx` | 代理所属用户 | 代理 | 完成 |
-| `/redemption-codes` | `_authenticated/redemption-codes/index.tsx` | 兑换码管理 | 用户；管理员全部，代理限自己 | 完成 |
+| `/redemption-codes` | `_authenticated/redemption-codes/index.tsx` | 兑换码管理；新生成代码复制/下载，多选复制/下载/倒计时删除 | 用户；管理员全部，代理限自己；批量删除仅管理员/root | 完成 |
 | `/channels` | `_authenticated/channels/index.tsx` | 渠道管理 | 管理员/root | 完成 |
 | `/models/*` | `_authenticated/models/*` | 模型元数据/部署 | 管理员/root | 完成 |
-| `/users` | `_authenticated/users/index.tsx` | 用户管理 | 管理员/root | 完成 |
+| `/users` | `_authenticated/users/index.tsx` | 用户管理；URL search 支持 `tag[]` 风险/自定义标签筛选，含标签、批量额度、风险和登录设备弹窗 | 管理员/root | 完成 |
 | `/subscriptions` | `_authenticated/subscriptions/index.tsx` | 订阅管理 | 管理员/root | 完成 |
 | `/error-reports` | `_authenticated/error-reports/index.tsx` | 错误反馈列表 | 管理员/root | 完成 |
 | `/system-info` | `_authenticated/system-info/index.tsx` | 系统节点/任务 | Root | 完成 |
-| `/system-settings/*` | `_authenticated/system-settings/*` | 系统设置 | 管理员/root，视页面而定 | 完成 |
+| `/system-settings/operations/email-templates` | `_authenticated/system-settings/operations/$section.tsx` | 邮箱提醒、数据报表/风险提醒调度、测试和 10 类邮件模板 | Root 或 `operations.email-templates` 权限 | 完成 |
+| `/system-settings/operations/logs` | 同上 | 消费/生图日志、风险检测全局开关、用户日志倍率展示 | Root 或 `operations.logs` 权限 | 完成 |
+| `/system-settings/operations/update-checker` | `_authenticated/system-settings/operations/$section.tsx`、`maintenance/update-checker-section.tsx` | 系统维护；分别展示 Julong 构建版本、已合并 New API 版本/提交和运行时间，检查更新时只比较上游版本 | Root 或 `operations.update-checker` 权限 | 完成 |
+| `/system-settings/billing/group-pricing` | `_authenticated/system-settings/billing/$section.tsx` | 分组定价、特殊倍率规则、模型 Token 特殊倍率规则 | Root 或 `billing.group-pricing` 权限 | 完成 |
+| `/system-settings/*` | `_authenticated/system-settings/*` | 其他系统设置页面 | 管理员/root，视页面而定 | 完成 |
 | `/401`、`/403`、`/404`、`/500`、`/503` | `routes/(errors)/*` | 错误页 | 公开 | 完成 |
 
 ## 前端组件清单
@@ -1065,20 +1104,20 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 | --- | --- | --- | --- | --- |
 | `auth` | `sign-in`、`sign-up`、`forgot-password`、`otp`、`passkey`、`secure-verification`、`components/oauth-providers.tsx` | 登录、注册、找回密码、OAuth、Passkey、2FA | `/api/user/*`、`/api/oauth/*`、`/api/verify` | 完成 |
 | `home` | `index.tsx`、hero/gateway/stat 组件 | 公开首页内容 | `/api/home_page_content` | 完成 |
-| `dashboard` | `index.tsx:Dashboard`、`section-registry.tsx`、`components/groups/group-analysis.tsx:GroupAnalysis`、stats/charts libs | 用户/管理员/root 看板统计；`GroupAnalysis(filters)` 仅对 root 注册，复用模型分析时间/用户筛选，展示四项总计、可切换额度/请求/Token/用户数的分组横向柱图和完整明细表 | `/api/data*`、`/api/dashboard*`、`/api/status`；依赖 React Query、VChart、Tabs/Table、主题与 i18n | 完成 |
+| `dashboard` | `index.tsx:Dashboard`、`section-registry.tsx`、`components/groups/group-analysis.tsx:GroupAnalysis`、stats/charts libs | 用户/管理员/root 看板统计；`GroupAnalysis(filters)` 仅对 root 注册，展示额度/请求/Token/用户分组分析。邮件报表复用真实看板聚合，包含总计、用户统计、Top 模型和分组分析 | `/api/data*`、`/api/dashboard*`、`/api/status`；依赖 React Query、VChart、Tabs/Table、主题与 i18n | 完成 |
 | `announcements` | `api.ts`、`types.ts` | 公告类型和当前用户公告查询；供顶部通知中心、自动弹窗和后台公告编辑器共享 | `/api/announcements` | 完成 |
 | `custom-endpoints` | `types.ts`、`system-settings/content/custom-endpoints-section.tsx`、`keys/components/custom-endpoints.tsx` | 自定义端点共享类型、后台编辑器、API 密钥页复制条和悬停介绍 | `/api/option`、`/api/status` | 完成 |
 | `system-settings/operations/email-campaigns` | `email-campaigns-section.tsx:EmailCampaignsSection/Stat`、`email-campaign-user-picker.tsx:EmailCampaignUserPicker`、`email-campaigns-api.ts`、`email-templates-api.ts`、`operations/section-registry.tsx` | 运维邮件任务列表、统计、创建/编辑、收件人预估、草稿/启用/暂停/失败重试/删除和逐用户明细；指定用户支持分页模糊搜索及回显；创建任务可选择 `campaign_compatible` 中英文模板，预览样例渲染后套用主题和 HTML；关键状态含 `page/form/editing/templateKey/templatePreview/selected/deliveryPage` | `/api/email-campaigns*`、`GET/POST /api/email-settings/templates*`；依赖 React Query、Popover/Command/Checkbox、Dialog、HtmlContent、Table、NativeSelect、i18n | 完成 |
-| `system-settings/operations/email-templates`（显示名“邮件设置”） | `email-template-settings-section.tsx:EmailTemplateSettingsSection`、`email-alert-settings.tsx:EmailAlertSettings/AlertPanel`、`email-templates-api.ts`、`email-campaign-user-picker.tsx:EmailCampaignUserPicker`、`operations/section-registry.tsx` | 顶部以四张独立卡片配置订阅到期、余额不足、渠道账号额度和渠道异常提醒；后两类支持搜索、多选并回显管理员/root 收件人。渠道异常卡片可用当前收件人和模板发送真实 SMTP 测试邮件，但不关闭渠道；加载失败显示错误和重试。下方按事件和 `zh/en` 编辑 7 类模板，展示事件说明、分类、占位符中文含义、双栏 HTML 实时预览、服务端预览、恢复官方模板和保存 | `/api/email-settings/config`、`/recipients*`、`/channel-anomaly/test`、`/templates*`；依赖 React Query、Switch、Popover/Command/Checkbox、HtmlContent/DOMPurify、Input/Textarea、i18n | 完成 |
+| `system-settings/operations/email-templates`（显示名“邮件设置”） | `email-template-settings-section.tsx:EmailTemplateSettingsSection`、`email-alert-settings.tsx:EmailAlertSettings/AlertPanel`、`dashboard-report-schedule-editor.tsx`、`email-templates-api.ts`、`email-campaign-user-picker.tsx` | 六张提醒卡配置订阅到期、余额不足、渠道账号额度、渠道异常、数据看板报表和风险用户；报表支持最多 20 条日报/周报/月报规则及每条 12 个发送时间，风险等级可多选，两者均可选择管理员/root 并发送真实数据测试。下方按事件和 `zh/en` 编辑 10 类图片式模板 | `/api/email-settings/config`、`/recipients*`、`/channel-anomaly/test`、`/dashboard-report/test`、`/risk-user/test`、`/templates*` | 完成 |
 | `channels` | `channels-table.tsx`、`channels-columns.tsx`、dialogs/drawers、`api.ts` | 上游渠道 CRUD/测试/配置 | `/api/channel*` | 完成 |
 | `keys` | `api-keys-table.tsx`、`api-keys-columns.tsx`、`api-keys-mutate-drawer.tsx`、`api-key-group-combobox.tsx`、mutate/delete dialogs | 用户 API key 管理；令牌分组下拉框和列表倍率统一读取 `/api/user/self/groups`，可配置展示真实特殊倍率或基础定价分组倍率 | `/api/token*`、`/api/user/self/groups` | 完成 |
-| `usage-logs` | `usage-logs-table.tsx`、普通/绘图/生图/任务 columns、`lib/group-ratio.ts:getAdminGroupRatioDetails`、`image-generation-task-dialog.tsx`、图片预览和筛选组件 | 普通消费日志、Midjourney 绘图日志、同步/异步生图日志、媒体任务日志；普通用户令牌下方倍率支持关闭、跟随实际倍率、跟随定价分组基础倍率或统一手动展示；管理员/root 紧凑显示“真实倍率 / 用户展示倍率”，悬浮查看定价分组、特殊、最终真实和本日志展示快照；未完成生图按 root 配置频率刷新（默认 15 秒） | `/api/log*`、`/api/mj`、`/api/image-generation-logs*`、`/api/task`；依赖 Tooltip、React Query、i18n | 完成 |
+| `usage-logs` | `usage-logs-table.tsx`、`usage-logs-export-menu.tsx`、`cost-breakdown-tooltip.tsx`、普通/绘图/生图/任务 columns、倍率审计 libs | 普通消费日志、绘图、生图和媒体任务日志；下载菜单支持本页、今日、自定义时间和全部 CSV。用户和管理员均展示模型倍率调整后的 Token；管理员/root 悬浮 Tokens 查看真实 Token，悬浮费用查看原始费用及分组特殊倍率/模型倍率收益。原有普通用户倍率展示逻辑保持不变 | `/api/log*`、`/api/log/export`、`/api/log/self/export`、`/api/mj`、`/api/image-generation-logs*`、`/api/task` | 完成 |
 | `wallet` | recharge cards、subscription cards、affiliate rewards、redemption hook | 钱包充值、兑换码、订阅 | `/api/user/topup*`、`/api/subscription*`、支付 API | 完成 |
-| `redemption-codes` | `redemptions-table.tsx`、`redemptions-columns.tsx`、mutate/delete dialogs | 管理员/代理兑换码管理 | `/api/redemption*`、`/api/user/agent/topup-link` | 完成 |
-| `users` | `users-table.tsx`、`users-columns.tsx`、`users-mutate-drawer.tsx`、`agent-detail-dialog.tsx`、`user-detail-dialog.tsx:UserDetailDialog/Metric`、`user-request-content-panel.tsx:UserRequestContentPanel/RequestContentDetailDialog`、`lib/request-content.ts:extractRequestConversation` | 后台用户管理、代理详情、用户详情；详情弹窗包含钱包、已用额度、总 Token、今日 Token、请求数、订阅摘要、IP 管理及按用户开启的上下文与提示词审计。今日 Token 按服务器本地自然日读取；审计面板负责开关、最近 50 条摘要、清空、结构化对话、原始 JSON 复制/下载和移动端布局 | `/api/user*`、`/api/log`、`/api/subscription/admin/*`、`/api/user/:id/request-content*`；依赖 React Query、Dialog/Tabs/ScrollArea/Switch、i18n | 完成 |
+| `redemption-codes` | `redemptions-generated-dialog.tsx`、`data-table-bulk-actions.tsx`、`redemptions-multi-delete-dialog.tsx`、表格和编辑弹窗 | 管理员/代理兑换码管理；刚生成的兑换码支持仅复制代码、复制名称和代码、一键下载；多选支持仅复制代码、下载和管理员 5 秒确认批量删除 | `/api/redemption*`、`POST /api/redemption/batch`、`/api/user/agent/topup-link` | 完成 |
+| `users` | `users-table.tsx`、`users-columns.tsx`、`users-mutate-drawer.tsx`、`user-detail-dialog.tsx`、`user-tags-dialog.tsx`、`user-batch-quota-dialog.tsx`、`user-risk-panel.tsx`、`user-login-access-panel.tsx`、`user-group-ratios-card.tsx` | 后台用户管理、标签筛选/标注、批量额度、代理详情和用户详情；详情含今日消费、总/今日 Token、额度明细、已选分组真实倍率及额度/Token、风险报告、登录 IP 与设备、上下文审计。编辑用户可在特殊规则后的最终真实倍率上增加或减少单用户调整，并实时预览已有分组结果 | `/api/user*`、`/api/user/tags*`、`/api/user/options*`、`/api/user/batch-quota`、`/api/user/:id/{usage-summary,quota-increases,risk,login-ips,login-devices,request-content}*` | 完成 |
 | `models` | metadata/deployment tables and drawers | 模型元数据和部署管理 | `/api/models*`、`/api/vendors*`、`/api/deployments*` | 完成 |
 | `subscriptions` | subscription table/drawers | 后台订阅计划/用户绑定 | `/api/subscription/admin*` | 完成 |
-| `system-settings` | `auth`、`billing`、`content`、`models`、`request-limits`、`maintenance`、`integrations`、`general` 下的 section registries；`general/system-info-section.tsx:SystemInfoSection`、`maintenance/log-settings-section.tsx:LogSettingsSection`、`models/group-ratio-form.tsx:GroupRatioForm`、内部 `ImageStorageSettings` | 管理员/root 运行时设置；`SystemInfoSection` 维护站点信息并支持徽标 URL、本地上传、Object URL 保存前预览、移除和上传回滚，依赖 `useSettingsForm.externalDirty`、`uploadSiteLogo/deleteSiteLogo`、React Hook Form、Zod 与 i18n；`LogSettingsSection` 负责消费/生图日志、普通用户日志倍率展示、轮询频率和图片读取白名单；`GroupRatioForm` 独立配置模型广场和令牌分组倍率展示模式；`ImageStorageSettings` 负责 MinIO 凭据、生命周期和清理；初始化请求并行，活动清理任务每 5 秒查询一次 | `/api/option*`、`/api/site-assets/logo*`、`/api/performance/image-storage*`、`/api/system-task/*` | 完成 |
+| `system-settings` | 各一级菜单 section registries；`maintenance/{log-settings-section,update-checker-section}.tsx`、`models/group-ratio-form.tsx`、`model-token-ratio-editor.tsx`、邮件设置组件和 `ImageStorageSettings` | 管理员/root 运行时设置；系统维护展示 Julong 与已合并 New API 双版本并按上游版本检查更新；日志维护含全局风险检测；分组定价含模型 Token 特殊倍率；邮件设置维护数据报表及风险提醒；其余站点徽标、普通用户倍率展示、MinIO 生命周期等既有功能保持 | `/api/status`、`/api/option*`、`/api/email-settings*`、`/api/site-assets/logo*`、`/api/performance/image-storage*`、`/api/system-task/*` | 完成 |
 | `system-info` | system instances/tasks panels | Root 系统运维 | `/api/system-info*`、`/api/system-task*` | 完成 |
 | `error-reports` | `submit-error-report.tsx`、`index.tsx`、`api.ts` | 提交/查看 500 页面反馈 | `/api/error-reports*` | 完成 |
 | `errors` | `general-error.tsx`、forbidden/not-found/maintenance/unauthorized | 错误页 | `/error-report` 路由用于反馈 | 完成 |
@@ -1279,6 +1318,21 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 
 | 日期 | 变更 | 更新文件/API/模型 | 验证 |
 | --- | --- | --- | --- |
+| 2026-07-28 | 合并上游 `QuantumNous/new-api@afe16c64c`：引入独立 RelayKit 模块、通用工具调用计费与 Alpha Search、New API/Sub2API/Tencent TokenHub 渠道、每渠道 HTTP Transport 控制、参数化 SQL 日志、渠道与 JSON 编辑器改进及上游 CI；所有冲突优先保留 Julong 的模型 Token 倍率、收益审计、异步生图、风险/设备、邮件、日志导出和失败任务退款对账，再补 RelayKit DTO/类型兼容。系统维护新增 Julong 构建版本、已合并 New API 版本 `v1.0.0-rc.22`、提交 `afe16c64c` 和运行时间，GitHub 更新检查改为比较上游版本。 | `upstream/main@afe16c64c`、`relaykit/`、Relay/Service/Model/Web 上游改动、`common.UpstreamVersion/UpstreamCommit`、`GET /api/status`、`/system-settings/operations/update-checker`、`DEVELOPMENT.md` | RelayKit 独立编译、根模块编译、退款对账回归、状态接口和双版本组件测试、前端 typecheck/i18n/lint/build、格式及差异检查。 |
+| 2026-07-28 | 建立强制文档同步门禁并补录 7 月 27-28 日全部 Julong 功能：以后每个功能的 API、页面路由、配置、模型、迁移、组件和变更记录必须在同一次提交更新；上游同步时非冲突正常合入，任何冲突先保留 Julong 实现再补兼容，禁止用上游覆盖自有功能。 | `AGENTS.md`、`DEVELOPMENT.md` | 对照 `router/api-router.go`、系统设置 section registry、模型和 18 个功能提交逐项审计；文档格式检查纳入本次合并验证。 |
+| 2026-07-28 | 使用日志新增 CSV 下载菜单，支持本页、今日、自定义时间和全部范围；管理员与用户分别复用原列表过滤和权限，单次最多 5000 行，中文表头、UTF-8 BOM、截断响应头并防公式注入；修复下载菜单运行时崩溃。 | `controller/log_export.go`、`GET /api/log/export`、`GET /api/log/self/export`、`usage-logs-export-menu.tsx`、导出参数/CSV 测试 | 导出范围、管理员/用户隔离、中文表头、截断、公式注入和前端参数回归测试。 |
+| 2026-07-28 | 兑换码新增生成结果的仅复制代码、复制名称与代码、一键下载；多选新增仅复制代码、下载和 5 秒确认批量删除，批量接口限管理员/root 且一次最多 100 个 ID。 | `POST /api/redemption/batch`、`DeleteRedemptionBatch`、`DeleteRedemptionsByIds`、`redemptions-generated-dialog.tsx`、批量操作/确认弹窗 | Controller/Model 权限、去重、事务删除和前端复制/下载/倒计时测试。 |
+| 2026-07-28 | 风险用户邮件提醒加入邮件设置：可多选中风险/高风险、指定有效管理员/root 收件人并发送真实数据测试；自动任务仅通知新进入或风险等级升级用户，模板新增 `user.risk_detected` 中英文图片式卡片。 | `RiskUserEmail*` Options、`risk_user_email` 系统任务、`POST /api/email-settings/risk-user/test`、邮件设置与模板组件 | 风险等级筛选、收件人过滤、状态幂等、真实测试邮件和模板测试。 |
+| 2026-07-28 | 风险等级增加不可修改/删除的内置标签：中风险橘色、高风险红色；用户列表按当前风险报告动态显示并可筛选，内置标签不写 `user_tags` 表。 | `UserTagRiskMediumId/UserTagRiskHighId`、`ListUserTags`、用户列表 `tag[]` search、标签 UI | 内置标签顺序、不可变性、风险映射、筛选及数据库兼容测试。 |
+| 2026-07-28 | 用户详情“登录 IP”升级为“登录 IP 与设备”：Dashboard 登录/刷新携带持久设备 UUID，后台聚合设备 UA、IP、会话数，支持批量封禁/解封并在封禁时撤销对应活跃会话。 | `BlockedDevice`、`UserSession.device_id`、`GET/PUT /api/user/:id/login-devices`、`UserLoginAccessPanel`、认证中间件 | UUID 校验、用户隔离、封禁登录/刷新、会话撤销及三数据库查询测试。 |
+| 2026-07-28 | 新增可配置风险评估：系统可全局开启，管理员/root 也可对单个用户开启；按 1/7/30 日的敏感词、错误率、客户端断开、异常流、失败退款、输出后退款和多 IP 信号计算 0-100 分及低/中/高三级，用户详情展示报告。 | `User.risk_detection_enabled`、`UserRiskReport`、`UserRiskDetectionEnabled`、`GET/PUT /api/user/:id/risk`、`UserRiskPanel` | 各信号阈值/评分、全局与单用户开关、角色权限、跨数据库聚合和前端状态测试。 |
+| 2026-07-27 | 使用日志费用悬浮增加原始费用、分组特殊倍率收益和模型倍率收益；模型 Token 悬浮为管理员/root 展示真实 Token，表格本身对用户和管理员统一展示倍率调整后的计费 Token，普通用户既有使用日志倍率展示逻辑不改。 | `BillingRevenueAudit`、`ModelTokenAdjustmentAudit`、`Log.other.admin_info`、`cost-breakdown-tooltip.tsx`、倍率审计解析库 | 文本/分层/音频/任务计费反事实金额和管理员字段剥离测试；前端 tooltip 单元测试。 |
+| 2026-07-27 | 分组定价新增“模型特殊倍率规则”：按用户分组、计费分组和模型配置输入、输出、缓存读取、缓存创建增量；值 `0.1` 表示真实 Token 乘 `1.1`，关闭单项则保持真实 Token，配置参与实际计费并保留真实/计费 Token 审计。 | `group_ratio_setting.model_token_ratio`、`ModelTokenAdjustment`、`service/model_token_adjustment.go`、`model-token-ratio-editor.tsx` | 规则匹配/校验、零值、四类 Token、计费和日志审计回归测试。 |
+| 2026-07-27 | 修复用户详情“上下文与提示词”超过 4 条后不可见，详情内容区域改为稳定高度并可滚动，不改变请求内容审计接口或保存逻辑。 | `user-detail-dialog.tsx`、`user-detail-layout.ts` | 4 条以上布局和滚动区域前端单元测试。 |
+| 2026-07-27 | 编辑用户新增单用户倍率调整开关，可在包含特殊倍率规则的最终真实分组倍率上增加或减少固定值，并实时预览用户已选分组结果；后端在预扣和结算共同使用调整后倍率，结果不得小于 0。 | `User.group_ratio_adjustment_*`、`ApplyUserGroupRatioAdjustment`、`PUT /api/user/`、`GET /api/user/:id/usage-summary`、`user-group-ratio-adjustment-fields.tsx` | 加减、禁用、非法负数、缓存同步、预扣/结算一致性和前端预览测试。 |
+| 2026-07-27 | 用户管理新增自定义标签和批量调整额度：标签名称/颜色可维护并在表格左边框标色；批量额度支持选择多个或全部可管理用户、增加/减少、可选邮件和 `user.quota_adjustment` 模板，增加额度自动写额度明细。 | `/api/user/tags*`、`PUT /api/user/:id/tag`、`/api/user/options*`、`POST /api/user/batch-quota`、`UserTag`、批量额度/标签弹窗 | 标签 CRUD/关联、角色边界、批量事务回滚、额度明细和邮件结果测试。 |
+| 2026-07-27 | 用户详情实际扣费倍率只展示该用户 API Key 已选择的分组，悬浮显示各分组累计额度和 Token；接口同时返回基础真实倍率、单用户调整后的最终倍率和按分组用量。 | `GetUserSelectedTokenGroups`、`GetUserGroupUsage`、`GET /api/user/:id/usage-summary`、`UserGroupRatiosCard` | 已选分组去重、无选择、额度/Token 聚合、特殊倍率和前端布局测试。 |
+| 2026-07-27 | 数据看板报表加入用户统计和分组数据分析，并把单一频率/时间扩展为最多 20 条日报/周报/月报规则、每条最多 12 个发送时间；测试按钮使用当前真实看板数据，模板新增 `dashboard.report` 图片式中英文卡片。 | `DashboardReportEmail*` Options、`dashboard_report_email` 系统任务、`POST /api/email-settings/dashboard-report/test`、报表调度编辑器和模板 | 报表聚合、周期边界、多规则/多时间幂等、旧配置兼容、收件人和模板测试。 |
 | 2026-07-26 | 用户详情在“使用日志”和“登录 IP”之间新增“额度明细”，分页展示部署后所有结构化的钱包额度增加记录，包括兑换码、签到、管理员增加或向上覆盖、在线充值、注册/邀请奖励、邀请额度转入和钱包退款；每条记录保存来源、增加额度、时间与说明，订阅额度退款不会混入钱包明细。 | `LogTypeQuotaIncrease`、`RecordQuotaIncreaseLog`、`GetUserQuotaIncreaseLogs`、`GET /api/user/:id/quota-increases`、`QuotaDetailsPanel`、locale files、`DEVELOPMENT.md` | 额度来源、分页、用户隔离、管理员调整、兑换幂等及钱包/订阅退款隔离回归测试；Go/前端/i18n/构建/格式检查见本次提交。 |
 | 2026-07-26 | 用户详情顶部新增“今日消费”，按服务器本地自然日汇总消费日志中的额度并使用与钱包余额一致的货币格式展示；用户使用汇总接口新增 `today_quota`，今日 Token 与今日额度由同一次半开时间区间聚合查询返回。 | `model.GetUserUsageSummaryBetween`、`AdminGetUserUsageSummary`、`UserUsageSummary.today_quota`、`UserDetailDialog`、locale files、`DEVELOPMENT.md` | 消费日志类型、用户隔离和自然日边界回归测试；前端类型、lint、i18n、构建和格式检查见本次提交。 |
 | 2026-07-26 | 修复开发热更新后邮件设置持续显示旧 404：后端为旧前端仍在调用的 `GET/PUT /api/email-settings` 增加兼容别名；前端配置读取移除会跨页面保留失败状态的 React Query 缓存，改为组件每次挂载和点击重试时直接请求带时间戳的 `/config`，绕过接口启用前遗留的 404 缓存；当没有有效运维邮件收件人时，后端固定返回空数组而非 `null`，前端同步归一化旧响应，避免收件人选择器读取 `length` 时跳转 500；Rsbuild 开发服务器统一返回 `Cache-Control: no-store`，防止 Safari 等浏览器继续复用旧 `index.js`。 | `getEmailSettingsConfig`、`EmailAlertSettings.loadConfig`、`service.GetEmailSettingsConfig`、`web/rsbuild.config.ts`、`GET/PUT /api/email-settings`、`service/email_settings_test.go`、`router/email_settings_router_test.go`、`DEVELOPMENT.md` | 空收件人 JSON 数组、路由兼容别名与标准 `/config` 注册回归测试；前端类型、构建、响应头和格式检查见本次提交。 |

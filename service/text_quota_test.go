@@ -8,12 +8,16 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
-	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
-	"github.com/QuantumNous/new-api/types"
+	relayconstant "github.com/QuantumNous/new-api/relay/constant"
+	"github.com/QuantumNous/new-api/relaykit/dto"
+	"github.com/QuantumNous/new-api/relaykit/types"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
+	hosttypes "github.com/QuantumNous/new-api/types"
 
 	"github.com/gin-gonic/gin"
+	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -34,14 +38,14 @@ func TestCalculateTextQuotaSummaryUnifiedForClaudeSemantic(t *testing.T) {
 		ClaudeCacheCreation1hTokens: 20,
 	}
 
-	priceData := types.PriceData{
+	priceData := hosttypes.PriceData{
 		ModelRatio:           1,
 		CompletionRatio:      2,
 		CacheRatio:           0.1,
 		CacheCreationRatio:   1.25,
 		CacheCreation5mRatio: 1.25,
 		CacheCreation1hRatio: 2,
-		GroupRatioInfo: types.GroupRatioInfo{
+		GroupRatioInfo: hosttypes.GroupRatioInfo{
 			GroupRatio: 1,
 		},
 	}
@@ -80,15 +84,15 @@ func TestCalculateTextQuotaSummaryAppliesModelTokenAdjustmentsByCategory(t *test
 	cacheCreationAdjustment := 1.0
 	relayInfo := &relaycommon.RelayInfo{
 		OriginModelName: "model-token-adjustment-test",
-		PriceData: types.PriceData{
+		PriceData: hosttypes.PriceData{
 			ModelRatio:         1,
 			CompletionRatio:    1,
 			CacheRatio:         1,
 			CacheCreationRatio: 1,
-			GroupRatioInfo: types.GroupRatioInfo{
+			GroupRatioInfo: hosttypes.GroupRatioInfo{
 				GroupRatio: 1,
 			},
-			ModelTokenAdjustment: types.ModelTokenAdjustment{
+			ModelTokenAdjustment: hosttypes.ModelTokenAdjustment{
 				Input:         &inputAdjustment,
 				Output:        &outputAdjustment,
 				CacheRead:     &cacheReadAdjustment,
@@ -111,8 +115,8 @@ func TestCalculateTextQuotaSummaryAppliesModelTokenAdjustmentsByCategory(t *test
 	// Text input 70*1.1 + cache read 20*1.5 + cache creation 10*2 + output 50*1.2.
 	require.Equal(t, 187, summary.Quota)
 	require.NotNil(t, summary.ModelTokenAdjustmentAudit)
-	assert.Equal(t, types.ModelTokenUsage{Input: 100, Output: 50, CacheRead: 20, CacheCreation: 10}, summary.ModelTokenAdjustmentAudit.Actual)
-	assert.Equal(t, types.ModelTokenUsage{Input: 127, Output: 60, CacheRead: 30, CacheCreation: 20}, summary.ModelTokenAdjustmentAudit.Billed)
+	assert.Equal(t, hosttypes.ModelTokenUsage{Input: 100, Output: 50, CacheRead: 20, CacheCreation: 10}, summary.ModelTokenAdjustmentAudit.Actual)
+	assert.Equal(t, hosttypes.ModelTokenUsage{Input: 127, Output: 60, CacheRead: 30, CacheCreation: 20}, summary.ModelTokenAdjustmentAudit.Billed)
 }
 
 func TestCalculateTextQuotaSummaryUsesSplitClaudeCacheCreationRatios(t *testing.T) {
@@ -124,14 +128,14 @@ func TestCalculateTextQuotaSummaryUsesSplitClaudeCacheCreationRatios(t *testing.
 		RelayFormat:             types.RelayFormatOpenAI,
 		FinalRequestRelayFormat: types.RelayFormatClaude,
 		OriginModelName:         "claude-3-7-sonnet",
-		PriceData: types.PriceData{
+		PriceData: hosttypes.PriceData{
 			ModelRatio:           1,
 			CompletionRatio:      1,
 			CacheRatio:           0,
 			CacheCreationRatio:   1,
 			CacheCreation5mRatio: 2,
 			CacheCreation1hRatio: 3,
-			GroupRatioInfo: types.GroupRatioInfo{
+			GroupRatioInfo: hosttypes.GroupRatioInfo{
 				GroupRatio: 1,
 			},
 		},
@@ -162,14 +166,14 @@ func TestCalculateTextQuotaSummaryUsesAnthropicUsageSemanticFromUpstreamUsage(t 
 	relayInfo := &relaycommon.RelayInfo{
 		RelayFormat:     types.RelayFormatOpenAI,
 		OriginModelName: "claude-3-7-sonnet",
-		PriceData: types.PriceData{
+		PriceData: hosttypes.PriceData{
 			ModelRatio:           1,
 			CompletionRatio:      2,
 			CacheRatio:           0.1,
 			CacheCreationRatio:   1.25,
 			CacheCreation5mRatio: 1.25,
 			CacheCreation1hRatio: 2,
-			GroupRatioInfo: types.GroupRatioInfo{
+			GroupRatioInfo: hosttypes.GroupRatioInfo{
 				GroupRatio: 1,
 			},
 		},
@@ -203,14 +207,14 @@ func TestCalculateTextQuotaSummaryUsesClaudeBillingUsageBeforeTopLevelUsage(t *t
 	relayInfo := &relaycommon.RelayInfo{
 		RelayFormat:     types.RelayFormatOpenAI,
 		OriginModelName: "claude-3-7-sonnet",
-		PriceData: types.PriceData{
+		PriceData: hosttypes.PriceData{
 			ModelRatio:           1,
 			CompletionRatio:      2,
 			CacheRatio:           0.1,
 			CacheCreationRatio:   1.25,
 			CacheCreation5mRatio: 1.25,
 			CacheCreation1hRatio: 2,
-			GroupRatioInfo:       types.GroupRatioInfo{GroupRatio: 1},
+			GroupRatioInfo:       hosttypes.GroupRatioInfo{GroupRatio: 1},
 		},
 		StartTime: time.Now(),
 	}
@@ -252,11 +256,11 @@ func TestCalculateTextQuotaSummaryUsesGeminiBillingUsageBeforeTopLevelUsage(t *t
 	relayInfo := &relaycommon.RelayInfo{
 		RelayFormat:     types.RelayFormatOpenAI,
 		OriginModelName: "gemini-2.5-flash",
-		PriceData: types.PriceData{
+		PriceData: hosttypes.PriceData{
 			ModelRatio:      1,
 			CompletionRatio: 2,
 			CacheRatio:      0.1,
-			GroupRatioInfo:  types.GroupRatioInfo{GroupRatio: 1},
+			GroupRatioInfo:  hosttypes.GroupRatioInfo{GroupRatio: 1},
 		},
 		StartTime: time.Now(),
 	}
@@ -294,10 +298,10 @@ func TestCalculateTextQuotaSummaryUsesOpenAIBillingUsageBeforeTopLevelUsage(t *t
 	relayInfo := &relaycommon.RelayInfo{
 		RelayFormat:     types.RelayFormatClaude,
 		OriginModelName: "gpt-4o",
-		PriceData: types.PriceData{
+		PriceData: hosttypes.PriceData{
 			ModelRatio:      1,
 			CompletionRatio: 2,
-			GroupRatioInfo:  types.GroupRatioInfo{GroupRatio: 1},
+			GroupRatioInfo:  hosttypes.GroupRatioInfo{GroupRatio: 1},
 		},
 		StartTime: time.Now(),
 	}
@@ -393,14 +397,14 @@ func TestCalculateTextQuotaSummaryHandlesLegacyClaudeDerivedOpenAIUsage(t *testi
 	relayInfo := &relaycommon.RelayInfo{
 		RelayFormat:     types.RelayFormatOpenAI,
 		OriginModelName: "claude-3-7-sonnet",
-		PriceData: types.PriceData{
+		PriceData: hosttypes.PriceData{
 			ModelRatio:           1,
 			CompletionRatio:      5,
 			CacheRatio:           0.1,
 			CacheCreationRatio:   1.25,
 			CacheCreation5mRatio: 1.25,
 			CacheCreation1hRatio: 2,
-			GroupRatioInfo:       types.GroupRatioInfo{GroupRatio: 1},
+			GroupRatioInfo:       hosttypes.GroupRatioInfo{GroupRatio: 1},
 		},
 		StartTime: time.Now(),
 	}
@@ -428,12 +432,12 @@ func TestCalculateTextQuotaSummaryBillsOpenAICacheWriteTokens(t *testing.T) {
 	relayInfo := &relaycommon.RelayInfo{
 		RelayFormat:     types.RelayFormatOpenAI,
 		OriginModelName: "gpt-5.1",
-		PriceData: types.PriceData{
+		PriceData: hosttypes.PriceData{
 			ModelRatio:         1,
 			CompletionRatio:    2,
 			CacheRatio:         0.1,
 			CacheCreationRatio: 1.25,
-			GroupRatioInfo:     types.GroupRatioInfo{GroupRatio: 1},
+			GroupRatioInfo:     hosttypes.GroupRatioInfo{GroupRatio: 1},
 		},
 		StartTime: time.Now(),
 	}
@@ -486,12 +490,12 @@ func TestCalculateTextQuotaSummarySeparatesOpenRouterCacheReadFromPromptBilling(
 		ChannelMeta: &relaycommon.ChannelMeta{
 			ChannelType: constant.ChannelTypeOpenRouter,
 		},
-		PriceData: types.PriceData{
+		PriceData: hosttypes.PriceData{
 			ModelRatio:         1,
 			CompletionRatio:    1,
 			CacheRatio:         0.1,
 			CacheCreationRatio: 1.25,
-			GroupRatioInfo:     types.GroupRatioInfo{GroupRatio: 1},
+			GroupRatioInfo:     hosttypes.GroupRatioInfo{GroupRatio: 1},
 		},
 		StartTime: time.Now(),
 	}
@@ -523,11 +527,11 @@ func TestCalculateTextQuotaSummarySeparatesOpenRouterCacheCreationFromPromptBill
 		ChannelMeta: &relaycommon.ChannelMeta{
 			ChannelType: constant.ChannelTypeOpenRouter,
 		},
-		PriceData: types.PriceData{
+		PriceData: hosttypes.PriceData{
 			ModelRatio:         1,
 			CompletionRatio:    1,
 			CacheCreationRatio: 1.25,
-			GroupRatioInfo:     types.GroupRatioInfo{GroupRatio: 1},
+			GroupRatioInfo:     hosttypes.GroupRatioInfo{GroupRatio: 1},
 		},
 		StartTime: time.Now(),
 	}
@@ -559,12 +563,12 @@ func TestCalculateTextQuotaSummaryKeepsPrePRClaudeOpenRouterBilling(t *testing.T
 		ChannelMeta: &relaycommon.ChannelMeta{
 			ChannelType: constant.ChannelTypeOpenRouter,
 		},
-		PriceData: types.PriceData{
+		PriceData: hosttypes.PriceData{
 			ModelRatio:         1,
 			CompletionRatio:    1,
 			CacheRatio:         0.1,
 			CacheCreationRatio: 1.25,
-			GroupRatioInfo:     types.GroupRatioInfo{GroupRatio: 1},
+			GroupRatioInfo:     hosttypes.GroupRatioInfo{GroupRatio: 1},
 		},
 		StartTime: time.Now(),
 	}
@@ -591,24 +595,30 @@ func TestComposeTieredTextQuotaKeepsToolCallSurcharges(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(w)
-	ctx.Set("image_generation_call", true)
-	ctx.Set("image_generation_call_quality", "low")
-	ctx.Set("image_generation_call_size", "1024x1024")
+
+	// 11 $/1K => 0.011 per completed image output, matching the prior fixed low-tier charge.
+	operation_setting.SetToolPriceForTest(dto.BuildInToolImageGeneration, 11.0)
+	t.Cleanup(func() {
+		operation_setting.DeleteToolPriceForTest(dto.BuildInToolImageGeneration)
+	})
 
 	relayInfo := &relaycommon.RelayInfo{
 		OriginModelName: "o1",
-		PriceData: types.PriceData{
+		PriceData: hosttypes.PriceData{
 			ModelRatio:      1,
 			CompletionRatio: 1,
-			GroupRatioInfo:  types.GroupRatioInfo{GroupRatio: 1},
+			GroupRatioInfo:  hosttypes.GroupRatioInfo{GroupRatio: 1},
 		},
 		ResponsesUsageInfo: &relaycommon.ResponsesUsageInfo{
 			BuiltInTools: map[string]*relaycommon.BuildInToolInfo{
-				dto.BuildInToolWebSearchPreview: &relaycommon.BuildInToolInfo{
+				dto.BuildInToolWebSearchPreview: {
 					CallCount: 1,
 				},
-				dto.BuildInToolFileSearch: &relaycommon.BuildInToolInfo{
+				dto.BuildInToolFileSearch: {
 					CallCount: 2,
+				},
+				dto.BuildInToolImageGeneration: {
+					CallCount: 1,
 				},
 			},
 		},
@@ -644,10 +654,10 @@ func TestComposeTieredTextQuotaFallbackKeepsToolCallSurcharges(t *testing.T) {
 
 	relayInfo := &relaycommon.RelayInfo{
 		OriginModelName: "claude-3-7-sonnet",
-		PriceData: types.PriceData{
+		PriceData: hosttypes.PriceData{
 			ModelRatio:      1,
 			CompletionRatio: 1,
-			GroupRatioInfo:  types.GroupRatioInfo{GroupRatio: 1.25},
+			GroupRatioInfo:  hosttypes.GroupRatioInfo{GroupRatio: 1.25},
 		},
 		TieredBillingSnapshot: &billingexpr.BillingSnapshot{
 			BillingMode:               "tiered_expr",
@@ -678,10 +688,10 @@ func TestComposeTieredTextQuotaErrorFallbackUsesPreConsumedQuota(t *testing.T) {
 
 	relayInfo := &relaycommon.RelayInfo{
 		OriginModelName: "claude-3-7-sonnet",
-		PriceData: types.PriceData{
+		PriceData: hosttypes.PriceData{
 			ModelRatio:      1,
 			CompletionRatio: 1,
-			GroupRatioInfo:  types.GroupRatioInfo{GroupRatio: 1.25},
+			GroupRatioInfo:  hosttypes.GroupRatioInfo{GroupRatio: 1.25},
 		},
 		TieredBillingSnapshot: &billingexpr.BillingSnapshot{
 			BillingMode:               "tiered_expr",
@@ -761,10 +771,10 @@ func TestTryTieredSettleNoClampInRange(t *testing.T) {
 func TestCalculateTextQuotaSummaryFixedPriceAppliesImageCountOnceAndAllowsOverride(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
-	priceData := types.PriceData{
+	priceData := hosttypes.PriceData{
 		ModelPrice: 0.12,
 		UsePrice:   true,
-		GroupRatioInfo: types.GroupRatioInfo{
+		GroupRatioInfo: hosttypes.GroupRatioInfo{
 			GroupRatio: 1,
 		},
 	}
@@ -784,4 +794,342 @@ func TestCalculateTextQuotaSummaryFixedPriceAppliesImageCountOnceAndAllowsOverri
 	relayInfo.PriceData.AddOtherRatio("n", 2)
 	summary = calculateTextQuotaSummary(ctx, relayInfo, usage)
 	require.Equal(t, 120000, summary.Quota)
+}
+
+func TestCalculateTextToolCallSurchargeGeneralizedBuiltInTools(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+
+	operation_setting.SetToolPriceForTest("my_fn", 5.0)
+	t.Cleanup(func() {
+		operation_setting.DeleteToolPriceForTest("my_fn")
+	})
+
+	relayInfo := &relaycommon.RelayInfo{
+		OriginModelName: "o1",
+		ResponsesUsageInfo: &relaycommon.ResponsesUsageInfo{
+			BuiltInTools: map[string]*relaycommon.BuildInToolInfo{
+				dto.BuildInToolWebSearchPreview: {CallCount: 2},
+				"my_fn":                         {CallCount: 3},
+				"unpriced":                      {CallCount: 5},
+			},
+		},
+	}
+	summary := &textQuotaSummary{
+		ModelName:  "o1",
+		GroupRatio: 1,
+	}
+
+	surcharge := calculateTextToolCallSurchargeBase(ctx, relayInfo, summary)
+	expected := decimal.NewFromFloat((10.0*2 + 5.0*3) / 1000).Mul(decimal.NewFromFloat(common.QuotaPerUnit))
+	assert.True(t, expected.Equal(surcharge), "got %s want %s", surcharge, expected)
+	require.Len(t, summary.ToolSurchargeItems, 2)
+	assert.Equal(t, "my_fn", summary.ToolSurchargeItems[0].Name)
+	assert.Equal(t, 3, summary.ToolSurchargeItems[0].Count)
+	assert.Equal(t, 5.0, summary.ToolSurchargeItems[0].Price)
+	assert.Equal(t, dto.BuildInToolWebSearchPreview, summary.ToolSurchargeItems[1].Name)
+	assert.Equal(t, 2, summary.ToolSurchargeItems[1].Count)
+	assert.Equal(t, 10.0, summary.ToolSurchargeItems[1].Price)
+}
+
+func TestCalculateTextToolCallSurchargeKeepsSearchPreviewFallbackWithCustomFunctions(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+
+	operation_setting.SetToolPriceForTest("my_fn", 5)
+	t.Cleanup(func() {
+		operation_setting.DeleteToolPriceForTest("my_fn")
+	})
+
+	relayInfo := &relaycommon.RelayInfo{
+		RelayMode:       relayconstant.RelayModeChatCompletions,
+		OriginModelName: "gpt-4o-search-preview",
+		ResponsesUsageInfo: &relaycommon.ResponsesUsageInfo{
+			BuiltInTools: map[string]*relaycommon.BuildInToolInfo{
+				"my_fn": {CallCount: 1},
+			},
+		},
+	}
+	summary := &textQuotaSummary{
+		ModelName:  relayInfo.OriginModelName,
+		GroupRatio: 1,
+	}
+
+	surcharge := calculateTextToolCallSurchargeBase(ctx, relayInfo, summary)
+
+	require.Len(t, summary.ToolSurchargeItems, 2)
+	assert.Equal(t, "my_fn", summary.ToolSurchargeItems[0].Name)
+	assert.Equal(t, dto.BuildInToolWebSearchPreview, summary.ToolSurchargeItems[1].Name)
+	expected := decimal.NewFromFloat((5.0 + 25.0) / 1000).
+		Mul(decimal.NewFromFloat(common.QuotaPerUnit))
+	assert.True(t, expected.Equal(surcharge), "got %s want %s", surcharge, expected)
+}
+
+func TestCalculateTextToolCallSurchargeDoesNotInferSearchForResponses(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	relayInfo := &relaycommon.RelayInfo{
+		RelayMode:       relayconstant.RelayModeResponses,
+		OriginModelName: "gpt-4o-search-preview",
+		ResponsesUsageInfo: &relaycommon.ResponsesUsageInfo{
+			BuiltInTools: map[string]*relaycommon.BuildInToolInfo{},
+		},
+	}
+	summary := &textQuotaSummary{
+		ModelName:  relayInfo.OriginModelName,
+		GroupRatio: 1,
+	}
+
+	surcharge := calculateTextToolCallSurchargeBase(ctx, relayInfo, summary)
+
+	assert.True(t, surcharge.IsZero())
+	assert.Empty(t, summary.ToolSurchargeItems)
+}
+
+func TestCalculateTextToolCallSurchargeMergesSameNameAndPrice(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Set("claude_web_search_requests", 3)
+
+	relayInfo := &relaycommon.RelayInfo{
+		OriginModelName: "claude-3-7-sonnet",
+		ResponsesUsageInfo: &relaycommon.ResponsesUsageInfo{
+			BuiltInTools: map[string]*relaycommon.BuildInToolInfo{
+				dto.BuildInToolWebSearch: {CallCount: 2},
+			},
+		},
+	}
+	summary := &textQuotaSummary{ModelName: relayInfo.OriginModelName, GroupRatio: 1}
+
+	surcharge := calculateTextToolCallSurchargeBase(ctx, relayInfo, summary)
+
+	require.Len(t, summary.ToolSurchargeItems, 1)
+	assert.Equal(t, dto.BuildInToolWebSearch, summary.ToolSurchargeItems[0].Name)
+	assert.Equal(t, 5, summary.ToolSurchargeItems[0].Count)
+	assert.Equal(t, 10.0, summary.ToolSurchargeItems[0].Price)
+	expected := decimal.NewFromFloat(10.0 * 5 / 1000).Mul(decimal.NewFromFloat(common.QuotaPerUnit))
+	assert.True(t, expected.Equal(surcharge), "got %s want %s", surcharge, expected)
+}
+
+func TestMergeToolSurchargeItemsSaturatesCountOverflow(t *testing.T) {
+	items := []ToolSurchargeItem{
+		{Name: "custom_fn", Count: math.MaxInt, Price: 5},
+		{Name: "custom_fn", Count: 1, Price: 5},
+	}
+
+	merged := mergeToolSurchargeItems(items)
+
+	require.Len(t, merged, 1)
+	assert.Equal(t, math.MaxInt, merged[0].Count)
+}
+
+// A zero-token request (e.g. /v1/alpha/search returns no usage) must still
+// bill a tool-call surcharge. Regression for the TotalTokens==0 gate zeroing
+// out the surcharge quota.
+func TestCalculateTextQuotaSummaryZeroTokensStillBillsToolSurcharge(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+
+	relayInfo := &relaycommon.RelayInfo{
+		OriginModelName: "o1",
+		ResponsesUsageInfo: &relaycommon.ResponsesUsageInfo{
+			BuiltInTools: map[string]*relaycommon.BuildInToolInfo{
+				dto.BuildInToolWebSearchPreview: {CallCount: 1},
+			},
+		},
+	}
+	relayInfo.PriceData.GroupRatioInfo.GroupRatio = 1
+
+	usage := &dto.Usage{} // zero tokens, mirrors alpha search
+	summary := calculateTextQuotaSummary(ctx, relayInfo, usage)
+
+	require.Equal(t, 0, summary.TotalTokens)
+	assert.False(t, summary.ToolCallSurchargeQuota.IsZero(), "surcharge should be computed")
+	assert.Greater(t, summary.Quota, 0, "quota must not be zeroed out for a zero-token web search request")
+	expected := common.QuotaFromDecimal(summary.ToolCallSurchargeQuota)
+	assert.Equal(t, expected, summary.Quota)
+}
+
+func TestCalculateTextQuotaSummaryDoesNotApplyRequestMultipliersToToolSurcharge(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+
+	relayInfo := &relaycommon.RelayInfo{
+		OriginModelName: "o1",
+		PriceData: hosttypes.PriceData{
+			ModelRatio:      1,
+			CompletionRatio: 1,
+			GroupRatioInfo:  hosttypes.GroupRatioInfo{GroupRatio: 1},
+		},
+		ResponsesUsageInfo: &relaycommon.ResponsesUsageInfo{
+			BuiltInTools: map[string]*relaycommon.BuildInToolInfo{
+				dto.BuildInToolWebSearchPreview: {CallCount: 1},
+			},
+		},
+	}
+	relayInfo.PriceData.AddOtherRatio("n", 3)
+
+	summary := calculateTextQuotaSummary(ctx, relayInfo, &dto.Usage{})
+
+	expected := decimal.NewFromFloat(10.0 / 1000).Mul(decimal.NewFromFloat(common.QuotaPerUnit))
+	assert.True(t, expected.Equal(summary.ToolCallSurchargeQuota))
+	assert.Equal(t, common.QuotaFromDecimal(expected), summary.Quota)
+}
+
+func TestCalculateTextQuotaSummaryUsePriceDoesNotApplyRequestMultipliersToToolSurcharge(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	operation_setting.SetToolPriceForTest(dto.BuildInToolWebSearchPreview, 10)
+	t.Cleanup(func() {
+		operation_setting.DeleteToolPriceForTest(dto.BuildInToolWebSearchPreview)
+	})
+
+	relayInfo := &relaycommon.RelayInfo{
+		OriginModelName: "priced-model",
+		PriceData: hosttypes.PriceData{
+			UsePrice:       true,
+			ModelPrice:     0.02,
+			GroupRatioInfo: hosttypes.GroupRatioInfo{GroupRatio: 1.5},
+		},
+		ResponsesUsageInfo: &relaycommon.ResponsesUsageInfo{
+			BuiltInTools: map[string]*relaycommon.BuildInToolInfo{
+				dto.BuildInToolWebSearchPreview: {CallCount: 1},
+			},
+		},
+	}
+	relayInfo.PriceData.AddOtherRatio("n", 3)
+
+	summary := calculateTextQuotaSummary(ctx, relayInfo, &dto.Usage{})
+
+	quotaPerUnit := decimal.NewFromFloat(common.QuotaPerUnit)
+	expectedSurcharge := decimal.NewFromFloat(10.0 / 1000).
+		Mul(quotaPerUnit).
+		Mul(decimal.NewFromFloat(1.5))
+	expectedTotal := decimal.NewFromFloat(0.02).
+		Mul(quotaPerUnit).
+		Mul(decimal.NewFromFloat(1.5)).
+		Mul(decimal.NewFromInt(3)).
+		Add(expectedSurcharge)
+	assert.True(t, expectedSurcharge.Equal(summary.ToolCallSurchargeQuota))
+	assert.Equal(t, common.QuotaFromDecimal(expectedTotal), summary.Quota)
+}
+
+func TestCalculateTextToolCallSurchargeGeminiGoogleSearch(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Set("gemini_google_search_call", true)
+
+	relayInfo := &relaycommon.RelayInfo{OriginModelName: "gemini-2.5-flash"}
+	summary := &textQuotaSummary{ModelName: "gemini-2.5-flash", GroupRatio: 1}
+
+	surcharge := calculateTextToolCallSurchargeBase(ctx, relayInfo, summary)
+	expected := decimal.NewFromFloat(14.0 / 1000).Mul(decimal.NewFromFloat(common.QuotaPerUnit))
+	assert.True(t, expected.Equal(surcharge), "got %s want %s", surcharge, expected)
+	require.Len(t, summary.ToolSurchargeItems, 1)
+	assert.Equal(t, dto.BuildInToolGoogleSearch, summary.ToolSurchargeItems[0].Name)
+	assert.Equal(t, 1, summary.ToolSurchargeItems[0].Count)
+	assert.Equal(t, 14.0, summary.ToolSurchargeItems[0].Price)
+}
+
+func TestCalculateTextToolCallSurchargeImageGenerationDefaultPrice(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	t.Cleanup(func() {
+		operation_setting.DeleteToolPriceForTest(dto.BuildInToolImageGeneration)
+	})
+
+	relayInfo := &relaycommon.RelayInfo{
+		OriginModelName: "gpt-5.1",
+		ResponsesUsageInfo: &relaycommon.ResponsesUsageInfo{
+			BuiltInTools: map[string]*relaycommon.BuildInToolInfo{
+				dto.BuildInToolImageGeneration: {CallCount: 2},
+			},
+		},
+	}
+	summary := &textQuotaSummary{ModelName: "gpt-5.1", GroupRatio: 1.5}
+
+	surcharge := calculateTextToolCallSurchargeBase(ctx, relayInfo, summary)
+	expected := decimal.NewFromFloat(150.0).
+		Mul(decimal.NewFromInt(2)).
+		Div(decimal.NewFromInt(1000)).
+		Mul(decimal.NewFromFloat(common.QuotaPerUnit))
+	assert.True(t, expected.Equal(surcharge), "got %s want %s", surcharge, expected)
+	require.Len(t, summary.ToolSurchargeItems, 1)
+	assert.Equal(t, dto.BuildInToolImageGeneration, summary.ToolSurchargeItems[0].Name)
+	assert.Equal(t, 2, summary.ToolSurchargeItems[0].Count)
+	assert.Equal(t, 150.0, summary.ToolSurchargeItems[0].Price)
+}
+
+func TestCalculateTextToolCallSurchargeImageGenerationExplicitZeroDisables(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	operation_setting.SetToolPriceForTest(dto.BuildInToolImageGeneration, 0)
+	t.Cleanup(func() {
+		operation_setting.DeleteToolPriceForTest(dto.BuildInToolImageGeneration)
+	})
+
+	relayInfo := &relaycommon.RelayInfo{
+		OriginModelName: "gpt-5.1",
+		ResponsesUsageInfo: &relaycommon.ResponsesUsageInfo{
+			BuiltInTools: map[string]*relaycommon.BuildInToolInfo{
+				dto.BuildInToolImageGeneration: {CallCount: 3},
+			},
+		},
+	}
+	summary := &textQuotaSummary{ModelName: "gpt-5.1", GroupRatio: 1}
+
+	surcharge := calculateTextToolCallSurchargeBase(ctx, relayInfo, summary)
+	assert.True(t, surcharge.IsZero())
+	assert.Empty(t, summary.ToolSurchargeItems)
+}
+
+func TestCalculateTextQuotaSummaryImageGenerationUsesStructuredSurcharge(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	t.Cleanup(func() {
+		operation_setting.DeleteToolPriceForTest(dto.BuildInToolImageGeneration)
+	})
+
+	relayInfo := &relaycommon.RelayInfo{
+		OriginModelName: "gpt-5.1",
+		ResponsesUsageInfo: &relaycommon.ResponsesUsageInfo{
+			BuiltInTools: map[string]*relaycommon.BuildInToolInfo{
+				dto.BuildInToolImageGeneration: {CallCount: 1},
+			},
+		},
+	}
+	relayInfo.PriceData.GroupRatioInfo.GroupRatio = 1
+	relayInfo.PriceData.ModelRatio = 1
+	relayInfo.PriceData.CompletionRatio = 1
+
+	usage := &dto.Usage{PromptTokens: 10, CompletionTokens: 5, TotalTokens: 15}
+	summary := calculateTextQuotaSummary(ctx, relayInfo, usage)
+
+	require.Len(t, summary.ToolSurchargeItems, 1)
+	assert.Equal(t, dto.BuildInToolImageGeneration, summary.ToolSurchargeItems[0].Name)
+	assert.Equal(t, 1, summary.ToolSurchargeItems[0].Count)
+	assert.Equal(t, 150.0, summary.ToolSurchargeItems[0].Price)
+
+	expectedSurcharge := decimal.NewFromFloat(150.0 / 1000).Mul(decimal.NewFromFloat(common.QuotaPerUnit))
+	assert.True(t, expectedSurcharge.Equal(summary.ToolCallSurchargeQuota),
+		"got %s want %s", summary.ToolCallSurchargeQuota, expectedSurcharge)
+	assert.Greater(t, summary.Quota, 0)
+}
+
+func TestAppendToolSurchargeLogInfoWritesOnlyStructuredFields(t *testing.T) {
+	items := []ToolSurchargeItem{
+		{Name: dto.BuildInToolWebSearch, Count: 2, Price: 10},
+		{Name: dto.BuildInToolImageGeneration, Count: 1, Price: 150},
+	}
+	other := map[string]interface{}{}
+
+	appendToolSurchargeLogInfo(other, items)
+
+	assert.Equal(t, items, other["tool_surcharges"])
+	assert.NotContains(t, other, "web_search")
+	assert.NotContains(t, other, "web_search_call_count")
+	assert.NotContains(t, other, "web_search_price")
+	assert.NotContains(t, other, "file_search")
+	assert.NotContains(t, other, "image_generation_call")
+	assert.NotContains(t, other, "image_generation_call_price")
 }

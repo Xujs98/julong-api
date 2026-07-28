@@ -169,11 +169,15 @@ const OPERATIONS_SECTIONS = [
     titleKey: 'System maintenance',
     build: (
       _settings: OperationsSettings,
-      currentVersion?: string | null,
+      julongVersion?: string | null,
+      upstreamVersion?: string | null,
+      upstreamCommit?: string | null,
       startTime?: number | null
     ) => (
       <UpdateCheckerSection
-        currentVersion={currentVersion}
+        julongVersion={julongVersion}
+        upstreamVersion={upstreamVersion}
+        upstreamCommit={upstreamCommit}
         startTime={startTime}
       />
     ),
@@ -185,7 +189,12 @@ export type OperationsSectionId = (typeof OPERATIONS_SECTIONS)[number]['id']
 const operationsRegistry = createSectionRegistry<
   OperationsSectionId,
   OperationsSettings,
-  [string | null | undefined, number | null | undefined]
+  [
+    string | null | undefined,
+    string | null | undefined,
+    string | null | undefined,
+    number | null | undefined,
+  ]
 >({
   sections: OPERATIONS_SECTIONS,
   defaultSection: 'behavior',

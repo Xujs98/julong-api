@@ -12,6 +12,12 @@ import (
 
 var StartTime = time.Now().Unix() // unit: second
 var Version = "v0.0.0"            // this hard coding will be replaced automatically when building, no need to manually change
+
+const (
+	UpstreamVersion = "v1.0.0-rc.22"
+	UpstreamCommit  = "afe16c64c"
+)
+
 var SystemName = "矩龙-API"
 var Footer = ""
 var Logo = ""

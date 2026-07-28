@@ -94,6 +94,9 @@ export interface SystemStatus {
   message?: string
   data?: {
     version?: string
+    julong_version?: string
+    upstream_version?: string
+    upstream_commit?: string
     system_name?: string
     logo?: string
     github_oauth?: boolean
@@ -138,6 +141,9 @@ export interface SystemStatus {
   }
   // Allow direct access to common properties
   version?: string
+  julong_version?: string
+  upstream_version?: string
+  upstream_commit?: string
   system_name?: string
   logo?: string
   github_oauth?: boolean

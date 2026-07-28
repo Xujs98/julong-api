@@ -64,6 +64,11 @@ web/           — Frontend (React 19, Rsbuild, Base UI, Tailwind)
 
 ### Backend Rules
 
+**relaykit module independence:** The `relaykit/` Go module MUST remain independently buildable.
+
+- Code under `relaykit/` MUST NOT import or depend on packages from the root `new-api` module, or rely on root-only configuration, generated files, or workspace wiring.
+- Any change affecting `relaykit/` or its public APIs MUST be verified with `cd relaykit && GOWORK=off go build ./...`; a successful root-module build is not sufficient.
+
 **JSON package:** All JSON marshal/unmarshal operations MUST use the wrapper functions in `common/json.go`:
 
 - `common.Marshal(v any) ([]byte, error)`
@@ -134,6 +139,10 @@ Do NOT directly import or call `encoding/json` in business code. `json.RawMessag
 - Follow `web/AGENTS.md` for detailed frontend conventions, including TypeScript, component structure, styling, accessibility, testing, and build checks.
 
 ### Project Governance
+
+**Upstream synchronization policy:** When synchronizing changes from `QuantumNous/new-api`, merge all non-conflicting upstream changes normally. For every conflict, preserve the existing Julong implementation first, then add only the compatibility changes required for the upstream update. Never resolve a conflict by replacing or removing Julong functionality with the upstream version.
+
+**Development documentation policy:** Every Julong feature addition, modification, or removal MUST update `DEVELOPMENT.md` in the same change. Any added, changed, or removed backend API must be reflected in the API inventory with its method, path, handler, purpose, request parameters, response contract, and permissions. Any added, changed, or removed frontend page route must be reflected in the frontend route inventory with its route, source file, feature, and access requirements. Update the related configuration, data model, migration, component, and changelog sections whenever they are affected. A feature is not complete until this documentation is synchronized with the implementation.
 
 **Protected project information:** The following project-related information is strictly protected and MUST NOT be modified, deleted, replaced, or removed under any circumstances:
 

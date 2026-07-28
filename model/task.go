@@ -8,8 +8,8 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
-	"github.com/QuantumNous/new-api/dto"
 	commonRelay "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/relaykit/dto"
 )
 
 type TaskStatus string
@@ -357,8 +357,7 @@ func HasUnfinishedSyncTasks() bool {
 }
 
 // HasTaskPollingWork reports whether polling has either an unfinished task or
-// a failed task with a pending, non-legacy refund. The latter keeps the system
-// task scheduler active when reconciliation is the only work left.
+// a failed task with a pending, non-legacy refund.
 func HasTaskPollingWork() bool {
 	if HasUnfinishedSyncTasks() {
 		return true
@@ -372,20 +371,6 @@ func HasTaskPollingWork() bool {
 		Limit(1).
 		Pluck("id", &id).Error
 	return err == nil && id != 0
-}
-
-func GetByOnlyTaskId(taskId string) (*Task, bool, error) {
-	if taskId == "" {
-		return nil, false, nil
-	}
-	var task *Task
-	var err error
-	err = DB.Where("task_id = ?", taskId).First(&task).Error
-	exist, err := RecordExist(err)
-	if err != nil {
-		return nil, false, err
-	}
-	return task, exist, err
 }
 
 func GetByTaskId(userId int, taskId string) (*Task, bool, error) {
@@ -482,8 +467,7 @@ func ClaimQuotaForRefund(id int64, expectedQuota int) (bool, error) {
 }
 
 // RestoreQuotaAfterFailedRefund restores a claimed quota marker only while it
-// is still zero. It is used when the observable funding adjustment fails, so a
-// later reconciliation pass can retry without overwriting another writer.
+// is still zero, allowing a later reconciliation pass to retry safely.
 func RestoreQuotaAfterFailedRefund(id int64, quota int) (bool, error) {
 	if quota == 0 {
 		return false, nil
@@ -513,17 +497,6 @@ func (t *Task) UpdateWithStatus(fromStatus TaskStatus) (bool, error) {
 		return false, result.Error
 	}
 	return result.RowsAffected > 0, nil
-}
-
-// TaskBulkUpdate performs an unconditional bulk UPDATE by upstream task_id strings.
-// Same caveats as TaskBulkUpdateByID — no CAS guard.
-func TaskBulkUpdate(taskIds []string, params map[string]any) error {
-	if len(taskIds) == 0 {
-		return nil
-	}
-	return DB.Model(&Task{}).
-		Where("task_id in (?)", taskIds).
-		Updates(params).Error
 }
 
 // TaskBulkUpdateByID performs an unconditional bulk UPDATE by primary key IDs.

@@ -2,7 +2,6 @@ package service
 
 import (
 	"encoding/base64"
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,9 +9,9 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
-	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/types"
 	"github.com/gin-gonic/gin"
 )
@@ -167,7 +166,7 @@ func TestImageGenerationTaskLifecycleStoresSanitizedResponse(t *testing.T) {
 
 	png := []byte{0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a}
 	encoded := base64.StdEncoding.EncodeToString(png)
-	responseBody, _ := json.Marshal(dto.ImageResponse{
+	responseBody, _ := common.Marshal(dto.ImageResponse{
 		Created: 123456,
 		Data:    []dto.ImageData{{B64Json: encoded, RevisedPrompt: "revised"}},
 	})

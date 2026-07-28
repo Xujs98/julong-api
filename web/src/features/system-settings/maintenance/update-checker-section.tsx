@@ -37,27 +37,30 @@ type ReleaseInfo = {
 }
 
 type UpdateCheckerSectionProps = {
-  currentVersion?: string | null
+  julongVersion?: string | null
+  upstreamVersion?: string | null
+  upstreamCommit?: string | null
   startTime?: number | null
 }
 
-export function UpdateCheckerSection({
-  currentVersion,
-  startTime,
-}: UpdateCheckerSectionProps) {
+export function UpdateCheckerSection(props: UpdateCheckerSectionProps) {
   const { t } = useTranslation()
   const [checking, setChecking] = useState(false)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [release, setRelease] = useState<ReleaseInfo | null>(null)
 
-  const uptime = startTime ? formatTimestamp(startTime) : t('Unknown')
-  const version = currentVersion || t('Unknown')
+  const uptime = props.startTime
+    ? formatTimestamp(props.startTime)
+    : t('Unknown')
+  const julongVersion = props.julongVersion || t('Unknown')
+  const upstreamVersion = props.upstreamVersion || t('Unknown')
+  const upstreamCommit = props.upstreamCommit || t('Unknown')
 
   const handleCheckUpdates = async () => {
     setChecking(true)
     try {
       const response = await fetch(
-        'https://api.github.com/repos/Calcium-Ion/new-api/releases/latest',
+        'https://api.github.com/repos/QuantumNous/new-api/releases/latest',
         {
           headers: {
             Accept: 'application/vnd.github+json',
@@ -75,7 +78,7 @@ export function UpdateCheckerSection({
         throw new Error(t('Unexpected release payload'))
       }
 
-      if (currentVersion && data.tag_name === currentVersion) {
+      if (props.upstreamVersion && data.tag_name === props.upstreamVersion) {
         toast.success(
           t('You are running the latest version ({{version}}).', {
             version: data.tag_name,
@@ -107,12 +110,21 @@ export function UpdateCheckerSection({
     <>
       <SettingsSection title={t('System maintenance')}>
         <div className='space-y-6'>
-          <div className='grid gap-4 md:grid-cols-2'>
+          <div className='grid gap-4 md:grid-cols-3'>
             <div className='rounded-lg border p-4'>
               <div className='text-muted-foreground text-sm'>
-                {t('Current version')}
+                {t('Julong version')}
               </div>
-              <div className='text-lg font-semibold'>{version}</div>
+              <div className='text-lg font-semibold'>{julongVersion}</div>
+            </div>
+            <div className='rounded-lg border p-4'>
+              <div className='text-muted-foreground text-sm'>
+                {t('Merged New API version')}
+              </div>
+              <div className='text-lg font-semibold'>{upstreamVersion}</div>
+              <div className='text-muted-foreground mt-1 font-mono text-xs break-all'>
+                {t('Upstream commit')}: {upstreamCommit}
+              </div>
             </div>
             <div className='rounded-lg border p-4'>
               <div className='text-muted-foreground text-sm'>

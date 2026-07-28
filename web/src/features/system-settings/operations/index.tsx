@@ -79,7 +79,9 @@ export function OperationsSettings() {
       getSectionContent={getOperationsSectionContent}
       getSectionMeta={getOperationsSectionMeta}
       extraArgs={[
-        status?.version as string | undefined,
+        (status?.julong_version ?? status?.version) as string | undefined,
+        status?.upstream_version as string | undefined,
+        status?.upstream_commit as string | undefined,
         status?.start_time as number | null | undefined,
       ]}
       loadingMessage='Loading maintenance settings...'
