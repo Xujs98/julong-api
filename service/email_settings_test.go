@@ -18,7 +18,7 @@ func setupEmailSettingsTest(t *testing.T) (*gorm.DB, map[string]model.User) {
 	t.Helper()
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&model.Option{}, &model.User{}, &model.QuotaData{}, &model.Log{}))
+	require.NoError(t, db.AutoMigrate(&model.Option{}, &model.User{}, &model.QuotaData{}, &model.Log{}, &model.UserPresence{}))
 
 	users := map[string]model.User{
 		"common": {
@@ -89,9 +89,14 @@ func TestUpdateEmailSettingsConfigPersistsCompleteConfiguration(t *testing.T) {
 			{Frequency: DashboardReportFrequencyWeekly, SendTimes: []string{"18:00", "09:30"}, Weekday: 5, MonthDay: 15},
 			{Frequency: DashboardReportFrequencyDaily, SendTimes: []string{"23:00", "12:00"}, Weekday: 1, MonthDay: 1},
 		},
-		RiskUserEmailEnabled:      true,
-		RiskUserEmailLevels:       []string{model.UserRiskLevelHigh, model.UserRiskLevelMedium, model.UserRiskLevelHigh},
-		RiskUserEmailRecipientIDs: []int{users["admin"].Id, users["root"].Id},
+		RiskUserEmailEnabled:              true,
+		RiskUserEmailLevels:               []string{model.UserRiskLevelHigh, model.UserRiskLevelMedium, model.UserRiskLevelHigh},
+		RiskUserEmailRecipientIDs:         []int{users["admin"].Id, users["root"].Id},
+		UserPresenceEmailEnabled:          true,
+		UserPresenceEmailEvents:           []string{UserPresenceEventOffline, UserPresenceEventOnline, UserPresenceEventOnline},
+		UserPresenceEmailMonitoredUserIDs: []int{users["common"].Id, users["admin"].Id},
+		UserPresenceEmailRecipientIDs:     []int{users["admin"].Id, users["root"].Id},
+		UserPresenceOfflineMinutes:        5,
 	}
 
 	updated, err := UpdateEmailSettingsConfig(input)
@@ -102,6 +107,10 @@ func TestUpdateEmailSettingsConfigPersistsCompleteConfiguration(t *testing.T) {
 	assert.Equal(t, expectedRecipients, updated.DashboardReportEmailRecipientIDs)
 	assert.Equal(t, []string{model.UserRiskLevelMedium, model.UserRiskLevelHigh}, updated.RiskUserEmailLevels)
 	assert.Equal(t, expectedRecipients, updated.RiskUserEmailRecipientIDs)
+	assert.Equal(t, []string{UserPresenceEventOnline, UserPresenceEventOffline}, updated.UserPresenceEmailEvents)
+	assert.Equal(t, normalizeEmailRecipientIDs([]int{users["common"].Id, users["admin"].Id}), updated.UserPresenceEmailMonitoredUserIDs)
+	assert.Equal(t, expectedRecipients, updated.UserPresenceEmailRecipientIDs)
+	assert.Equal(t, 5, updated.UserPresenceOfflineMinutes)
 	assert.Equal(t, DashboardReportFrequencyWeekly, updated.DashboardReportEmailFrequency)
 	assert.Equal(t, "09:30", updated.DashboardReportEmailSendTime)
 	require.Len(t, updated.DashboardReportEmailSchedules, 2)
@@ -112,7 +121,7 @@ func TestUpdateEmailSettingsConfigPersistsCompleteConfiguration(t *testing.T) {
 
 	var optionCount int64
 	require.NoError(t, db.Model(&model.Option{}).Count(&optionCount).Error)
-	assert.EqualValues(t, 19, optionCount)
+	assert.EqualValues(t, 24, optionCount)
 	assert.Equal(t, "true", common.OptionMap[common.LowBalanceEmailEnabledOptionKey])
 	expectedChannelRecipients, err := common.Marshal([]int{users["root"].Id})
 	require.NoError(t, err)

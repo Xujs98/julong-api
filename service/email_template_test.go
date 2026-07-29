@@ -149,6 +149,17 @@ func TestRiskUserTemplateExposesRiskSummary(t *testing.T) {
 	assert.Contains(t, template.Content, "{{detected_at}}")
 }
 
+func TestUserPresenceTemplateExposesActivityDetails(t *testing.T) {
+	setupEmailTemplateTest(t)
+	template, err := GetEmailTemplateForLocale(EmailTemplateEventUserPresenceChanged, EmailTemplateLocaleChinese)
+	require.NoError(t, err)
+	assert.Contains(t, template.Placeholders, "monitored_user_id")
+	assert.Contains(t, template.Placeholders, "presence_status")
+	assert.Contains(t, template.Placeholders, "activity_source")
+	assert.Contains(t, template.Content, "{{inactivity_minutes}}")
+	assert.Contains(t, template.Content, "{{user_agent}}")
+}
+
 func TestShouldSendAccountQuotaEmailOnlyOnFirstLowBalanceOrDownwardCrossing(t *testing.T) {
 	tests := []struct {
 		name              string

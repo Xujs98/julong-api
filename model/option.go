@@ -102,6 +102,11 @@ func InitOptionMap() {
 	common.OptionMap[common.RiskUserEmailLevelsOptionKey] = `["medium","high"]`
 	common.OptionMap[common.RiskUserEmailRecipientUserIDsOptionKey] = "[]"
 	common.OptionMap[common.RiskUserEmailDispatchStateOptionKey] = "{}"
+	common.OptionMap[common.UserPresenceEmailEnabledOptionKey] = "false"
+	common.OptionMap[common.UserPresenceEmailEventsOptionKey] = `["online","offline"]`
+	common.OptionMap[common.UserPresenceEmailMonitoredUserIDsOptionKey] = "[]"
+	common.OptionMap[common.UserPresenceEmailRecipientUserIDsOptionKey] = "[]"
+	common.OptionMap[common.UserPresenceOfflineMinutesOptionKey] = "5"
 	common.OptionMap[common.UserQuotaSummaryExcludedUserIDsOptionKey] = "[]"
 	common.OptionMap["Notice"] = ""
 	common.OptionMap["About"] = ""

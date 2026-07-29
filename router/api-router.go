@@ -316,9 +316,12 @@ func SetApiRouter(router *gin.Engine) {
 			emailSettingsRoute.PUT("/config", controller.UpdateEmailSettingsConfig)
 			emailSettingsRoute.GET("/recipients", controller.SearchEmailSettingsRecipients)
 			emailSettingsRoute.POST("/recipients/resolve", controller.ResolveEmailSettingsRecipients)
+			emailSettingsRoute.GET("/monitored-users", controller.SearchUserPresenceMonitoredUsers)
+			emailSettingsRoute.POST("/monitored-users/resolve", controller.ResolveUserPresenceMonitoredUsers)
 			emailSettingsRoute.POST("/channel-anomaly/test", controller.SendChannelAnomalyTestEmail)
 			emailSettingsRoute.POST("/dashboard-report/test", controller.SendDashboardReportTestEmail)
 			emailSettingsRoute.POST("/risk-user/test", controller.SendRiskUserTestEmail)
+			emailSettingsRoute.POST("/user-presence/test", controller.SendUserPresenceTestEmail)
 		}
 		emailTemplateRoute := emailSettingsRoute.Group("/templates")
 		{

@@ -237,7 +237,8 @@ export function EmailCampaignUserPicker(props: EmailCampaignUserPickerProps) {
                             </span>
                           </span>
                           <span className='text-muted-foreground block truncate text-xs'>
-                            @{user.username} | {user.email}
+                            @{user.username}
+                            {user.email ? ` | ${user.email}` : ''}
                           </span>
                         </span>
                       </CommandItem>

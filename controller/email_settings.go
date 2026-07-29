@@ -27,6 +27,13 @@ type riskUserTestEmailRequest struct {
 	RiskLevels       []string `json:"risk_levels"`
 }
 
+type userPresenceTestEmailRequest struct {
+	RecipientUserIDs []int    `json:"recipient_user_ids"`
+	MonitoredUserIDs []int    `json:"monitored_user_ids"`
+	Events           []string `json:"events"`
+	OfflineMinutes   int      `json:"offline_minutes"`
+}
+
 func GetEmailSettingsConfig(c *gin.Context) {
 	config, err := service.GetEmailSettingsConfig()
 	if err != nil {
@@ -84,6 +91,40 @@ func ResolveEmailSettingsRecipients(c *gin.Context) {
 	common.ApiSuccess(c, users)
 }
 
+func SearchUserPresenceMonitoredUsers(c *gin.Context) {
+	pageInfo := common.GetPageQuery(c)
+	users, total, err := model.SearchUserPresenceMonitorOptions(
+		c.Query("keyword"),
+		pageInfo.GetStartIdx(),
+		pageInfo.GetPageSize(),
+	)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	pageInfo.SetTotal(int(total))
+	pageInfo.SetItems(users)
+	common.ApiSuccess(c, pageInfo)
+}
+
+func ResolveUserPresenceMonitoredUsers(c *gin.Context) {
+	var req emailSettingsRecipientResolveRequest
+	if err := common.DecodeJson(c.Request.Body, &req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "无效的参数"})
+		return
+	}
+	if len(req.UserIDs) > 500 {
+		common.ApiErrorMsg(c, "监控用户数量不能超过 500")
+		return
+	}
+	users, err := model.GetUserPresenceMonitorOptionsByIDs(req.UserIDs)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, users)
+}
+
 func SendChannelAnomalyTestEmail(c *gin.Context) {
 	var req channelAnomalyTestEmailRequest
 	if err := common.DecodeJson(c.Request.Body, &req); err != nil {
@@ -119,6 +160,25 @@ func SendRiskUserTestEmail(c *gin.Context) {
 		return
 	}
 	result, err := service.SendRiskUserTestEmails(req.RecipientUserIDs, req.RiskLevels)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, result)
+}
+
+func SendUserPresenceTestEmail(c *gin.Context) {
+	var req userPresenceTestEmailRequest
+	if err := common.DecodeJson(c.Request.Body, &req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "无效的参数"})
+		return
+	}
+	result, err := service.SendUserPresenceTestEmails(
+		req.RecipientUserIDs,
+		req.MonitoredUserIDs,
+		req.Events,
+		req.OfflineMinutes,
+	)
 	if err != nil {
 		common.ApiError(c, err)
 		return

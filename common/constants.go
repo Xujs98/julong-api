@@ -158,6 +158,11 @@ const (
 	RiskUserEmailLevelsOptionKey                  = "RiskUserEmailLevels"
 	RiskUserEmailRecipientUserIDsOptionKey        = "RiskUserEmailRecipientUserIDs"
 	RiskUserEmailDispatchStateOptionKey           = "RiskUserEmailDispatchState"
+	UserPresenceEmailEnabledOptionKey             = "UserPresenceEmailEnabled"
+	UserPresenceEmailEventsOptionKey              = "UserPresenceEmailEvents"
+	UserPresenceEmailMonitoredUserIDsOptionKey    = "UserPresenceEmailMonitoredUserIDs"
+	UserPresenceEmailRecipientUserIDsOptionKey    = "UserPresenceEmailRecipientUserIDs"
+	UserPresenceOfflineMinutesOptionKey           = "UserPresenceOfflineMinutes"
 	UserQuotaSummaryExcludedUserIDsOptionKey      = "UserQuotaSummaryExcludedUserIDs"
 )
 

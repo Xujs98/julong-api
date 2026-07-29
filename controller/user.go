@@ -201,6 +201,7 @@ func setupLoginAtAuthVersion(user *model.User, expectedAuthVersion int64, c *gin
 	service.WriteDeviceCookie(c, deviceID)
 	setAuthNoStore(c)
 	recordLoginAudit(user, c, deviceID)
+	service.RecordUserPresenceActivity(user.Id, service.UserPresenceActivitySourceLogin, c.ClientIP(), c.Request.UserAgent())
 	c.JSON(http.StatusOK, gin.H{
 		"message": "",
 		"success": true,

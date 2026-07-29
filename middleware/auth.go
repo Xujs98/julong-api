@@ -64,6 +64,7 @@ func authHelper(c *gin.Context, minRole int) {
 		return
 	}
 	setDashboardAuthContext(c, user, identity, useAccessToken)
+	service.RecordUserPresenceActivity(user.Id, service.UserPresenceActivitySourceDashboard, c.ClientIP(), c.Request.UserAgent())
 
 	// 管理/root 写操作审计兜底：内聚在鉴权链路里，保证任何经过 AdminAuth/RootAuth
 	// 的写接口都会自动留痕（无需在路由上单独挂审计中间件，避免漏挂）。
@@ -90,6 +91,7 @@ func TryUserAuth() func(c *gin.Context) {
 				return
 			}
 			setDashboardAuthContext(c, user, identity, credentialKind == dashboardCredentialPAT)
+			service.RecordUserPresenceActivity(user.Id, service.UserPresenceActivitySourceDashboard, c.ClientIP(), c.Request.UserAgent())
 		}
 		c.Next()
 	}
@@ -392,6 +394,7 @@ func TokenAuthReadOnly() func(c *gin.Context) {
 		c.Set("id", token.UserId)
 		c.Set("token_id", token.Id)
 		c.Set("token_key", token.Key)
+		service.RecordUserPresenceActivity(token.UserId, service.UserPresenceActivitySourceAPI, c.ClientIP(), c.Request.UserAgent())
 		c.Next()
 	}
 }
@@ -535,6 +538,7 @@ func TokenAuth() func(c *gin.Context) {
 		if err != nil {
 			return
 		}
+		service.RecordUserPresenceActivity(token.UserId, service.UserPresenceActivitySourceAPI, c.ClientIP(), c.Request.UserAgent())
 		c.Next()
 	}
 }

@@ -25,6 +25,7 @@ import {
   Send,
   ShieldAlert,
   TriangleAlert,
+  UserRoundCheck,
   WalletCards,
   type LucideIcon,
 } from 'lucide-react'
@@ -43,13 +44,17 @@ import { EmailCampaignUserPicker } from './email-campaign-user-picker'
 import {
   getEmailSettingsConfig,
   resolveEmailSettingsRecipients,
+  resolveUserPresenceMonitoredUsers,
   searchEmailSettingsRecipients,
+  searchUserPresenceMonitoredUsers,
   sendChannelAnomalyTestEmail,
   sendDashboardReportTestEmail,
   sendRiskUserTestEmail,
+  sendUserPresenceTestEmail,
   updateEmailSettingsConfig,
   type EmailSettingsConfig,
   type RiskUserEmailLevel,
+  type UserPresenceEmailEvent,
 } from './email-templates-api'
 
 const RISK_USER_EMAIL_LEVELS: Array<{
@@ -58,6 +63,14 @@ const RISK_USER_EMAIL_LEVELS: Array<{
 }> = [
   { value: 'medium', labelKey: 'Medium risk' },
   { value: 'high', labelKey: 'High risk' },
+]
+
+const USER_PRESENCE_EMAIL_EVENTS: Array<{
+  value: UserPresenceEmailEvent
+  labelKey: string
+}> = [
+  { value: 'online', labelKey: 'Online' },
+  { value: 'offline', labelKey: 'Offline' },
 ]
 
 type AlertPanelProps = {
@@ -111,6 +124,7 @@ export function EmailAlertSettings() {
   const [testingChannelAnomaly, setTestingChannelAnomaly] = useState(false)
   const [testingDashboardReport, setTestingDashboardReport] = useState(false)
   const [testingRiskUser, setTestingRiskUser] = useState(false)
+  const [testingUserPresence, setTestingUserPresence] = useState(false)
 
   const loadConfig = useCallback(async () => {
     setLoading(true)
@@ -156,6 +170,20 @@ export function EmailAlertSettings() {
       config.risk_user_email_levels.length === 0
     ) {
       toast.error(t('Select at least one risk level'))
+      return
+    }
+    if (
+      config.user_presence_email_enabled &&
+      config.user_presence_email_events.length === 0
+    ) {
+      toast.error(t('Select at least one presence event'))
+      return
+    }
+    if (
+      config.user_presence_email_enabled &&
+      config.user_presence_email_monitored_user_ids.length === 0
+    ) {
+      toast.error(t('Select at least one monitored user'))
       return
     }
     setSaving(true)
@@ -265,6 +293,57 @@ export function EmailAlertSettings() {
       )
     } finally {
       setTestingRiskUser(false)
+    }
+  }
+
+  const toggleUserPresenceEvent = (
+    presenceEvent: UserPresenceEmailEvent,
+    checked: boolean
+  ) => {
+    if (!config) return
+    const selected = new Set(config.user_presence_email_events)
+    if (checked) selected.add(presenceEvent)
+    else selected.delete(presenceEvent)
+    patchConfig({
+      user_presence_email_events: USER_PRESENCE_EMAIL_EVENTS.map(
+        (option) => option.value
+      ).filter((value) => selected.has(value)),
+    })
+  }
+
+  const testUserPresence = async () => {
+    if (!config) return
+    if (config.user_presence_email_events.length === 0) {
+      toast.error(t('Select at least one presence event'))
+      return
+    }
+    if (config.user_presence_email_monitored_user_ids.length === 0) {
+      toast.error(t('Select at least one monitored user'))
+      return
+    }
+    setTestingUserPresence(true)
+    try {
+      const response = await sendUserPresenceTestEmail(
+        config.user_presence_email_recipient_user_ids,
+        config.user_presence_email_monitored_user_ids,
+        config.user_presence_email_events,
+        config.user_presence_offline_minutes
+      )
+      if (!response.success || !response.data) throw new Error(response.message)
+      toast.success(
+        t('Presence test sent: {{emails}} email(s) to {{count}} recipient(s)', {
+          emails: response.data.email_count,
+          count: response.data.recipient_count,
+        })
+      )
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : t('Failed to send presence test email')
+      )
+    } finally {
+      setTestingUserPresence(false)
     }
   }
 
@@ -564,6 +643,125 @@ export function EmailAlertSettings() {
               >
                 <Send className='size-4' />
                 {testingRiskUser ? t('Sending...') : t('Send real data test')}
+              </Button>
+            </div>
+          </div>
+        </AlertPanel>
+
+        <AlertPanel
+          icon={UserRoundCheck}
+          title={t('User online and offline alert')}
+          description={t(
+            'Track selected users through dashboard activity and API calls, then notify administrators when their status changes.'
+          )}
+          toggleLabel={t('Enable user presence alert')}
+          checked={config.user_presence_email_enabled}
+          onCheckedChange={(checked) =>
+            patchConfig({ user_presence_email_enabled: checked })
+          }
+        >
+          <div className='space-y-2'>
+            <Label>{t('Events to monitor')}</Label>
+            <div className='grid gap-2 sm:grid-cols-2'>
+              {USER_PRESENCE_EMAIL_EVENTS.map((option) => {
+                const checked = config.user_presence_email_events.includes(
+                  option.value
+                )
+                return (
+                  <label
+                    key={option.value}
+                    className='hover:bg-muted/50 flex min-h-10 cursor-pointer items-center gap-3 rounded-md border px-3 py-2 text-sm'
+                  >
+                    <Checkbox
+                      checked={checked}
+                      disabled={!config.user_presence_email_enabled}
+                      onCheckedChange={(nextChecked) =>
+                        toggleUserPresenceEvent(option.value, nextChecked)
+                      }
+                    />
+                    <span>{t(option.labelKey)}</span>
+                  </label>
+                )
+              })}
+            </div>
+          </div>
+          <div className='grid gap-4 lg:grid-cols-2'>
+            <div className='space-y-1.5'>
+              <Label htmlFor='presence-monitored-users'>
+                {t('Monitored users')}
+              </Label>
+              <EmailCampaignUserPicker
+                id='presence-monitored-users'
+                labelKey='Monitored users'
+                queryKeyPrefix='user-presence-monitored'
+                searchUsers={searchUserPresenceMonitoredUsers}
+                resolveUsers={resolveUserPresenceMonitoredUsers}
+                selectedUserIds={config.user_presence_email_monitored_user_ids}
+                onChange={(user_presence_email_monitored_user_ids) =>
+                  patchConfig({ user_presence_email_monitored_user_ids })
+                }
+              />
+              <p className='text-muted-foreground text-xs'>
+                {t(
+                  'A successful login, authenticated dashboard request, or API Key request counts as online activity.'
+                )}
+              </p>
+            </div>
+            <div className='space-y-1.5'>
+              <Label htmlFor='presence-offline-minutes'>
+                {t('Offline after inactivity (minutes)')}
+              </Label>
+              <Input
+                id='presence-offline-minutes'
+                type='number'
+                min={1}
+                max={1440}
+                step={1}
+                disabled={!config.user_presence_email_enabled}
+                value={config.user_presence_offline_minutes}
+                onChange={(event) =>
+                  patchConfig({
+                    user_presence_offline_minutes: Math.min(
+                      1440,
+                      Math.max(1, Number.parseInt(event.target.value, 10) || 5)
+                    ),
+                  })
+                }
+              />
+              <p className='text-muted-foreground text-xs'>
+                {t(
+                  'The default is 5 minutes. Repeated activity and repeated offline checks do not send duplicate alerts.'
+                )}
+              </p>
+            </div>
+          </div>
+          <div className='space-y-1.5'>
+            <Label htmlFor='presence-recipients'>{t('Recipients')}</Label>
+            <EmailCampaignUserPicker
+              id='presence-recipients'
+              labelKey='Alert recipients'
+              queryKeyPrefix='user-presence-recipients'
+              searchUsers={searchEmailSettingsRecipients}
+              resolveUsers={resolveEmailSettingsRecipients}
+              selectedUserIds={config.user_presence_email_recipient_user_ids}
+              onChange={(user_presence_email_recipient_user_ids) =>
+                patchConfig({ user_presence_email_recipient_user_ids })
+              }
+            />
+            <p className='text-muted-foreground text-xs'>
+              {t(
+                'Only active administrators and root users with email are available.'
+              )}
+            </p>
+            <div className='flex justify-end'>
+              <Button
+                type='button'
+                variant='outline'
+                disabled={testingUserPresence}
+                onClick={testUserPresence}
+              >
+                <Send className='size-4' />
+                {testingUserPresence ? t('Sending...') : t('Send test email')}
               </Button>
             </div>
           </div>

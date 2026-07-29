@@ -26,6 +26,7 @@ const (
 	SystemTaskTypeSubscriptionExpiryEmail = "subscription_expiry_email"
 	SystemTaskTypeDashboardReportEmail    = "dashboard_report_email"
 	SystemTaskTypeRiskUserEmail           = "risk_user_email"
+	SystemTaskTypeUserPresenceEmail       = "user_presence_email"
 )
 
 var ErrSystemTaskLockLost = errors.New("system task lock lost")

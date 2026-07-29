@@ -40,6 +40,11 @@ type EmailSettingsConfig struct {
 	RiskUserEmailEnabled              bool                           `json:"risk_user_email_enabled"`
 	RiskUserEmailLevels               []string                       `json:"risk_user_email_levels"`
 	RiskUserEmailRecipientIDs         []int                          `json:"risk_user_email_recipient_user_ids"`
+	UserPresenceEmailEnabled          bool                           `json:"user_presence_email_enabled"`
+	UserPresenceEmailEvents           []string                       `json:"user_presence_email_events"`
+	UserPresenceEmailMonitoredUserIDs []int                          `json:"user_presence_email_monitored_user_ids"`
+	UserPresenceEmailRecipientIDs     []int                          `json:"user_presence_email_recipient_user_ids"`
+	UserPresenceOfflineMinutes        int                            `json:"user_presence_offline_minutes"`
 }
 
 func GetEmailSettingsConfig() (EmailSettingsConfig, error) {
@@ -57,9 +62,17 @@ func GetEmailSettingsConfig() (EmailSettingsConfig, error) {
 		DashboardReportEmailWeekday:       emailOptionInt(common.DashboardReportEmailWeekdayOptionKey, 1),
 		DashboardReportEmailMonthDay:      emailOptionInt(common.DashboardReportEmailMonthDayOptionKey, 1),
 		RiskUserEmailEnabled:              emailOptionBool(common.RiskUserEmailEnabledOptionKey, false),
+		UserPresenceEmailEnabled:          emailOptionBool(common.UserPresenceEmailEnabledOptionKey, false),
+		UserPresenceOfflineMinutes:        emailOptionInt(common.UserPresenceOfflineMinutesOptionKey, defaultUserPresenceOfflineMinutes),
 	}
 	if err := decodeRiskUserEmailLevels(&config.RiskUserEmailLevels); err != nil {
 		return EmailSettingsConfig{}, err
+	}
+	if err := decodeUserPresenceEmailEvents(&config.UserPresenceEmailEvents); err != nil {
+		return EmailSettingsConfig{}, err
+	}
+	if config.UserPresenceOfflineMinutes <= 0 {
+		config.UserPresenceOfflineMinutes = defaultUserPresenceOfflineMinutes
 	}
 	if config.DashboardReportEmailFrequency == "" {
 		config.DashboardReportEmailFrequency = DashboardReportFrequencyDaily
@@ -92,7 +105,13 @@ func GetEmailSettingsConfig() (EmailSettingsConfig, error) {
 	if err := decodeEmailRecipientIDs(common.RiskUserEmailRecipientUserIDsOptionKey, &config.RiskUserEmailRecipientIDs); err != nil {
 		return EmailSettingsConfig{}, err
 	}
-	if len(config.AccountQuotaEmailRecipientUserIDs) == 0 || len(config.ChannelAnomalyEmailRecipientIDs) == 0 || len(config.DashboardReportEmailRecipientIDs) == 0 || len(config.RiskUserEmailRecipientIDs) == 0 {
+	if err := decodeEmailRecipientIDs(common.UserPresenceEmailMonitoredUserIDsOptionKey, &config.UserPresenceEmailMonitoredUserIDs); err != nil {
+		return EmailSettingsConfig{}, err
+	}
+	if err := decodeEmailRecipientIDs(common.UserPresenceEmailRecipientUserIDsOptionKey, &config.UserPresenceEmailRecipientIDs); err != nil {
+		return EmailSettingsConfig{}, err
+	}
+	if len(config.AccountQuotaEmailRecipientUserIDs) == 0 || len(config.ChannelAnomalyEmailRecipientIDs) == 0 || len(config.DashboardReportEmailRecipientIDs) == 0 || len(config.RiskUserEmailRecipientIDs) == 0 || len(config.UserPresenceEmailRecipientIDs) == 0 {
 		rootRecipients, err := model.GetOperationalEmailRecipientUsers(nil)
 		if err != nil {
 			return EmailSettingsConfig{}, err
@@ -113,11 +132,15 @@ func GetEmailSettingsConfig() (EmailSettingsConfig, error) {
 		if len(config.RiskUserEmailRecipientIDs) == 0 {
 			config.RiskUserEmailRecipientIDs = append([]int{}, rootIDs...)
 		}
+		if len(config.UserPresenceEmailRecipientIDs) == 0 {
+			config.UserPresenceEmailRecipientIDs = append([]int{}, rootIDs...)
+		}
 	}
 	return config, nil
 }
 
 func UpdateEmailSettingsConfig(config EmailSettingsConfig) (EmailSettingsConfig, error) {
+	previousPresenceConfig := currentUserPresenceRuntimeConfig()
 	config.LowBalanceEmailRechargeURL = strings.TrimSpace(config.LowBalanceEmailRechargeURL)
 	if len(config.DashboardReportEmailSchedules) == 0 {
 		config.DashboardReportEmailSchedules = []DashboardReportEmailSchedule{{
@@ -134,6 +157,12 @@ func UpdateEmailSettingsConfig(config EmailSettingsConfig) (EmailSettingsConfig,
 	config.DashboardReportEmailRecipientIDs = normalizeEmailRecipientIDs(config.DashboardReportEmailRecipientIDs)
 	config.RiskUserEmailLevels = normalizeRiskUserEmailLevels(config.RiskUserEmailLevels)
 	config.RiskUserEmailRecipientIDs = normalizeEmailRecipientIDs(config.RiskUserEmailRecipientIDs)
+	config.UserPresenceEmailEvents = normalizeUserPresenceEmailEvents(config.UserPresenceEmailEvents)
+	config.UserPresenceEmailMonitoredUserIDs = normalizeEmailRecipientIDs(config.UserPresenceEmailMonitoredUserIDs)
+	config.UserPresenceEmailRecipientIDs = normalizeEmailRecipientIDs(config.UserPresenceEmailRecipientIDs)
+	if config.UserPresenceOfflineMinutes == 0 {
+		config.UserPresenceOfflineMinutes = defaultUserPresenceOfflineMinutes
+	}
 	if config.LowBalanceEmailThreshold < 0 {
 		return EmailSettingsConfig{}, errors.New("low balance threshold cannot be negative")
 	}
@@ -152,7 +181,19 @@ func UpdateEmailSettingsConfig(config EmailSettingsConfig) (EmailSettingsConfig,
 	if config.RiskUserEmailEnabled && len(config.RiskUserEmailLevels) == 0 {
 		return EmailSettingsConfig{}, errors.New("at least one risk level is required")
 	}
-	if len(config.AccountQuotaEmailRecipientUserIDs) > maxOperationalEmailRecipients || len(config.ChannelAnomalyEmailRecipientIDs) > maxOperationalEmailRecipients || len(config.DashboardReportEmailRecipientIDs) > maxOperationalEmailRecipients || len(config.RiskUserEmailRecipientIDs) > maxOperationalEmailRecipients {
+	if config.UserPresenceEmailEnabled && len(config.UserPresenceEmailEvents) == 0 {
+		return EmailSettingsConfig{}, errors.New("at least one user presence event is required")
+	}
+	if config.UserPresenceEmailEnabled && len(config.UserPresenceEmailMonitoredUserIDs) == 0 {
+		return EmailSettingsConfig{}, errors.New("at least one monitored user is required")
+	}
+	if config.UserPresenceOfflineMinutes < minUserPresenceOfflineMinutes || config.UserPresenceOfflineMinutes > maxUserPresenceOfflineMinutes {
+		return EmailSettingsConfig{}, fmt.Errorf("user presence offline minutes must be between %d and %d", minUserPresenceOfflineMinutes, maxUserPresenceOfflineMinutes)
+	}
+	if len(config.UserPresenceEmailMonitoredUserIDs) > maxUserPresenceMonitoredUsers {
+		return EmailSettingsConfig{}, fmt.Errorf("monitored user count cannot exceed %d", maxUserPresenceMonitoredUsers)
+	}
+	if len(config.AccountQuotaEmailRecipientUserIDs) > maxOperationalEmailRecipients || len(config.ChannelAnomalyEmailRecipientIDs) > maxOperationalEmailRecipients || len(config.DashboardReportEmailRecipientIDs) > maxOperationalEmailRecipients || len(config.RiskUserEmailRecipientIDs) > maxOperationalEmailRecipients || len(config.UserPresenceEmailRecipientIDs) > maxOperationalEmailRecipients {
 		return EmailSettingsConfig{}, fmt.Errorf("recipient count cannot exceed %d", maxOperationalEmailRecipients)
 	}
 	if err := validateOperationalEmailRecipientIDs(config.AccountQuotaEmailRecipientUserIDs); err != nil {
@@ -165,6 +206,12 @@ func UpdateEmailSettingsConfig(config EmailSettingsConfig) (EmailSettingsConfig,
 		return EmailSettingsConfig{}, err
 	}
 	if err := validateOperationalEmailRecipientIDs(config.RiskUserEmailRecipientIDs); err != nil {
+		return EmailSettingsConfig{}, err
+	}
+	if err := validateUserPresenceMonitoredUserIDs(config.UserPresenceEmailMonitoredUserIDs); err != nil {
+		return EmailSettingsConfig{}, err
+	}
+	if err := validateOperationalEmailRecipientIDs(config.UserPresenceEmailRecipientIDs); err != nil {
 		return EmailSettingsConfig{}, err
 	}
 
@@ -192,6 +239,28 @@ func UpdateEmailSettingsConfig(config EmailSettingsConfig) (EmailSettingsConfig,
 	if err != nil {
 		return EmailSettingsConfig{}, err
 	}
+	userPresenceEventsJSON, err := common.Marshal(config.UserPresenceEmailEvents)
+	if err != nil {
+		return EmailSettingsConfig{}, err
+	}
+	userPresenceMonitoredUsersJSON, err := common.Marshal(config.UserPresenceEmailMonitoredUserIDs)
+	if err != nil {
+		return EmailSettingsConfig{}, err
+	}
+	userPresenceRecipientsJSON, err := common.Marshal(config.UserPresenceEmailRecipientIDs)
+	if err != nil {
+		return EmailSettingsConfig{}, err
+	}
+	if config.UserPresenceEmailEnabled {
+		resetUserIDs := newlyMonitoredUserPresenceIDs(previousPresenceConfig, config.UserPresenceEmailMonitoredUserIDs)
+		if !previousPresenceConfig.Enabled {
+			resetUserIDs = config.UserPresenceEmailMonitoredUserIDs
+		}
+		if err := model.ResetUserPresencesOffline(resetUserIDs, time.Now().Unix()); err != nil {
+			return EmailSettingsConfig{}, err
+		}
+		clearUserPresenceActivityWriteThrottle(resetUserIDs)
+	}
 	values := map[string]string{
 		common.SubscriptionExpiryReminderEnabledOptionKey:    strconv.FormatBool(config.SubscriptionExpiryReminderEnabled),
 		common.LowBalanceEmailEnabledOptionKey:               strconv.FormatBool(config.LowBalanceEmailEnabled),
@@ -212,6 +281,11 @@ func UpdateEmailSettingsConfig(config EmailSettingsConfig) (EmailSettingsConfig,
 		common.RiskUserEmailEnabledOptionKey:                 strconv.FormatBool(config.RiskUserEmailEnabled),
 		common.RiskUserEmailLevelsOptionKey:                  string(riskUserLevelsJSON),
 		common.RiskUserEmailRecipientUserIDsOptionKey:        string(riskUserRecipientJSON),
+		common.UserPresenceEmailEnabledOptionKey:             strconv.FormatBool(config.UserPresenceEmailEnabled),
+		common.UserPresenceEmailEventsOptionKey:              string(userPresenceEventsJSON),
+		common.UserPresenceEmailMonitoredUserIDsOptionKey:    string(userPresenceMonitoredUsersJSON),
+		common.UserPresenceEmailRecipientUserIDsOptionKey:    string(userPresenceRecipientsJSON),
+		common.UserPresenceOfflineMinutesOptionKey:           strconv.Itoa(config.UserPresenceOfflineMinutes),
 	}
 	if err := model.UpdateOptionsBulk(values); err != nil {
 		return EmailSettingsConfig{}, err

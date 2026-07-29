@@ -211,6 +211,33 @@ func SearchOperationalEmailRecipientOptions(keyword string, startIdx, pageSize i
 	return searchEmailUserOptions(keyword, startIdx, pageSize, true)
 }
 
+func SearchUserPresenceMonitorOptions(keyword string, startIdx, pageSize int) ([]EmailCampaignUserOption, int64, error) {
+	query := DB.Model(&User{}).
+		Select("id, username, display_name, email").
+		Where("status = ? AND deleted_at IS NULL", common.UserStatusEnabled)
+	if keyword = strings.TrimSpace(keyword); keyword != "" {
+		idTextExpression := "CAST(id AS TEXT)"
+		if common.UsingMainDatabase(common.DatabaseTypeMySQL) {
+			idTextExpression = "CAST(id AS CHAR)"
+		}
+		like := "%" + strings.ToLower(keyword) + "%"
+		query = query.Where(
+			"("+idTextExpression+" LIKE ? OR LOWER(username) LIKE ? OR LOWER(email) LIKE ?)",
+			like, like, like,
+		)
+	}
+	var total int64
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	if pageSize <= 0 {
+		pageSize = 20
+	}
+	var users []EmailCampaignUserOption
+	err := query.Order("id DESC").Offset(startIdx).Limit(pageSize).Scan(&users).Error
+	return users, total, err
+}
+
 func searchEmailUserOptions(keyword string, startIdx, pageSize int, adminOnly bool) ([]EmailCampaignUserOption, int64, error) {
 	query := DB.Model(&User{}).
 		Select("id, username, display_name, email").
@@ -248,6 +275,19 @@ func GetEmailCampaignUserOptionsByIds(userIDs []int) ([]EmailCampaignUserOption,
 
 func GetOperationalEmailRecipientOptionsByIDs(userIDs []int) ([]EmailCampaignUserOption, error) {
 	return getEmailUserOptionsByIDs(userIDs, true)
+}
+
+func GetUserPresenceMonitorOptionsByIDs(userIDs []int) ([]EmailCampaignUserOption, error) {
+	if len(userIDs) == 0 {
+		return []EmailCampaignUserOption{}, nil
+	}
+	var users []EmailCampaignUserOption
+	err := DB.Model(&User{}).
+		Select("id, username, display_name, email").
+		Where("id IN ? AND status = ? AND deleted_at IS NULL", userIDs, common.UserStatusEnabled).
+		Order("id DESC").
+		Scan(&users).Error
+	return users, err
 }
 
 func getEmailUserOptionsByIDs(userIDs []int, adminOnly bool) ([]EmailCampaignUserOption, error) {

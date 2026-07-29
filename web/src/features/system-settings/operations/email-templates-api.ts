@@ -35,8 +35,13 @@ export type EmailTemplateLocale = 'zh' | 'en'
 
 export type DashboardReportEmailFrequency = 'daily' | 'weekly' | 'monthly'
 export type RiskUserEmailLevel = 'medium' | 'high'
+export type UserPresenceEmailEvent = 'online' | 'offline'
 
 const DEFAULT_RISK_USER_EMAIL_LEVELS: RiskUserEmailLevel[] = ['medium', 'high']
+const DEFAULT_USER_PRESENCE_EMAIL_EVENTS: UserPresenceEmailEvent[] = [
+  'online',
+  'offline',
+]
 
 export type DashboardReportEmailSchedule = {
   id: string
@@ -66,6 +71,11 @@ export type EmailSettingsConfig = {
   risk_user_email_enabled: boolean
   risk_user_email_levels: RiskUserEmailLevel[]
   risk_user_email_recipient_user_ids: number[]
+  user_presence_email_enabled: boolean
+  user_presence_email_events: UserPresenceEmailEvent[]
+  user_presence_email_monitored_user_ids: number[]
+  user_presence_email_recipient_user_ids: number[]
+  user_presence_offline_minutes: number
 }
 
 export type EmailRecipientOption = {
@@ -185,6 +195,17 @@ export async function getEmailSettingsConfig() {
             : [...DEFAULT_RISK_USER_EMAIL_LEVELS],
           risk_user_email_recipient_user_ids:
             config.risk_user_email_recipient_user_ids ?? [],
+          user_presence_email_enabled:
+            config.user_presence_email_enabled ?? false,
+          user_presence_email_events: config.user_presence_email_events?.length
+            ? config.user_presence_email_events
+            : [...DEFAULT_USER_PRESENCE_EMAIL_EVENTS],
+          user_presence_email_monitored_user_ids:
+            config.user_presence_email_monitored_user_ids ?? [],
+          user_presence_email_recipient_user_ids:
+            config.user_presence_email_recipient_user_ids ?? [],
+          user_presence_offline_minutes:
+            config.user_presence_offline_minutes ?? 5,
         }
       : undefined,
   }
@@ -213,6 +234,26 @@ export async function searchEmailSettingsRecipients(
 export async function resolveEmailSettingsRecipients(userIds: number[]) {
   const response = await api.post<ApiResponse<EmailRecipientOption[]>>(
     '/api/email-settings/recipients/resolve',
+    { user_ids: userIds }
+  )
+  return response.data
+}
+
+export async function searchUserPresenceMonitoredUsers(
+  keyword: string,
+  page: number,
+  pageSize: number
+) {
+  const response = await api.get<ApiResponse<PageData<EmailRecipientOption>>>(
+    '/api/email-settings/monitored-users',
+    { params: { keyword, p: page, page_size: pageSize } }
+  )
+  return response.data
+}
+
+export async function resolveUserPresenceMonitoredUsers(userIds: number[]) {
+  const response = await api.post<ApiResponse<EmailRecipientOption[]>>(
+    '/api/email-settings/monitored-users/resolve',
     { user_ids: userIds }
   )
   return response.data
@@ -248,6 +289,28 @@ export async function sendRiskUserTestEmail(
   >('/api/email-settings/risk-user/test', {
     recipient_user_ids: recipientUserIds,
     risk_levels: riskLevels,
+  })
+  return response.data
+}
+
+export async function sendUserPresenceTestEmail(
+  recipientUserIds: number[],
+  monitoredUserIds: number[],
+  events: UserPresenceEmailEvent[],
+  offlineMinutes: number
+) {
+  const response = await api.post<
+    ApiResponse<{
+      recipient_count: number
+      email_count: number
+      monitored_user_id: number
+      events: UserPresenceEmailEvent[]
+    }>
+  >('/api/email-settings/user-presence/test', {
+    recipient_user_ids: recipientUserIds,
+    monitored_user_ids: monitoredUserIds,
+    events,
+    offline_minutes: offlineMinutes,
   })
   return response.data
 }

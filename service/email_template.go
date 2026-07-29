@@ -22,6 +22,7 @@ const (
 	EmailTemplateEventChannelAnomalyDisabled     = "channel.anomaly_disabled"
 	EmailTemplateEventDashboardReport            = "dashboard.report"
 	EmailTemplateEventRiskUserDetected           = "user.risk_detected"
+	EmailTemplateEventUserPresenceChanged        = "user.presence_changed"
 	EmailTemplateEventUserQuotaAdjustment        = "user.quota_adjustment"
 	EmailTemplateLocaleChinese                   = "zh"
 	EmailTemplateLocaleEnglish                   = "en"
@@ -71,6 +72,7 @@ var (
 		EmailTemplateEventChannelAnomalyDisabled,
 		EmailTemplateEventDashboardReport,
 		EmailTemplateEventRiskUserDetected,
+		EmailTemplateEventUserPresenceChanged,
 		EmailTemplateEventUserQuotaAdjustment,
 	}
 	emailTemplateDefinitions = map[string]EmailTemplateDefinition{
@@ -138,6 +140,13 @@ var (
 			Description:  "Sent to selected administrators when users reach the selected risk levels.",
 			Category:     "Operations",
 			Placeholders: []string{"system_name", "username", "display_name", "email", "alert_mode", "risk_user_count", "risk_levels", "risk_users", "window_days", "detected_at"},
+		},
+		EmailTemplateEventUserPresenceChanged: {
+			Event:        EmailTemplateEventUserPresenceChanged,
+			Label:        "User online and offline alert",
+			Description:  "Sent to selected administrators when a monitored user comes online or becomes inactive.",
+			Category:     "Operations",
+			Placeholders: []string{"system_name", "username", "display_name", "email", "monitored_user_id", "monitored_username", "monitored_display_name", "monitored_email", "presence_status", "activity_source", "activity_ip", "user_agent", "activity_at", "offline_at", "inactivity_minutes"},
 		},
 		EmailTemplateEventUserQuotaAdjustment: {
 			Event:        EmailTemplateEventUserQuotaAdjustment,
@@ -303,6 +312,25 @@ func newEmailTemplateDefaults() map[string]storedEmailTemplate {
 <p>Alert mode: <strong>{{alert_mode}}</strong><br>Evaluation window: last <strong>{{window_days}}</strong> days<br>Detected at: {{detected_at}}</p>
 <p style="margin:20px 0 8px;font-weight:600;">Risk user details</p>
 <pre style="margin:0;padding:14px;border-radius:6px;background:#f8fafc;color:#334155;font-family:inherit;white-space:pre-wrap;word-break:break-word;">{{risk_users}}</pre>`)
+
+	add(EmailTemplateEventUserPresenceChanged, EmailTemplateLocaleChinese,
+		"[{{system_name}}] 用户 {{monitored_username}} 已{{presence_status}}", "用户上线/下线通知", "#0369a1", `
+<p>{{display_name}}，您好：</p>
+<p>监控用户 <strong>{{monitored_display_name}}</strong>（#{{monitored_user_id}}）的当前状态已变更为<strong>{{presence_status}}</strong>。</p>
+<table role="presentation" style="width:100%;margin:24px 0;border-collapse:separate;border-spacing:8px;table-layout:fixed;">
+  <tr><td style="padding:16px;border-radius:6px;background:#f0f9ff;"><span style="display:block;color:#0369a1;font-size:12px;">用户</span><strong>{{monitored_username}}</strong></td><td style="padding:16px;border-radius:6px;background:#ecfdf5;"><span style="display:block;color:#047857;font-size:12px;">状态</span><strong>{{presence_status}}</strong></td></tr>
+</table>
+<p>活动来源：{{activity_source}}<br>最后活动：{{activity_at}}<br>离线判定：{{offline_at}}<br>无活动时长：{{inactivity_minutes}} 分钟<br>IP：{{activity_ip}}</p>
+<p style="padding:12px;border-radius:6px;background:#f8fafc;color:#475569;word-break:break-word;">设备：{{user_agent}}</p>`)
+	add(EmailTemplateEventUserPresenceChanged, EmailTemplateLocaleEnglish,
+		"[{{system_name}}] User {{monitored_username}} is {{presence_status}}", "User online/offline alert", "#0369a1", `
+<p>Hello {{display_name}},</p>
+<p>Monitored user <strong>{{monitored_display_name}}</strong> (#{{monitored_user_id}}) is now <strong>{{presence_status}}</strong>.</p>
+<table role="presentation" style="width:100%;margin:24px 0;border-collapse:separate;border-spacing:8px;table-layout:fixed;">
+  <tr><td style="padding:16px;border-radius:6px;background:#f0f9ff;"><span style="display:block;color:#0369a1;font-size:12px;">User</span><strong>{{monitored_username}}</strong></td><td style="padding:16px;border-radius:6px;background:#ecfdf5;"><span style="display:block;color:#047857;font-size:12px;">Status</span><strong>{{presence_status}}</strong></td></tr>
+</table>
+<p>Activity source: {{activity_source}}<br>Last activity: {{activity_at}}<br>Offline detected: {{offline_at}}<br>Inactive for: {{inactivity_minutes}} minutes<br>IP: {{activity_ip}}</p>
+<p style="padding:12px;border-radius:6px;background:#f8fafc;color:#475569;word-break:break-word;">Device: {{user_agent}}</p>`)
 
 	add(EmailTemplateEventUserQuotaAdjustment, EmailTemplateLocaleChinese,
 		"[{{system_name}}] 额度调整通知", "额度调整通知", "#0f766e", `
@@ -566,53 +594,64 @@ func renderStoredEmailTemplate(template storedEmailTemplate, values map[string]s
 
 func emailTemplateSampleValues(locale string) map[string]string {
 	values := map[string]string{
-		"system_name":           common.SystemName,
-		"username":              "demo_user",
-		"display_name":          "示例用户",
-		"email":                 "user@example.com",
-		"verification_code":     "123456",
-		"expires_in_minutes":    "15",
-		"reset_url":             "https://example.com/user/reset?token=preview",
-		"subscription_name":     "Pro",
-		"subscription_end_time": "2026-08-01 12:00:00",
-		"days_remaining":        "3",
-		"balance_type":          "钱包余额",
-		"current_balance":       "$2.50",
-		"warning_threshold":     "$5.00",
-		"recharge_url":          "https://example.com/wallet",
-		"channel_id":            "18",
-		"channel_name":          "OpenAI Production",
-		"channel_type":          "OpenAI",
-		"channel_base_url":      "https://api.openai.com",
-		"checked_at":            "2026-08-01 12:00:00",
-		"disabled_at":           "2026-08-01 12:00:00",
-		"failure_reason":        "Upstream returned HTTP 401 repeatedly.",
-		"report_type":           "日报",
-		"report_period":         "2026-07-26 00:00 - 2026-07-27 00:00",
-		"generated_at":          "2026-07-27 08:00:00",
-		"total_consumption":     "$128.50",
-		"total_quota":           "64,250,000",
-		"total_requests":        "12,580",
-		"total_tokens":          "48,320,000",
-		"active_users":          "328",
-		"active_models":         "18",
-		"active_channels":       "12",
-		"active_groups":         "4",
-		"top_models":            "1. gpt-4.1  $52.30\n2. claude-sonnet-4  $41.20\n3. gemini-2.5-pro  $23.80",
-		"top_users":             "1. alice  消费 $62.10 | 请求 5,320 | Token 20,100,000\n2. bob  消费 $41.30 | 请求 3,210 | Token 15,200,000",
-		"group_analysis":        "1. default  消费 $72.40 | 请求 7,100 | Token 27,800,000 | 用户 210\n2. vip  消费 $56.10 | 请求 5,480 | Token 20,520,000 | 用户 118",
-		"alert_mode":            "测试邮件",
-		"risk_user_count":       "2",
-		"risk_levels":           "中风险、高风险",
-		"risk_users":            "#1024 risk_medium_demo（风险测试用户） | 中风险 30 分 | 请求 12 | 错误 3 | 返还 0 | 信号：高错误率\n#1025 risk_high_demo（高风险测试用户） | 高风险 75 分 | 请求 18 | 错误 10 | 返还 3 | 信号：高错误率、输出后返还",
-		"window_days":           "7",
-		"detected_at":           "2026-07-28 12:00:00",
-		"operation":             "增加",
-		"adjustment_amount":     "$10.00",
-		"previous_quota":        "$20.00",
-		"current_quota":         "$30.00",
-		"operator_name":         "root",
-		"adjusted_at":           "2026-07-27 12:00:00",
+		"system_name":            common.SystemName,
+		"username":               "demo_user",
+		"display_name":           "示例用户",
+		"email":                  "user@example.com",
+		"verification_code":      "123456",
+		"expires_in_minutes":     "15",
+		"reset_url":              "https://example.com/user/reset?token=preview",
+		"subscription_name":      "Pro",
+		"subscription_end_time":  "2026-08-01 12:00:00",
+		"days_remaining":         "3",
+		"balance_type":           "钱包余额",
+		"current_balance":        "$2.50",
+		"warning_threshold":      "$5.00",
+		"recharge_url":           "https://example.com/wallet",
+		"channel_id":             "18",
+		"channel_name":           "OpenAI Production",
+		"channel_type":           "OpenAI",
+		"channel_base_url":       "https://api.openai.com",
+		"checked_at":             "2026-08-01 12:00:00",
+		"disabled_at":            "2026-08-01 12:00:00",
+		"failure_reason":         "Upstream returned HTTP 401 repeatedly.",
+		"report_type":            "日报",
+		"report_period":          "2026-07-26 00:00 - 2026-07-27 00:00",
+		"generated_at":           "2026-07-27 08:00:00",
+		"total_consumption":      "$128.50",
+		"total_quota":            "64,250,000",
+		"total_requests":         "12,580",
+		"total_tokens":           "48,320,000",
+		"active_users":           "328",
+		"active_models":          "18",
+		"active_channels":        "12",
+		"active_groups":          "4",
+		"top_models":             "1. gpt-4.1  $52.30\n2. claude-sonnet-4  $41.20\n3. gemini-2.5-pro  $23.80",
+		"top_users":              "1. alice  消费 $62.10 | 请求 5,320 | Token 20,100,000\n2. bob  消费 $41.30 | 请求 3,210 | Token 15,200,000",
+		"group_analysis":         "1. default  消费 $72.40 | 请求 7,100 | Token 27,800,000 | 用户 210\n2. vip  消费 $56.10 | 请求 5,480 | Token 20,520,000 | 用户 118",
+		"alert_mode":             "测试邮件",
+		"risk_user_count":        "2",
+		"risk_levels":            "中风险、高风险",
+		"risk_users":             "#1024 risk_medium_demo（风险测试用户） | 中风险 30 分 | 请求 12 | 错误 3 | 返还 0 | 信号：高错误率\n#1025 risk_high_demo（高风险测试用户） | 高风险 75 分 | 请求 18 | 错误 10 | 返还 3 | 信号：高错误率、输出后返还",
+		"window_days":            "7",
+		"detected_at":            "2026-07-28 12:00:00",
+		"monitored_user_id":      "1024",
+		"monitored_username":     "monitored_user",
+		"monitored_display_name": "监控用户",
+		"monitored_email":        "monitored@example.com",
+		"presence_status":        "离线",
+		"activity_source":        "API 调用",
+		"activity_ip":            "203.0.113.10",
+		"user_agent":             "Codex CLI/1.0",
+		"activity_at":            "2026-07-29 12:00:00",
+		"offline_at":             "2026-07-29 12:05:00",
+		"inactivity_minutes":     "5",
+		"operation":              "增加",
+		"adjustment_amount":      "$10.00",
+		"previous_quota":         "$20.00",
+		"current_quota":          "$30.00",
+		"operator_name":          "root",
+		"adjusted_at":            "2026-07-27 12:00:00",
 	}
 	if locale == EmailTemplateLocaleEnglish {
 		values["display_name"] = "Demo User"
@@ -623,6 +662,9 @@ func emailTemplateSampleValues(locale string) map[string]string {
 		values["alert_mode"] = "Test email"
 		values["risk_levels"] = "Medium risk, High risk"
 		values["risk_users"] = "#1024 risk_medium_demo (Risk Demo User) | Medium risk 30 pts | Requests 12 | Errors 3 | Refunds 0 | Signals: High error rate\n#1025 risk_high_demo (High Risk Demo User) | High risk 75 pts | Requests 18 | Errors 10 | Refunds 3 | Signals: High error rate, Refund after output"
+		values["monitored_display_name"] = "Monitored User"
+		values["presence_status"] = "Offline"
+		values["activity_source"] = "API call"
 		values["operation"] = "increase"
 	}
 	return values
