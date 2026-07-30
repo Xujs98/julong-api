@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import {
   Activity,
+  BookOpen,
   Box,
   Bug,
   CreditCard,
@@ -39,6 +40,11 @@ import { useTranslation } from 'react-i18next'
 
 import type { SidebarData } from '@/components/layout/types'
 import { firstAllowedSystemSettingsPath } from '@/features/system-settings/permissions'
+import {
+  ADMIN_PERMISSION_ACTIONS,
+  ADMIN_PERMISSION_RESOURCES,
+  hasPermission,
+} from '@/lib/admin-permissions'
 import { ROLE } from '@/lib/roles'
 import { useAuthStore } from '@/stores/auth-store'
 
@@ -53,6 +59,11 @@ export function useSidebarData(): SidebarData {
   const isAgent = useAuthStore((s) => s.auth.user?.is_agent === true)
   const user = useAuthStore((s) => s.auth.user)
   const systemSettingsPath = firstAllowedSystemSettingsPath(user)
+  const canViewLedger = hasPermission(
+    user,
+    ADMIN_PERMISSION_RESOURCES.LEDGER,
+    ADMIN_PERMISSION_ACTIONS.READ
+  )
 
   return {
     navGroups: [
@@ -81,6 +92,15 @@ export function useSidebarData(): SidebarData {
             url: '/dashboard/overview',
             icon: Activity,
           },
+          ...(canViewLedger
+            ? [
+                {
+                  title: t('Ledger'),
+                  url: '/ledger',
+                  icon: BookOpen,
+                },
+              ]
+            : []),
           {
             title: t('Dashboard'),
             url: '/dashboard/models',

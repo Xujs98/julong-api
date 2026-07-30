@@ -18,18 +18,20 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import type { AuthUser } from '@/stores/auth-store'
 
-import { ROLE } from './roles'
+import { ROLE } from './roles.ts'
 
 export type AdminPermissionMatrix = Record<string, Record<string, boolean>>
 export type AdminCapabilities = AdminPermissionMatrix
 
 export const ADMIN_PERMISSION_RESOURCES = {
   CHANNEL: 'channel',
+  LEDGER: 'ledger',
   SYSTEM_SETTINGS: 'system_settings',
 } as const
 
 export const ADMIN_PERMISSION_ACTIONS = {
   READ: 'read',
+  DELETE: 'delete',
   OPERATE: 'operate',
   WRITE: 'write',
   SENSITIVE_WRITE: 'sensitive_write',

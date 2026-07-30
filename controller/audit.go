@@ -51,6 +51,11 @@ var auditContentTemplates = map[string]string{
 
 	"subscription.plan_reset":      "Reset active subscriptions for plan ${plan_id}",
 	"subscription.user_plan_reset": "Reset active plan ${plan_id} subscriptions for user ${target_user_id}",
+
+	"ledger.create":          "Created ledger entry ${id} (${platform}, ${type}, quantity ${quantity})",
+	"ledger.update":          "Updated ledger entry ${id} (${platform}, ${type}, quantity ${quantity})",
+	"ledger.delete":          "Deleted ${deleted_count} ledger entries",
+	"ledger.settings.update": "Updated ledger estimate ratio to ${estimate_ratio}",
 }
 
 // auditContentEN 按 action 模板渲染英文兜底文本；未登记的 action 退回 action 本身。

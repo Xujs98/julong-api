@@ -225,3 +225,26 @@ func TestCapabilitiesUseCatalogShape(t *testing.T) {
 	assert.False(t, capabilities[ResourceChannel][ActionSensitiveWrite])
 	assert.False(t, capabilities[ResourceChannel][ActionSecretView])
 }
+
+func TestLedgerPermissionsRequireRootOrExplicitAdminGrant(t *testing.T) {
+	db := newAuthzTestDB(t)
+	require.NoError(t, Init(db))
+
+	assert.True(t, Can(1, common.RoleRootUser, LedgerRead))
+	assert.True(t, Can(1, common.RoleRootUser, LedgerWrite))
+	assert.True(t, Can(1, common.RoleRootUser, LedgerDelete))
+	assert.False(t, Can(42, common.RoleAdminUser, LedgerRead))
+	assert.False(t, Can(42, common.RoleAdminUser, LedgerWrite))
+	assert.False(t, Can(42, common.RoleAdminUser, LedgerDelete))
+
+	require.NoError(t, SetUserPermissions(42, PermissionsMap{
+		ResourceLedger: {
+			ActionRead:   true,
+			ActionWrite:  true,
+			ActionDelete: true,
+		},
+	}))
+	assert.True(t, Can(42, common.RoleAdminUser, LedgerRead))
+	assert.True(t, Can(42, common.RoleAdminUser, LedgerWrite))
+	assert.True(t, Can(42, common.RoleAdminUser, LedgerDelete))
+}

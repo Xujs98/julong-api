@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import type { PermissionCatalog } from '@/lib/admin-permissions'
 import { api } from '@/lib/api'
 
+import { userQuotaSummaryQueryParams } from './lib/api-cache-version'
 import type {
   User,
   GetUsersParams,
@@ -102,14 +103,18 @@ export async function searchUsers(
 export async function getUserQuotaSummary(
   params: UserQuotaSummaryParams
 ): Promise<ApiResponse<UserQuotaSummary>> {
-  const res = await api.get('/api/user/quota-summary', { params })
+  const res = await api.get('/api/user/quota-summary', {
+    params: userQuotaSummaryQueryParams(params),
+  })
   return res.data
 }
 
 export async function getUserQuotaSummarySettings(): Promise<
   ApiResponse<UserQuotaSummarySettings>
 > {
-  const res = await api.get('/api/user/quota-summary/settings')
+  const res = await api.get('/api/user/quota-summary/settings', {
+    params: userQuotaSummaryQueryParams({}),
+  })
   return res.data
 }
 
@@ -128,7 +133,11 @@ export async function searchUserQuotaSummaryOptions(
   pageSize: number
 ): Promise<ApiResponse<PageData<UserManagementOption>>> {
   const res = await api.get('/api/user/quota-summary/users', {
-    params: { keyword, p: page, page_size: pageSize },
+    params: userQuotaSummaryQueryParams({
+      keyword,
+      p: page,
+      page_size: pageSize,
+    }),
   })
   return res.data
 }

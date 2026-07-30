@@ -64,6 +64,8 @@ web/           — Frontend (React 19, Rsbuild, Base UI, Tailwind)
 
 ### Backend Rules
 
+**Development server restart:** When a task changes backend code, API routes, database migrations, or frontend assets embedded by the Go binary, the agent MUST restart the currently running development backend itself before reporting completion. After restarting, verify that the new process is listening and that a health check or the affected endpoint confirms the updated code is active. Do not leave the restart for the user unless restarting is blocked by missing authority or an external environment constraint.
+
 **relaykit module independence:** The `relaykit/` Go module MUST remain independently buildable.
 
 - Code under `relaykit/` MUST NOT import or depend on packages from the root `new-api` module, or rely on root-only configuration, generated files, or workspace wiring.

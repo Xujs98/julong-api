@@ -34,6 +34,7 @@
 | 用户风险与设备管控 | 已实现 | 风险检测支持全局或逐用户开启，按 1/7/30 天请求、错误、退款、客户端断开、异常流和 IP 等信号评分；登录 IP 与设备面板支持识别设备、封禁设备并撤销对应会话。 |
 | 模型 Token 特殊倍率 | 已实现 | 分组定价可按用户分组、计费分组和模型分别增加输入、输出、缓存读取、缓存创建 Token；用户和管理员看到计费后 Token，管理员悬浮可查看真实 Token、原始费用及分组/模型倍率收益。 |
 | 日志与兑换码导出 | 已实现 | 使用日志支持下载本页、今日、自定义时间和全部记录，CSV 使用中文表头并防公式注入；兑换码支持新生成结果复制/下载及多选复制、下载、5 秒确认删除。 |
+| 运营账本 | 已实现 | 概览下方新增独立账本页，支持日期查询、额度/用户消耗/运营成本/成本倍率汇总、CSV 下载、账本记录增改和 10 秒确认的单项/批量软删除；root 通过用户编辑器按查看、编辑、删除三项权限授权管理员。 |
 | 兑换码搜索 | 已实现 | 后台兑换码支持按兑换码 key、生成者用户名/显示名、名称、ID、状态搜索。 |
 | 签到额度预览 | 已实现 | 计费与支付中的签到奖励输入框显示格式化额度预览。 |
 | 生图日志与异步生图 | 已实现 | 开启生图日志后，`async: true` 立即创建 `pending` 日志并返回任务 ID，支持 API Key 轮询、状态更新、图片读取和后台 JSON 详情；关闭日志时退回同步且不存图。 |
@@ -571,6 +572,24 @@ curl 'http://localhost:3000/api/data/groups?start_timestamp=1784908800&end_times
   -H 'Authorization: Bearer <root-dashboard-access-token>'
 ```
 
+### 账本 API
+
+全部账本接口先设置 `Cache-Control: no-store`，再执行 `middleware.AdminAuth()`。前端 GET 请求附带内部 `ledger_api_version` 查询参数，避免浏览器继续命中路由上线前缓存的 404；用户额度汇总相关 GET 请求同样附带内部 `user_quota_summary_api_version` 参数。后端忽略这些内部参数。Web fallback 对不存在的 `/api` 和 `/v1` 路径统一返回 `no-store`，避免后续新增接口的旧 404 被浏览器长期缓存。root 作为超级管理员始终拥有全部权限；管理员默认无账本权限，root 可在“用户 -> 更新用户 -> 管理员权限”中分别授予 `ledger.read`、`ledger.write`、`ledger.delete`。Dashboard 统一 JSON 接口返回 `{success,message,data}`；CSV 导出接口直接返回文件。
+
+| 方法 | 路径 | Handler | 用途 | 请求参数/请求体 | 响应契约 | 权限 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| GET | `/api/ledger` | `controller.GetLedgerEntries` | 按账本日期查询记录并分页 | query 可选 `p/page_size`、`start_timestamp/end_timestamp` Unix 秒；时间边界均为包含 | `data={page,page_size,total,items:LedgerEntry[]}`，按 `occurred_at desc,id desc` 排序 | `ledger.read` | 完成 |
+| GET | `/api/ledger/summary` | `controller.GetLedgerSummary` | 查询当前用户总额度、所选时段消费、运营成本、运营额度和 Plus/Pro/K12 成本倍率 | query 可选 `start_timestamp/end_timestamp`，规则同列表 | `data={user_quota:{real,estimated},usage_quota:{real,estimated},daily_operating_cost,total_operating_cost,operational_quota,cost_ratios,estimate_ratio,days,ledger_entry_count,included_user_count}` | `ledger.read` | 完成 |
+| GET | `/api/ledger/settings` | `controller.GetLedgerSettings` | 读取账本预估倍率 | 无；前端附加内部缓存版本参数 | `data={estimate_ratio}`；未配置或配置非法时返回默认 `1` | `ledger.read` | 完成 |
+| GET | `/api/ledger/export` | `controller.ExportLedgerEntries` | 下载本页、今日、自定义日期或全部账本 CSV | 列表时间参数；本页下载增加 `p/page_size`，无分页时最多 5000 行 | UTF-8 BOM CSV；响应头含 `Content-Disposition`、`X-Export-Row-Limit`、`X-Export-Truncated`；危险公式前缀加单引号 | `ledger.read` | 完成 |
+| POST | `/api/ledger` | `controller.CreateLedgerEntry` | 新增账本记录 | JSON `{platform,account,email,type,quota,cost_price,quantity,occurred_at}`；`occurred_at` 为保留本地选择时、分、秒的 Unix 秒；平台限 Anthropic/OpenAI/Gemini/Antigravity/Grok，邮箱可空，类型可自定义，数量 1-10000 | `data=LedgerEntry`；`created_by` 取当前管理员 ID | `ledger.write` | 完成 |
+| PUT | `/api/ledger/settings` | `controller.UpdateLedgerSettings` | 设置账本预估倍率 | JSON `{estimate_ratio}`，大于 0 且不超过 1000，最多保留 6 位小数 | `data={estimate_ratio}`；持久化到 Options 的 `LedgerEstimateRatio` | `ledger.write` | 完成 |
+| PUT | `/api/ledger/:id` | `controller.UpdateLedgerEntry` | 更新账本记录 | path 正整数 `id`；请求体与新增相同 | `data=LedgerEntry`；不存在或参数非法返回标准错误 | `ledger.write` | 完成 |
+| DELETE | `/api/ledger/:id` | `controller.DeleteLedgerEntry` | 软删除单条账本记录 | path 正整数 `id` | `data=deleted_count` | `ledger.delete`；前端强制 10 秒倒计时确认 | 完成 |
+| POST | `/api/ledger/batch-delete` | `controller.DeleteLedgerEntries` | 批量软删除账本记录 | JSON `{ids:number[]}`，去重后 1-100 个正整数 | `data=deleted_count` | `ledger.delete`；前端强制 10 秒倒计时确认 | 完成 |
+
+账本汇总口径：额度均以数据库原始 quota unit 保存。当前用户真实额度直接复用“剩余总配额”的排除设置和汇总结果；所选时段用户消耗只统计 `type=consume` 的正额度日志。两项“预估消耗额度”统一按 `真实额度 / LedgerEstimateRatio` 计算，不读取用户分组倍率或日志倍率快照；root 或拥有 `ledger.write` 的管理员可点击“当前用户总额度”设置该倍率，默认 `1x`。运营真实额度为 `SUM(quota * quantity)`；单天运营成本为账本记录的 `cost_price * quantity`；总运营成本为所选日期范围内全部账本记录成本之和 `SUM(cost_price * quantity)`，查询天数不参与成本计算。整体及 Plus/Pro/K12 成本倍率为数量加权的 `总成本 / (总额度 / QuotaPerUnit)`；没有额度时返回 `null`。
+
 ### 生图日志 API
 
 以下接口均需要 `UserAuth()`。管理员/root 可查看全部日志，普通用户只能查看自己的记录；图片读取接口会再次校验日志所属用户。
@@ -1005,6 +1024,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 | `Channel` | `model/channel.go` | 上游 provider 渠道 | `id`、`type`、`key`、`base_url`、`models`、`group`、状态、priority/weight、计费/override 字段 | 由 distributor middleware 选择。敏感 key 需要脱敏。 | 活跃 |
 | `Ability` | `model/ability.go` | 渠道/模型能力映射 | channel/model/group enabled 字段 | 用于模型可用性和路由。 | 活跃 |
 | `Log` | `model/log.go` | 使用日志和审计日志 | 既有消费字段、可空 `user_display_group_ratio`、JSON `other`；`type=8` 为额度增加明细 | 模型 Token 倍率后的计费 Token写入 Token 列，真实/计费后 Token 保存到 `other.admin_info.model_token_adjustment`；原费用和两类倍率收益保存到 `admin_info.billing_revenue`，非管理员响应剥离。额度增加日志记录来源和额度，风险报告直接聚合既有日志信号。 | 活跃 |
+| `LedgerEntry` | `model/ledger.go` | 运营账号额度与成本账本 | `id`；索引 `platform/type/occurred_at/created_by/deleted_at`；`account/email`；原始 `quota int`；`cost_price decimal(20,6)`；`quantity int`；创建/更新时间 | `occurred_at` 与创建时间分离，按 Unix 秒保存用户选择的本地日期及时、分、秒，支持补录历史账本；删除使用 GORM `DeletedAt` 软删除。汇总读取使用日志和用户额度，但不参与 Relay 计费、预扣、结算、退款或用户余额写入。 | 活跃 |
 | `ImageGenerationLog` / `ImageGenerationImage` | `model/image_generation_log.go` | 同步生图日志与本地异步任务 | 日志含 `id`；索引 `task_id/status/user_id/username/token_id/channel_id/model_name/request_id/created_at/updated_at`；`prompt/size/quality/image_count/quota/use_time`；内部 `images/response` JSON。`ImageGenerationImage` JSON 字段为 `type/value/bucket/mime_type/sha256/size/revised_prompt`，`type` 支持 `local/remote/minio`。 | 任务属于一个 User/Token；MinIO 元数据写入现有 `images` 文本 JSON，不新增数据库列或表。旧 local/remote JSON 继续兼容；AutoMigrate 无额外迁移。 | 活跃 |
 | `UserRequestContentLog` | `model/user_request_content_log.go` | 按用户留存 Relay 请求上下文与提示词 | `id int` 主键；`user_id int` 与 `created_at int64` 组成排序索引；唯一 `request_id varchar(64)`；`model_name/token_name varchar(191)`、`request_path varchar(255)`、索引 `status varchar(16)`、`error_message text`、`original_size/captured_size int`、`truncated bool`、`compressed_json []byte` | 逻辑上属于 `User`，硬删除用户时同步删除；不建立数据库外键以兼容现有删除流程。正文先脱敏、限制为 4 MiB，再 gzip 存主库；创建和清理旧记录位于同一事务，每用户只保留最近 50 条。 | 活跃 |
 | `EmailCampaign` | `model/email_campaign.go` | 邮件群发、定时和条件任务 | `id bigint` 主键；`name varchar(128)`、`subject varchar(255)`、`content text`；索引 `mode`；`target_type`、JSON 文本 `target_user_ids`；`trigger_type/trigger_days`；`scheduled_at/next_run_at/last_run_at bigint`；`status+next_run_at` 复合索引；`created_by` 索引；累计收件/成功/失败/跳过数、`last_error`、时间戳 | 状态为 `draft/scheduled/active/running/completed/partial_failed/paused`。立即和定时任务执行一次；条件任务完成后恢复 `active` 并把 `next_run_at` 推迟 24 小时。 | 活跃 |
@@ -1043,6 +1063,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 ### 迁移注意事项
 
 - 新增持久化模型时，必须同时加入 `model/main.go` 的 `migrateDB()` 和 `migrateDBFast()`。
+- `LedgerEntry` 已同时加入标准和快速 AutoMigrate。升级启动会自动创建 `ledger_entries` 及平台、类型、账本日期时间、创建人和软删除索引；金额使用 GORM `decimal(20,6)`，兼容 SQLite、MySQL、PostgreSQL，无需手工 SQL。预估倍率以 `LedgerEstimateRatio` 保存到既有 `options` 表，默认 `1x`，不增加配置表。该迁移不修改用户额度、使用日志或既有计费数据，部署前仍应备份主库。
 - `EmailCampaign`、`EmailDelivery` 已同时加入标准和快速 AutoMigrate。升级启动会自动创建 `email_campaigns`、`email_deliveries` 及索引，不修改用户、订阅、余额和既有日志；SQLite、MySQL、PostgreSQL 均使用 GORM 兼容类型，无需手工 SQL。部署前仍应备份主库。
 - `UserPresence` 已同时加入标准和快速 AutoMigrate。升级启动自动创建 `user_presences`，只保存被监控用户的状态与最后活动元数据，不修改 `users`、令牌、额度或日志表；部署前仍应备份主库。
 - 邮件设置的 11 类双语模板、数据报表多规则/调度历史、风险邮件状态及上线/下线配置均保存到既有 `options` 表；订阅提醒发送记录继续复用 `email_deliveries` 且 `campaign_id=0`。中文模板继续使用旧事件键，英文使用 `event::en` 键；旧模板和旧单条报表频率/时间配置会自动兼容，无需手工迁移。
@@ -1076,6 +1097,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 | `/error-report` | `routes/error-report.tsx` | 提交错误反馈 | 公开 | 完成 |
 | `/dashboard/*` | `_authenticated/dashboard/*` | 看板统计 | 用户 | 完成 |
 | `/keys` | `_authenticated/keys/index.tsx` | API Keys | 用户 | 完成 |
+| `/ledger` | `_authenticated/ledger/index.tsx` | 运营账本：日期查询、六项汇总、可点击配置的预估倍率、CSV 下载、秒级日期时间记录增改和 10 秒确认单项/批量删除 | Root 或 `ledger.read`；写入按钮及预估倍率设置需 `ledger.write`，删除控件需 `ledger.delete` | 完成 |
 | `/usage-logs/*` | `_authenticated/usage-logs/*` | 使用日志/任务日志/绘图日志 | 用户/管理员视图不同 | 完成 |
 | `/wallet` | `_authenticated/wallet/index.tsx` | 钱包、充值、兑换码 | 用户 | 完成 |
 | `/profile` | `_authenticated/profile/index.tsx` | 个人资料/安全 | 用户 | 完成 |
@@ -1123,6 +1145,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 | `system-settings/operations/email-templates`（显示名“邮件设置”） | `email-template-settings-section.tsx:EmailTemplateSettingsSection`、`email-alert-settings.tsx:EmailAlertSettings/AlertPanel`、`dashboard-report-schedule-editor.tsx`、`email-templates-api.ts`、`email-campaign-user-picker.tsx` | 七张提醒卡配置订阅到期、余额不足、渠道账号额度、渠道异常、数据看板报表、风险用户和用户上线/下线；上线事件和监控用户可多选，默认 5 分钟无登录/后台/API 活动判定下线，收件人仅限管理员/root，并可发送真实 SMTP 测试。下方按事件和 `zh/en` 编辑 11 类图片式模板 | `/api/email-settings/config`、`/recipients*`、`/monitored-users*`、`/channel-anomaly/test`、`/dashboard-report/test`、`/risk-user/test`、`/user-presence/test`、`/templates*` | 完成 |
 | `channels` | `channels-table.tsx`、`channels-columns.tsx`、dialogs/drawers、`api.ts` | 上游渠道 CRUD/测试/配置 | `/api/channel*` | 完成 |
 | `keys` | `api-keys-table.tsx`、`api-keys-columns.tsx`、`api-keys-mutate-drawer.tsx`、`api-key-group-combobox.tsx`、mutate/delete dialogs | 用户 API key 管理；令牌分组下拉框和列表倍率统一读取 `/api/user/self/groups`，可配置展示真实特殊倍率或基础定价分组倍率 | `/api/token*`、`/api/user/self/groups` | 完成 |
+| `ledger` | `index.tsx`、`api.ts`、`types.ts`、`ledger-summary-cards.tsx`、`ledger-estimate-ratio-dialog.tsx`、`ledger-entry-dialog.tsx`、`ledger-export-menu.tsx`、`ledger-delete-dialog.tsx` | 账本日期筛选、统一预估倍率设置、六项汇总卡片、秒级日期时间、分页表格、权限感知的新增/编辑/单项与批量删除、10 秒确认和四种 CSV 下载范围 | `/api/ledger*`；复用使用日志日期范围选择器、用户权限矩阵和全站额度/货币格式 | 完成 |
 | `usage-logs` | `usage-logs-table.tsx`、`usage-logs-export-menu.tsx`、`cost-breakdown-tooltip.tsx`、普通/绘图/生图/任务 columns、倍率审计 libs | 普通消费日志、绘图、生图和媒体任务日志；下载菜单支持本页、今日、自定义时间和全部 CSV。用户和管理员均展示模型倍率调整后的 Token；管理员/root 悬浮 Tokens 查看真实 Token，悬浮费用查看原始费用及分组特殊倍率/模型倍率收益。原有普通用户倍率展示逻辑保持不变 | `/api/log*`、`/api/log/export`、`/api/log/self/export`、`/api/mj`、`/api/image-generation-logs*`、`/api/task` | 完成 |
 | `wallet` | recharge cards、subscription cards、affiliate rewards、redemption hook | 钱包充值、兑换码、订阅 | `/api/user/topup*`、`/api/subscription*`、支付 API | 完成 |
 | `redemption-codes` | `redemptions-generated-dialog.tsx`、`data-table-bulk-actions.tsx`、`redemptions-multi-delete-dialog.tsx`、表格和编辑弹窗 | 管理员/代理兑换码管理；刚生成的兑换码支持仅复制代码、复制名称和代码、一键下载；多选支持仅复制代码、下载和管理员 5 秒确认批量删除 | `/api/redemption*`、`POST /api/redemption/batch`、`/api/user/agent/topup-link` | 完成 |
@@ -1303,6 +1326,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 - 禁用用户提升认证版本并撤销全部活跃 Dashboard 会话，避免旧 access/refresh token 继续使用。
 - 兑换码支持按生成者、兑换码、名称、ID 搜索。
 - 签到奖励额度预览。
+- 运营账本页面、数据库持久化、日期/汇总/导出接口，以及 root 可分配的查看、编辑、删除权限。
 - 可由 root 开关控制、支持图片预览和自动保留清理的生图日志。
 - 生图 `async: true` 提交、任务 ID 轮询、状态/错误记录、受保护图片读取和后台 JSON 详情；轮询频率可配置，日志关闭时异步和图片存储同步关闭。
 - 订阅套餐可授予普通用户生图日志查看权限，并限制可见的最近记录数量。
@@ -1330,6 +1354,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 
 | 日期 | 变更 | 更新文件/API/模型 | 验证 |
 | --- | --- | --- | --- |
+| 2026-07-30 | 概览下方新增“账本”：root 可在管理员权限中分别授予查看、编辑和删除；账本按独立日期时间持久化平台、账号、可选邮箱、自定义类型、额度、成本价和数量，保留输入的时、分、秒，支持日期查询、六项运营汇总、本页/今日、自定义/全部 CSV 下载，以及 10 秒倒计时的单项和最多 100 条批量软删除。当前用户总额度卡片可设置统一预估倍率，当前用户额度和所选时段用户消耗均按 `真实额度 / 预估倍率` 显示预估消耗额度；单天和总运营成本按所选范围内账本记录的 `成本价 × 数量` 累加，总成本不乘查询天数。整体及 Plus/Pro/K12 使用数量加权成本倍率。账本和用户额度汇总 GET 请求增加缓存版本参数；Web fallback 对未知 `/api`、`/v1` 响应统一禁用缓存，绕过并阻止路由上线前的 404 被浏览器缓存一周。 | `LedgerEntry`、`LedgerEstimateRatio`、`/api/ledger*`、`/api/user/quota-summary*`、`ledger.read/write/delete`、`middleware.Cache`、`web/src/features/ledger/*`、`web/src/features/users/api.ts`、`/ledger`、侧边栏、管理员权限目录、七语言 locale、`DEVELOPMENT.md` | Model 日期/聚合/软删除/使用额度/倍率设置测试、Service 统一预估倍率和成本公式测试、Controller 输入边界/CSV 注入测试、Authz root/管理员授权测试、API 404 缓存回归测试、前端导出/倒计时/权限/日期时间/倍率入口测试、typecheck、目标 lint、i18n 同步；最终全量测试与构建结果见交付说明。 |
 | 2026-07-29 | 邮件设置新增用户上线/下线通知：可分别或同时监控上线、下线事件，多选启用用户和有效管理员/root 收件人；成功登录、已认证后台请求、API Key 普通与只读调用均算在线活动，默认连续 5 分钟无活动转为离线。状态转换去重且请求侧 30 秒节流，系统任务按数据库租约每分钟检测下线；真实 SMTP 测试使用首个已选真实用户，模板新增 `user.presence_changed` 中英文图片式卡片。 | `UserPresenceEmail*` Options、`UserPresence`、`user_presence_email` 系统任务、`middleware/auth.go`、`POST /api/email-settings/user-presence/test`、`GET/POST /api/email-settings/monitored-users*`、邮件设置与模板组件 | 在线/持续在线/超时离线/重复扫描状态测试、真实监控用户双事件邮件测试、模板目录与样式测试、路由回归、Go 相关包测试、前端 typecheck/lint、7 语言 i18n 同步。 |
 | 2026-07-29 | 用户管理筛选栏在标签后新增“剩余总配额”和“不统计用户”：汇总默认覆盖全部列表用户并随用户名/姓名/邮箱、分组、状态、角色、标签筛选同步重算；管理员/root 可持久化排除普通用户、管理员、root 或已删除用户，排除只影响汇总和匹配人数，不隐藏列表用户。 | `UserQuotaSummaryExcludedUserIDs`、`model.Get/UpdateUserQuotaSummarySettings`、`controller/user_quota_summary_settings.go`、`/api/user/quota-summary*`、`users-table.tsx`、`user-quota-summary-control.tsx`、`user-quota-summary-badge.tsx`、`DataTableToolbar.afterFilters`、`lib/user-quota-summary.ts` | Model 多条件/空结果/软删除/持久化排除/用户回显测试、Controller 配置与汇总响应测试、风险标签汇总回归、前端筛选参数和剩余总配额文案测试、TypeScript typecheck、目标文件 lint/format、i18n 同步、`git diff --check`。 |
 | 2026-07-28 | 修复系统维护版本信息：建立矩龙版本 `v1.0.0-julong.1`，`VERSION` 作为 Docker/Makefile 构建版本来源，空版本会中止构建；后端默认版本同步，避免本地直接编译显示 `v0.0.0`。已合并 New API 版本继续由状态接口返回 `v1.0.0-rc.22` 和提交 `afe16c64c`。 | `VERSION`、`common.Version`、`Dockerfile`、`Dockerfile.dev`、`Makefile`、`GET /api/status` | 状态接口回归、版本构建参数、Docker 构建前置校验。 |

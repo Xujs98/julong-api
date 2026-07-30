@@ -164,6 +164,7 @@ const (
 	UserPresenceEmailRecipientUserIDsOptionKey    = "UserPresenceEmailRecipientUserIDs"
 	UserPresenceOfflineMinutesOptionKey           = "UserPresenceOfflineMinutes"
 	UserQuotaSummaryExcludedUserIDsOptionKey      = "UserQuotaSummaryExcludedUserIDs"
+	LedgerEstimateRatioOptionKey                  = "LedgerEstimateRatio"
 )
 
 var GitHubClientId = ""

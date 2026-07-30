@@ -119,6 +119,14 @@ export const STATIC_I18N_KEYS = [
   'Failed to delete user',
   'No user selected',
 
+  // Ledger permission catalog (backend-provided labels)
+  'View ledger',
+  'View ledger entries, summaries, and downloads.',
+  'Edit ledger',
+  'Create and edit ledger entries.',
+  'Delete ledger entries',
+  'Delete one or multiple ledger entries after confirmation.',
+
   // Redemption codes
   'Unused',
   'Disabled',
