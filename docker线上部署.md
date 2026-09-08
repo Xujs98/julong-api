@@ -71,15 +71,13 @@ Docker Hub 用户名为 `qq1371446705`。
 ```bash
 cd /Users/xujs/.docker_dir/new-api
 
-docker build --platform linux/amd64 \
-  -t qq1371446705/julong-api:latest .
+./docker-publish.sh build latest
 ```
 
 不建议日常更新使用 `--no-cache`，它会明显增加构建时间和资源占用。只有确认缓存异常时才使用：
 
 ```bash
-docker build --no-cache --platform linux/amd64 \
-  -t qq1371446705/julong-api:latest .
+NO_CACHE=1 ./docker-publish.sh build latest
 ```
 
 ### 5. 检查本地镜像
@@ -94,7 +92,7 @@ docker image inspect qq1371446705/julong-api:latest \
 ### 6. 推送 Docker Hub
 
 ```bash
-docker push qq1371446705/julong-api:latest
+./docker-publish.sh push latest
 ```
 
 出现以下内容表示推送成功：
@@ -117,20 +115,67 @@ ssh root@38.246.244.17
 cd /root/julong-api
 ```
 
-### 1. 建议先备份数据库
+### 1. 必须先备份数据库和持久化目录
 
 ```bash
 mkdir -p /root/julong-api/backups
 
 docker exec julong-api-postgres pg_dump \
-  -U root -d julong-api \
-  > /root/julong-api/backups/julong-api-$(date +%Y%m%d-%H%M%S).sql
+  -U root -d julong-api --format=custom \
+  > /root/julong-api/backups/julong-api-$(date +%Y%m%d-%H%M%S).dump
+
+tar -C /root/julong-api -czf \
+  /root/julong-api/backups/files-$(date +%Y%m%d-%H%M%S).tar.gz \
+  data logs docker-compose.yml
+
+if [ -f /root/julong-api/.env ]; then
+  cp -a /root/julong-api/.env /root/julong-api/backups/env-$(date +%Y%m%d-%H%M%S)
+fi
 ```
 
-确认备份文件不是空文件：
+如使用独立日志数据库，再单独备份日志库：
 
 ```bash
-ls -lh /root/julong-api/backups
+docker exec julong-api-postgres pg_dump \
+  -U root -d julong-api-log --format=custom \
+  > /root/julong-api/backups/julong-api-log-$(date +%Y%m%d-%H%M%S).dump
+```
+
+确认备份文件存在且不是空文件：
+
+```bash
+find /root/julong-api/backups -type f -size +0 -printf '%TY-%Tm-%Td %TH:%TM %10s %p\n' | tail
+```
+
+可用以下命令校验 PostgreSQL 自定义格式备份：
+
+```bash
+pg_restore --list /root/julong-api/backups/julong-api-*.dump >/dev/null
+```
+
+恢复主库时，应先停止应用写入，再清空目标库并执行：
+
+```bash
+docker compose stop julong-api
+cat /root/julong-api/backups/julong-api-YYYYMMDD-HHMMSS.dump | \
+  docker exec -i julong-api-postgres pg_restore \
+    -U root -d julong-api --clean --if-exists --no-owner
+docker compose start julong-api
+```
+
+如果服务器未安装 `pg_restore`，直接通过容器校验：
+
+```bash
+cat /root/julong-api/backups/julong-api-YYYYMMDD-HHMMSS.dump | \
+  docker exec -i julong-api-postgres pg_restore --list >/dev/null
+```
+
+旧的纯 SQL 备份方式仍可使用：
+
+```bash
+docker exec julong-api-postgres pg_dump \
+  -U root -d julong-api \
+  > /root/julong-api/backups/julong-api-$(date +%Y%m%d-%H%M%S).sql
 ```
 
 ### 2. 拉取 GitHub 最新代码和 Compose 配置
@@ -191,10 +236,7 @@ cd /Users/xujs/.docker_dir/new-api
 
 git push origin main
 
-docker build --platform linux/amd64 \
-  -t qq1371446705/julong-api:latest .
-
-docker push qq1371446705/julong-api:latest
+./docker-publish.sh publish latest
 ```
 
 ### 服务器
@@ -240,12 +282,8 @@ docker volume rm julong-api_pg_data
 ```bash
 VERSION=2026.07.14-1
 
-docker build --platform linux/amd64 \
-  -t qq1371446705/julong-api:$VERSION \
-  -t qq1371446705/julong-api:latest .
-
-docker push qq1371446705/julong-api:$VERSION
-docker push qq1371446705/julong-api:latest
+./docker-publish.sh publish "$VERSION"
+./docker-publish.sh publish latest
 ```
 
 需要回滚时，在服务器将 `docker-compose.yml` 中镜像临时改为目标版本：

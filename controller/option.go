@@ -429,6 +429,43 @@ func UpdateOption(c *gin.Context) {
 			})
 			return
 		}
+	case "invoice_setting.enabled":
+		if option.Value != "true" && option.Value != "false" {
+			common.ApiErrorMsg(c, "自助发票开关值无效")
+			return
+		}
+	case "invoice_setting.minimum_amount":
+		amount, parseErr := strconv.ParseFloat(option.Value.(string), 64)
+		if parseErr != nil || amount <= 0 || amount > 1000000000 || math.IsNaN(amount) || math.IsInf(amount, 0) {
+			common.ApiErrorMsg(c, "发票最低申请金额必须是大于 0 且不超过 1000000000 的有效数字")
+			return
+		}
+		quota, quotaErr := common.QuotaFromFloatStrict(amount * common.QuotaPerUnit)
+		if quotaErr != nil || quota <= 0 {
+			common.ApiErrorMsg(c, "发票最低申请金额超过系统额度范围")
+			return
+		}
+	case "invoice_setting.unit":
+		unit := strings.TrimSpace(option.Value.(string))
+		if len([]rune(unit)) == 0 || len([]rune(unit)) > 16 {
+			common.ApiErrorMsg(c, "发票金额单位长度必须为 1 到 16 个字符")
+			return
+		}
+		option.Value = unit
+	case "invoice_setting.processing_days":
+		days := strings.TrimSpace(option.Value.(string))
+		if len([]rune(days)) == 0 || len([]rune(days)) > 32 {
+			common.ApiErrorMsg(c, "发票处理工作日说明长度必须为 1 到 32 个字符")
+			return
+		}
+		option.Value = days
+	case "invoice_setting.rejection_freeze_hours":
+		hours, parseErr := strconv.Atoi(strings.TrimSpace(option.Value.(string)))
+		if parseErr != nil || hours < 0 || hours > 8760 {
+			common.ApiErrorMsg(c, "发票驳回冷冻时间必须是 0 到 8760 之间的整数小时")
+			return
+		}
+		option.Value = strconv.Itoa(hours)
 	case "console_setting.api_info":
 		err = console_setting.ValidateConsoleSettings(option.Value.(string), "ApiInfo")
 		if err != nil {

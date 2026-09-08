@@ -57,9 +57,11 @@ bun run dev
 本地构建服务器使用的 Linux AMD64 镜像：
 
 ```bash
-docker build --platform linux/amd64 \
-  -t qq1371446705/julong-api:latest .
-docker push qq1371446705/julong-api:latest
+./docker-publish.sh build latest
+./docker-publish.sh push latest
+
+# 或一次完成构建、校验与推送
+./docker-publish.sh publish latest
 ```
 
 服务器更新：

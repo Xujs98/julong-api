@@ -43,7 +43,6 @@ import {
   FormMessage,
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import {
   Select,
   SelectContent,
@@ -659,36 +658,39 @@ export function UsersMutateDrawer({
                   </SideDrawerSection>
                 )}
 
-              {/* Binding Information (Read-only) */}
-              {isUpdate && (
-                <SideDrawerSection>
-                  <h3 className='text-sm font-medium'>
-                    {t('Binding Information')}
-                  </h3>
-                  <p className='text-muted-foreground text-xs'>
-                    {t(
-                      'Third-party account bindings (read-only, managed by user in profile settings)'
-                    )}
-                  </p>
+              <SideDrawerSection>
+                <h3 className='text-sm font-medium'>
+                  {t('Binding Information')}
+                </h3>
+                <p className='text-muted-foreground text-xs'>
+                  {t(
+                    'Administrators can add, update, or clear account bindings for this user.'
+                  )}
+                </p>
 
-                  <div className='flex flex-col gap-3'>
-                    {BINDING_FIELDS.map(({ key, label }) => (
-                      <div key={key}>
-                        <Label className='text-muted-foreground text-xs'>
-                          {t(label)}
-                        </Label>
-                        <Input
-                          value={
-                            (currentRow?.[key as keyof User] as string) || '-'
-                          }
-                          disabled
-                          className='mt-1'
-                        />
-                      </div>
-                    ))}
-                  </div>
-                </SideDrawerSection>
-              )}
+                <div className='grid gap-3 sm:grid-cols-2'>
+                  {BINDING_FIELDS.map(({ key, label }) => (
+                    <FormField
+                      key={key}
+                      control={form.control}
+                      name={`binding_updates.${key}`}
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>{t(label)}</FormLabel>
+                          <FormControl>
+                            <Input
+                              {...field}
+                              autoComplete='off'
+                              placeholder={t('Not bound')}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  ))}
+                </div>
+              </SideDrawerSection>
             </form>
           </Form>
           <SheetFooter className={sideDrawerFooterClassName()}>

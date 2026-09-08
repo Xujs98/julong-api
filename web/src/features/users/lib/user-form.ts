@@ -51,6 +51,15 @@ export const userFormSchema = z.object({
   admin_permissions: z
     .record(z.string(), z.record(z.string(), z.boolean()))
     .optional(),
+  binding_updates: z.object({
+    email: z.string().max(50),
+    github_id: z.string().max(255),
+    discord_id: z.string().max(255),
+    oidc_id: z.string().max(255),
+    wechat_id: z.string().max(255),
+    telegram_id: z.string().max(255),
+    linux_do_id: z.string().max(255),
+  }),
 })
 
 export type UserFormValues = z.infer<typeof userFormSchema>
@@ -75,6 +84,15 @@ export const USER_FORM_DEFAULT_VALUES: UserFormValues = {
   agent_topup_link: '',
   // Filled against the backend catalog at render time; see UsersMutateDrawer.
   admin_permissions: {},
+  binding_updates: {
+    email: '',
+    github_id: '',
+    discord_id: '',
+    oidc_id: '',
+    wechat_id: '',
+    telegram_id: '',
+    linux_do_id: '',
+  },
 }
 
 // ============================================================================
@@ -96,6 +114,7 @@ export function transformFormDataToPayload(
     is_agent: data.is_agent || false,
     agent_discount: data.is_agent ? (data.agent_discount ?? 100) : 100,
     agent_topup_link: data.is_agent ? data.agent_topup_link || '' : '',
+    binding_updates: data.binding_updates,
   }
 
   const role = userId === undefined ? data.role || 1 : (data.role ?? 0)
@@ -153,5 +172,14 @@ export function transformUserToFormDefaults(user: User): UserFormValues {
     agent_discount: user.agent_discount ?? 100,
     agent_topup_link: user.agent_topup_link || '',
     admin_permissions: user.admin_permissions ?? {},
+    binding_updates: {
+      email: user.email || '',
+      github_id: user.github_id || '',
+      discord_id: user.discord_id || '',
+      oidc_id: user.oidc_id || '',
+      wechat_id: user.wechat_id || '',
+      telegram_id: user.telegram_id || '',
+      linux_do_id: user.linux_do_id || '',
+    },
   }
 }

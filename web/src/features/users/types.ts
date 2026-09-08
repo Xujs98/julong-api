@@ -50,6 +50,7 @@ export const userSchema = z.object({
   display_name: z.string(),
   password: z.string().optional(),
   github_id: z.string().optional(),
+  discord_id: z.string().optional(),
   oidc_id: z.string().optional(),
   wechat_id: z.string().optional(),
   telegram_id: z.string().optional(),
@@ -174,6 +175,17 @@ export interface UserFormData {
   agent_discount?: number
   agent_topup_link?: string
   admin_permissions?: AdminPermissionMatrix
+  binding_updates?: UserBindingUpdates
+}
+
+export interface UserBindingUpdates {
+  email: string
+  github_id: string
+  discord_id: string
+  oidc_id: string
+  wechat_id: string
+  telegram_id: string
+  linux_do_id: string
 }
 
 export type ManageUserAction =

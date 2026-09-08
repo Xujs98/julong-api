@@ -334,6 +334,11 @@ export type BillingSettings = {
   'checkin_setting.enabled': boolean
   'checkin_setting.min_quota': number
   'checkin_setting.max_quota': number
+  'invoice_setting.enabled': boolean
+  'invoice_setting.minimum_amount': number
+  'invoice_setting.unit': string
+  'invoice_setting.processing_days': string
+  'invoice_setting.rejection_freeze_hours': number
 }
 
 export type OperationsSettings = {

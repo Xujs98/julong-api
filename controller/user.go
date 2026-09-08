@@ -1007,6 +1007,7 @@ func generateDefaultSidebarConfig(userRole int) string {
 	defaultConfig["personal"] = map[string]interface{}{
 		"enabled":  true,
 		"topup":    true,
+		"invoice":  true,
 		"personal": true,
 	}
 
@@ -1129,10 +1130,21 @@ func UpdateUser(c *gin.Context) {
 		if err := updatedUser.EditWithTx(tx, updatePassword); err != nil {
 			return err
 		}
+		if err := model.ApplyUserBindingUpdatesWithTx(tx, updatedUser.Id, updatedUser.BindingUpdates); err != nil {
+			return err
+		}
 		touched, err := updateAdminPermissionsForUserInTx(c, tx, updatedUser.Id, originUser.Role, updatedUser.AdminPermissions)
 		authzTouched = touched
 		return err
 	}); err != nil {
+		if errors.Is(err, model.ErrBindingAlreadyTaken) {
+			common.ApiErrorMsg(c, "绑定信息已被其他用户使用")
+			return
+		}
+		if errors.Is(err, model.ErrBindingInvalid) {
+			common.ApiErrorMsg(c, "绑定信息长度无效")
+			return
+		}
 		common.ApiError(c, err)
 		return
 	}
@@ -1457,16 +1469,28 @@ func CreateUser(c *gin.Context) {
 		IsAgent:        user.IsAgent,
 		AgentDiscount:  user.AgentDiscount,
 		AgentTopUpLink: user.AgentTopUpLink,
+		BindingUpdates: user.BindingUpdates,
 	}
 	authzTouched := false
 	if err := model.DB.Transaction(func(tx *gorm.DB) error {
 		if err := cleanUser.InsertWithTx(tx, 0); err != nil {
 			return err
 		}
+		if err := model.ApplyUserBindingUpdatesWithTx(tx, cleanUser.Id, cleanUser.BindingUpdates); err != nil {
+			return err
+		}
 		touched, err := updateAdminPermissionsForUserInTx(c, tx, cleanUser.Id, cleanUser.Role, user.AdminPermissions)
 		authzTouched = touched
 		return err
 	}); err != nil {
+		if errors.Is(err, model.ErrBindingAlreadyTaken) {
+			common.ApiErrorMsg(c, "绑定信息已被其他用户使用")
+			return
+		}
+		if errors.Is(err, model.ErrBindingInvalid) {
+			common.ApiErrorMsg(c, "绑定信息长度无效")
+			return
+		}
 		common.ApiError(c, err)
 		return
 	}

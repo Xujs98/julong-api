@@ -102,6 +102,11 @@ const PLACEHOLDER_LABELS: Record<string, string> = {
   current_quota: 'Current quota',
   operator_name: 'Operator name',
   adjusted_at: 'Adjustment time',
+  application_id: 'Application ID',
+  invoice_amount: 'Invoice amount',
+  invoice_unit: 'Invoice unit',
+  applied_at: 'Applied at',
+  completed_at: 'Completed at',
 }
 
 const SAMPLE_VALUES: Record<EmailTemplateLocale, Record<string, string>> = {
@@ -168,6 +173,11 @@ const SAMPLE_VALUES: Record<EmailTemplateLocale, Record<string, string>> = {
     current_quota: '$30.00',
     operator_name: 'root',
     adjusted_at: '2026-07-27 12:00:00',
+    application_id: '1024',
+    invoice_amount: '310.00',
+    invoice_unit: 'USD',
+    applied_at: '2026-09-08 08:22:56',
+    completed_at: '2026-09-08 10:30:00',
   },
   en: {
     system_name: 'Julong API',
@@ -232,6 +242,11 @@ const SAMPLE_VALUES: Record<EmailTemplateLocale, Record<string, string>> = {
     current_quota: '$30.00',
     operator_name: 'root',
     adjusted_at: '2026-07-27 12:00:00',
+    application_id: '1024',
+    invoice_amount: '310.00',
+    invoice_unit: 'USD',
+    applied_at: '2026-09-08 08:22:56',
+    completed_at: '2026-09-08 10:30:00',
   },
 }
 

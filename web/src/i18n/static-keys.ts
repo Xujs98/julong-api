@@ -582,4 +582,6 @@ export const STATIC_I18N_KEYS = [
   'This user account is disabled.',
   'Telegram binding failed. Please try again.',
   'Verification scope is missing',
+  'Self-service Invoices',
+  'Save invoice settings',
 ] as const

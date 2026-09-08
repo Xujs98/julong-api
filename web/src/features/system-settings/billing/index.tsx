@@ -109,6 +109,11 @@ const defaultBillingSettings: BillingSettings = {
   'checkin_setting.enabled': false,
   'checkin_setting.min_quota': 1000,
   'checkin_setting.max_quota': 10000,
+  'invoice_setting.enabled': false,
+  'invoice_setting.minimum_amount': 300,
+  'invoice_setting.unit': 'USD',
+  'invoice_setting.processing_days': '1-3',
+  'invoice_setting.rejection_freeze_hours': 72,
 }
 
 export function BillingSettings() {

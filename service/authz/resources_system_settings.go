@@ -21,7 +21,7 @@ func init() {
 		{"auth.custom-oauth", "Custom OAuth"},
 		{"billing.quota", "Quota Settings"}, {"billing.currency", "Currency & Display"},
 		{"billing.model-pricing", "Model Pricing"}, {"billing.group-pricing", "Group Pricing"},
-		{"billing.payment", "Payment Gateway"}, {"billing.checkin", "Check-in Rewards"},
+		{"billing.payment", "Payment Gateway"}, {"billing.checkin", "Check-in Rewards"}, {"billing.invoice", "Self-service Invoices"},
 		{"models.global", "Global Model Configuration"}, {"models.routing-reliability", "Routing Reliability"},
 		{"models.gemini", "Gemini"}, {"models.claude", "Claude"}, {"models.grok", "Grok"},
 		{"models.channel-affinity", "Channel Affinity"}, {"models.model-deployment", "Model Deployment"},

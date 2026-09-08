@@ -1,14 +1,27 @@
 package common
 
 import (
+	"bytes"
 	"crypto/tls"
 	"encoding/base64"
 	"fmt"
+	"io"
+	"mime"
+	"mime/multipart"
 	"net/smtp"
+	"net/textproto"
+	"net/url"
+	"path/filepath"
 	"slices"
 	"strings"
 	"time"
 )
+
+type EmailAttachment struct {
+	Filename    string
+	ContentType string
+	Data        []byte
+}
 
 func generateMessageID() (string, error) {
 	split := strings.Split(SMTPFrom, "@")
@@ -94,6 +107,79 @@ func SendEmail(subject string, receiver string, content string) error {
 		"Message-ID: %s\r\n"+ // 添加 Message-ID 头
 		"Content-Type: text/html; charset=UTF-8\r\n\r\n%s\r\n",
 		receiver, SystemName, SMTPFrom, encodedSubject, time.Now().Format(time.RFC1123Z), id, content))
+	return sendSMTPMessage(receiver, mail)
+}
+
+func SendEmailWithAttachments(subject, receiver, content string, attachments []EmailAttachment) error {
+	if len(attachments) == 0 {
+		return SendEmail(subject, receiver, content)
+	}
+	if SMTPFrom == "" {
+		SMTPFrom = SMTPAccount
+	}
+	id, err := generateMessageID()
+	if err != nil {
+		return err
+	}
+	if SMTPServer == "" && SMTPAccount == "" {
+		return fmt.Errorf("SMTP 服务器未配置")
+	}
+	encodedSubject := fmt.Sprintf("=?UTF-8?B?%s?=", base64.StdEncoding.EncodeToString([]byte(subject)))
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	fmt.Fprintf(&body, "To: %s\r\nFrom: %s <%s>\r\nSubject: %s\r\nDate: %s\r\nMessage-ID: %s\r\nMIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=%q\r\n\r\n", receiver, SystemName, SMTPFrom, encodedSubject, time.Now().Format(time.RFC1123Z), id, writer.Boundary())
+	htmlHeader := textproto.MIMEHeader{}
+	htmlHeader.Set("Content-Type", "text/html; charset=UTF-8")
+	htmlHeader.Set("Content-Transfer-Encoding", "base64")
+	htmlPart, err := writer.CreatePart(htmlHeader)
+	if err != nil {
+		return err
+	}
+	if err := writeBase64MIME(htmlPart, []byte(content)); err != nil {
+		return err
+	}
+	for i := range attachments {
+		filename := strings.NewReplacer("\r", "", "\n", "", "\"", "").Replace(filepath.Base(attachments[i].Filename))
+		if filename == "" {
+			filename = "invoice"
+		}
+		contentType := strings.TrimSpace(attachments[i].ContentType)
+		if parsedType, _, parseErr := mime.ParseMediaType(contentType); parseErr == nil {
+			contentType = parsedType
+		} else {
+			contentType = "application/octet-stream"
+		}
+		header := textproto.MIMEHeader{}
+		header.Set("Content-Type", contentType)
+		header.Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"invoice%s\"; filename*=UTF-8''%s", filepath.Ext(filename), url.PathEscape(filename)))
+		header.Set("Content-Transfer-Encoding", "base64")
+		part, createErr := writer.CreatePart(header)
+		if createErr != nil {
+			return createErr
+		}
+		if writeErr := writeBase64MIME(part, attachments[i].Data); writeErr != nil {
+			return writeErr
+		}
+	}
+	if err := writer.Close(); err != nil {
+		return err
+	}
+	return sendSMTPMessage(receiver, body.Bytes())
+}
+
+func writeBase64MIME(writer io.Writer, data []byte) error {
+	encoded := base64.StdEncoding.EncodeToString(data)
+	for len(encoded) > 76 {
+		if _, err := fmt.Fprintf(writer, "%s\r\n", encoded[:76]); err != nil {
+			return err
+		}
+		encoded = encoded[76:]
+	}
+	_, err := fmt.Fprintf(writer, "%s\r\n", encoded)
+	return err
+}
+
+func sendSMTPMessage(receiver string, mail []byte) error {
 	auth := getSMTPAuth()
 	addr := fmt.Sprintf("%s:%d", SMTPServer, SMTPPort)
 	to := strings.Split(receiver, ";")

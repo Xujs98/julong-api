@@ -24,6 +24,7 @@ const (
 	EmailTemplateEventRiskUserDetected           = "user.risk_detected"
 	EmailTemplateEventUserPresenceChanged        = "user.presence_changed"
 	EmailTemplateEventUserQuotaAdjustment        = "user.quota_adjustment"
+	EmailTemplateEventInvoiceDelivered           = "invoice.delivered"
 	EmailTemplateLocaleChinese                   = "zh"
 	EmailTemplateLocaleEnglish                   = "en"
 	maxEmailTemplateSubjectLength                = 255
@@ -74,6 +75,7 @@ var (
 		EmailTemplateEventRiskUserDetected,
 		EmailTemplateEventUserPresenceChanged,
 		EmailTemplateEventUserQuotaAdjustment,
+		EmailTemplateEventInvoiceDelivered,
 	}
 	emailTemplateDefinitions = map[string]EmailTemplateDefinition{
 		EmailTemplateEventGeneralNotification: {
@@ -154,6 +156,13 @@ var (
 			Description:  "Sent after an administrator adjusts user quota in bulk.",
 			Category:     "Billing",
 			Placeholders: []string{"system_name", "username", "display_name", "email", "operation", "adjustment_amount", "previous_quota", "current_quota", "operator_name", "adjusted_at"},
+		},
+		EmailTemplateEventInvoiceDelivered: {
+			Event:        EmailTemplateEventInvoiceDelivered,
+			Label:        "Electronic invoice delivery",
+			Description:  "Sent when an administrator completes an invoice application and attaches the electronic invoice.",
+			Category:     "Billing",
+			Placeholders: []string{"system_name", "username", "display_name", "email", "application_id", "invoice_amount", "invoice_unit", "applied_at", "completed_at"},
 		},
 	}
 	emailTemplateDefaults = newEmailTemplateDefaults()
@@ -348,6 +357,19 @@ func newEmailTemplateDefaults() map[string]storedEmailTemplate {
   <tr><td style="padding:16px;border-radius:6px;background:#f3f4f6;"><span style="display:block;color:#6b7280;font-size:12px;">Before</span><strong style="font-size:20px;">{{previous_quota}}</strong></td><td style="padding:16px;border-radius:6px;background:#ecfdf5;"><span style="display:block;color:#047857;font-size:12px;">After</span><strong style="font-size:20px;color:#065f46;">{{current_quota}}</strong></td></tr>
 </table>
 <p>Adjustment amount: <strong>{{adjustment_amount}}</strong><br>Adjusted at: {{adjusted_at}}</p>`)
+
+	add(EmailTemplateEventInvoiceDelivered, EmailTemplateLocaleChinese,
+		"[{{system_name}}] 电子发票已开具（申请 #{{application_id}}）", "电子发票已送达", "#2563eb", `
+<p>{{display_name}}，您好：</p>
+<p>您的发票申请 <strong>#{{application_id}}</strong> 已处理完成，电子发票请查看本邮件附件。</p>
+<p>开票金额：<strong>{{invoice_unit}} {{invoice_amount}}</strong><br>申请时间：{{applied_at}}<br>完成时间：{{completed_at}}</p>
+<p style="color:#6b7280;">请妥善保存电子发票附件。</p>`)
+	add(EmailTemplateEventInvoiceDelivered, EmailTemplateLocaleEnglish,
+		"[{{system_name}}] Electronic invoice issued (application #{{application_id}})", "Your electronic invoice is ready", "#2563eb", `
+<p>Hello {{display_name}},</p>
+<p>Invoice application <strong>#{{application_id}}</strong> is complete. Your electronic invoice is attached to this email.</p>
+<p>Amount: <strong>{{invoice_unit}} {{invoice_amount}}</strong><br>Applied at: {{applied_at}}<br>Completed at: {{completed_at}}</p>
+<p style="color:#6b7280;">Please keep the attachment for your records.</p>`)
 
 	return defaults
 }
@@ -652,6 +674,11 @@ func emailTemplateSampleValues(locale string) map[string]string {
 		"current_quota":          "$30.00",
 		"operator_name":          "root",
 		"adjusted_at":            "2026-07-27 12:00:00",
+		"application_id":         "1024",
+		"invoice_amount":         "310.00",
+		"invoice_unit":           "USD",
+		"applied_at":             "2026-09-08 08:22:56",
+		"completed_at":           "2026-09-08 10:30:00",
 	}
 	if locale == EmailTemplateLocaleEnglish {
 		values["display_name"] = "Demo User"

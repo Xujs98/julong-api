@@ -257,6 +257,9 @@ func migrateDB() error {
 	if err := migrateTokenModelLimitsToText(); err != nil {
 		return err
 	}
+	if err := prepareInvoiceItemMigration(); err != nil {
+		return err
+	}
 
 	err := DB.AutoMigrate(
 		&Channel{},
@@ -302,8 +305,14 @@ func migrateDB() error {
 		&EmailCampaign{},
 		&EmailDelivery{},
 		&UserPresence{},
+		&InvoiceApplication{},
+		&InvoiceItem{},
+		&InvoiceAttachment{},
 	)
 	if err != nil {
+		return err
+	}
+	if err := finalizeInvoiceItemMigration(); err != nil {
 		return err
 	}
 	if err := InitializeUserAuthVersions(); err != nil {
@@ -328,6 +337,9 @@ func migrateDB() error {
 }
 
 func migrateDBFast() error {
+	if err := prepareInvoiceItemMigration(); err != nil {
+		return err
+	}
 
 	var wg sync.WaitGroup
 
@@ -376,6 +388,9 @@ func migrateDBFast() error {
 		{&EmailCampaign{}, "EmailCampaign"},
 		{&EmailDelivery{}, "EmailDelivery"},
 		{&UserPresence{}, "UserPresence"},
+		{&InvoiceApplication{}, "InvoiceApplication"},
+		{&InvoiceItem{}, "InvoiceItem"},
+		{&InvoiceAttachment{}, "InvoiceAttachment"},
 	}
 	// 动态计算migration数量，确保errChan缓冲区足够大
 	errChan := make(chan error, len(migrations))
@@ -400,6 +415,9 @@ func migrateDBFast() error {
 			return err
 		}
 	}
+	if err := finalizeInvoiceItemMigration(); err != nil {
+		return err
+	}
 	if err := InitializeUserAuthVersions(); err != nil {
 		return err
 	}
@@ -419,6 +437,49 @@ func migrateDBFast() error {
 		return err
 	}
 	common.SysLog("database migrated")
+	return nil
+}
+
+func prepareInvoiceItemMigration() error {
+	if !DB.Migrator().HasTable(&InvoiceItem{}) {
+		return nil
+	}
+	const legacyIndex = "idx_invoice_items_source_request_id"
+	if DB.Migrator().HasIndex(&InvoiceItem{}, legacyIndex) {
+		return DB.Migrator().DropIndex(&InvoiceItem{}, legacyIndex)
+	}
+	return nil
+}
+
+func finalizeInvoiceItemMigration() error {
+	if DB.Migrator().HasTable(&InvoiceApplication{}) {
+		if err := DB.Model(&InvoiceApplication{}).Where("email_sending_at IS NULL").Update("email_sending_at", 0).Error; err != nil {
+			return err
+		}
+	}
+	if !DB.Migrator().HasTable(&InvoiceItem{}) {
+		return nil
+	}
+	if err := DB.Model(&InvoiceItem{}).Where("released_at IS NULL").Update("released_at", 0).Error; err != nil {
+		return err
+	}
+	if err := DB.Model(&InvoiceItem{}).Where("frozen_until IS NULL").Update("frozen_until", 0).Error; err != nil {
+		return err
+	}
+	var rejectedApplicationIds []int
+	if err := DB.Model(&InvoiceApplication{}).
+		Where("status = ?", InvoiceStatusRejected).
+		Pluck("id", &rejectedApplicationIds).Error; err != nil {
+		return err
+	}
+	for _, applicationId := range rejectedApplicationIds {
+		releasedAt := time.Now().UnixNano() + int64(applicationId)
+		if err := DB.Model(&InvoiceItem{}).
+			Where("application_id = ? AND released_at = 0", applicationId).
+			Updates(map[string]any{"released_at": releasedAt, "frozen_until": 0}).Error; err != nil {
+			return err
+		}
+	}
 	return nil
 }
 

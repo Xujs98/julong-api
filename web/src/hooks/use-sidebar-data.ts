@@ -23,6 +23,7 @@ import {
   Bug,
   CreditCard,
   FileText,
+  FileCheck2,
   FlaskConical,
   Key,
   LayoutDashboard,
@@ -137,6 +138,11 @@ export function useSidebarData(): SidebarData {
             title: t('Wallet'),
             url: '/wallet',
             icon: Wallet,
+          },
+          {
+            title: t('Self-service Invoices'),
+            url: '/invoices',
+            icon: FileCheck2,
           },
           {
             title: t('Profile'),

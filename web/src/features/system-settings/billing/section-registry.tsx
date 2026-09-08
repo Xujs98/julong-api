@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { parseCurrencyDisplayType } from '@/lib/currency'
 
 import { CheckinSettingsSection } from '../general/checkin-settings-section'
+import { InvoiceSettingsSection } from '../general/invoice-settings-section'
 import { PricingSection } from '../general/pricing-section'
 import { QuotaSettingsSection } from '../general/quota-settings-section'
 import { PaymentSettingsSection } from '../integrations/payment-settings-section'
@@ -202,6 +203,22 @@ const BILLING_SECTIONS = [
           enabled: settings['checkin_setting.enabled'],
           minQuota: settings['checkin_setting.min_quota'],
           maxQuota: settings['checkin_setting.max_quota'],
+        }}
+      />
+    ),
+  },
+  {
+    id: 'invoice',
+    titleKey: 'Self-service Invoices',
+    build: (settings: BillingSettings) => (
+      <InvoiceSettingsSection
+        defaultValues={{
+          enabled: settings['invoice_setting.enabled'],
+          minimumAmount: settings['invoice_setting.minimum_amount'],
+          unit: settings['invoice_setting.unit'],
+          processingDays: settings['invoice_setting.processing_days'],
+          rejectionFreezeHours:
+            settings['invoice_setting.rejection_freeze_hours'],
         }}
       />
     ),

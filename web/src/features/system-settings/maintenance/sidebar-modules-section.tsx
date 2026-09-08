@@ -124,6 +124,10 @@ export function SidebarModulesSection({
         title: t('Wallet'),
         description: t('Top up balance and view billing history.'),
       },
+      invoice: {
+        title: t('Self-service Invoices'),
+        description: t('Apply for invoices from eligible account credits.'),
+      },
       personal: {
         title: t('Profile'),
         description: t('Personal settings and profile management.'),

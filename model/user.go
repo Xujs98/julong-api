@@ -29,6 +29,94 @@ var userSortColumns = map[string]string{
 	"last_login_at": "last_login_at",
 }
 
+var ErrBindingAlreadyTaken = errors.New("user binding is already taken")
+var ErrBindingInvalid = errors.New("user binding is invalid")
+
+// UserBindingUpdates uses pointers so an omitted field keeps its current value
+// while an explicit empty string clears an existing binding.
+type UserBindingUpdates struct {
+	Email      *string `json:"email,omitempty"`
+	GitHubId   *string `json:"github_id,omitempty"`
+	DiscordId  *string `json:"discord_id,omitempty"`
+	OidcId     *string `json:"oidc_id,omitempty"`
+	WeChatId   *string `json:"wechat_id,omitempty"`
+	TelegramId *string `json:"telegram_id,omitempty"`
+	LinuxDOId  *string `json:"linux_do_id,omitempty"`
+}
+
+// ApplyUserBindingUpdatesWithTx validates and applies administrator-provided
+// binding values within an existing transaction. Empty values intentionally
+// clear a binding; omitted pointers leave it unchanged.
+func ApplyUserBindingUpdatesWithTx(tx *gorm.DB, userID int, updates *UserBindingUpdates) error {
+	if tx == nil || userID <= 0 || updates == nil {
+		return nil
+	}
+	values := map[string]string{}
+	if updates.Email != nil {
+		values["email"] = NormalizeEmail(*updates.Email)
+	}
+	if updates.GitHubId != nil {
+		values["github_id"] = strings.TrimSpace(*updates.GitHubId)
+	}
+	if updates.DiscordId != nil {
+		values["discord_id"] = strings.TrimSpace(*updates.DiscordId)
+	}
+	if updates.OidcId != nil {
+		values["oidc_id"] = strings.TrimSpace(*updates.OidcId)
+	}
+	if updates.WeChatId != nil {
+		values["wechat_id"] = strings.TrimSpace(*updates.WeChatId)
+	}
+	if updates.TelegramId != nil {
+		values["telegram_id"] = strings.TrimSpace(*updates.TelegramId)
+	}
+	if updates.LinuxDOId != nil {
+		values["linux_do_id"] = strings.TrimSpace(*updates.LinuxDOId)
+	}
+	for column, value := range values {
+		maxLength := 255
+		if column == "email" {
+			maxLength = 50
+		}
+		if len(value) > maxLength {
+			return ErrBindingInvalid
+		}
+		if value == "" {
+			continue
+		}
+		if column == "email" {
+			if err := ensureEmailAvailableWithTx(tx, value, userID); err != nil {
+				if errors.Is(err, ErrEmailAlreadyTaken) {
+					return ErrBindingAlreadyTaken
+				}
+				return err
+			}
+			continue
+		}
+		var count int64
+		if err := tx.Model(&User{}).Where(column+" = ? AND id <> ?", value, userID).Count(&count).Error; err != nil {
+			return err
+		}
+		if count > 0 {
+			return ErrBindingAlreadyTaken
+		}
+	}
+	if telegram, ok := values["telegram_id"]; ok {
+		if err := ReleaseExternalIdentityWithTx(tx, ExternalIdentityProviderTelegram, userID); err != nil {
+			return err
+		}
+		if telegram != "" {
+			if err := ClaimExternalIdentityWithTx(tx, ExternalIdentityProviderTelegram, telegram, userID); err != nil {
+				return err
+			}
+		}
+	}
+	if len(values) == 0 {
+		return nil
+	}
+	return tx.Model(&User{}).Where("id = ?", userID).Updates(values).Error
+}
+
 type UserSortOptions struct {
 	SortBy    string
 	SortOrder string
@@ -126,6 +214,7 @@ type User struct {
 	LastLoginIPBlocked           bool                       `json:"last_login_ip_blocked,omitempty" gorm:"-:all"`
 	AuthVersion                  int64                      `json:"-" gorm:"type:bigint;not null;default:1;column:auth_version"`
 	AdminPermissions             map[string]map[string]bool `json:"admin_permissions,omitempty" gorm:"-:all"`
+	BindingUpdates               *UserBindingUpdates        `json:"binding_updates,omitempty" gorm:"-:all"`
 }
 
 func (user *User) ToBaseUser() *UserBase {
@@ -218,6 +307,7 @@ func generateDefaultSidebarConfigForRole(userRole int) string {
 	defaultConfig["personal"] = map[string]interface{}{
 		"enabled":  true,
 		"topup":    true,
+		"invoice":  true,
 		"personal": true,
 	}
 

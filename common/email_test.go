@@ -7,10 +7,15 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/base64"
 	"encoding/pem"
 	"fmt"
+	"io"
 	"math/big"
+	"mime"
+	"mime/multipart"
 	"net"
+	"net/mail"
 	"net/smtp"
 	"strconv"
 	"strings"
@@ -290,6 +295,59 @@ func TestSendEmailUsesExplicitStartTLSWithInsecureCertificate(t *testing.T) {
 	case message := <-server.messages:
 		require.Contains(t, message, "Subject: =?UTF-8?B?")
 		require.Contains(t, message, "<p>123456</p>")
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for SMTP DATA")
+	}
+}
+
+func TestSendEmailWithAttachmentsBuildsMultipartMessage(t *testing.T) {
+	server := newFakeSMTPServerWithSTARTTLSAdvertisement(t, false)
+	defer server.close()
+	withSMTPSettings(t)
+
+	SMTPServer = server.host
+	SMTPPort = server.port
+	SMTPSSLEnabled = false
+	SMTPStartTLSEnabled = false
+	SMTPAccount = "sender@example.com"
+	SMTPFrom = "sender@example.com"
+	SMTPToken = ""
+	SystemName = "New API"
+
+	payload := []byte("test invoice attachment")
+	err := SendEmailWithAttachments("Invoice", "receiver@example.com", "<p>Invoice ready</p>", []EmailAttachment{{
+		Filename:    "电子发票.pdf",
+		ContentType: "application/pdf",
+		Data:        payload,
+	}})
+	require.NoError(t, err)
+
+	select {
+	case messageData := <-server.messages:
+		message, err := mail.ReadMessage(strings.NewReader(messageData))
+		require.NoError(t, err)
+		mediaType, params, err := mime.ParseMediaType(message.Header.Get("Content-Type"))
+		require.NoError(t, err)
+		require.Equal(t, "multipart/mixed", mediaType)
+		reader := multipart.NewReader(message.Body, params["boundary"])
+
+		htmlPart, err := reader.NextPart()
+		require.NoError(t, err)
+		htmlEncoded, err := io.ReadAll(htmlPart)
+		require.NoError(t, err)
+		htmlBody, err := base64.StdEncoding.DecodeString(strings.Join(strings.Fields(string(htmlEncoded)), ""))
+		require.NoError(t, err)
+		require.Equal(t, "<p>Invoice ready</p>", string(htmlBody))
+
+		attachmentPart, err := reader.NextPart()
+		require.NoError(t, err)
+		require.Equal(t, "application/pdf", attachmentPart.Header.Get("Content-Type"))
+		require.Contains(t, attachmentPart.Header.Get("Content-Disposition"), "attachment")
+		attachmentEncoded, err := io.ReadAll(attachmentPart)
+		require.NoError(t, err)
+		attachmentData, err := base64.StdEncoding.DecodeString(strings.Join(strings.Fields(string(attachmentEncoded)), ""))
+		require.NoError(t, err)
+		require.Equal(t, payload, attachmentData)
 	case <-time.After(2 * time.Second):
 		t.Fatal("timed out waiting for SMTP DATA")
 	}

@@ -62,6 +62,9 @@ func TestMain(m *testing.M) {
 		&UserRequestContentLog{},
 		&Option{},
 		&LedgerEntry{},
+		&InvoiceApplication{},
+		&InvoiceItem{},
+		&InvoiceAttachment{},
 	); err != nil {
 		panic("failed to migrate: " + err.Error())
 	}
@@ -99,6 +102,9 @@ func truncateTables(t *testing.T) {
 		DB.Exec("DELETE FROM system_tasks")
 		DB.Exec("DELETE FROM options")
 		DB.Exec("DELETE FROM ledger_entries")
+		DB.Exec("DELETE FROM invoice_attachments")
+		DB.Exec("DELETE FROM invoice_items")
+		DB.Exec("DELETE FROM invoice_applications")
 	})
 }
 

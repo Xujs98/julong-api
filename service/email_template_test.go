@@ -149,6 +149,33 @@ func TestRiskUserTemplateExposesRiskSummary(t *testing.T) {
 	assert.Contains(t, template.Content, "{{detected_at}}")
 }
 
+func TestInvoiceDeliveryTemplateRendersBothLocales(t *testing.T) {
+	setupEmailTemplateTest(t)
+	values := map[string]string{
+		"display_name":   "Invoice User",
+		"application_id": "42",
+		"invoice_amount": "125.50",
+		"invoice_unit":   "USD",
+		"applied_at":     "2026-09-08 10:00:00",
+		"completed_at":   "2026-09-08 11:00:00",
+	}
+
+	for _, locale := range SupportedEmailTemplateLocales() {
+		t.Run(locale, func(t *testing.T) {
+			template, err := GetEmailTemplateForLocale(EmailTemplateEventInvoiceDelivered, locale)
+			require.NoError(t, err)
+			assert.Contains(t, template.Placeholders, "application_id")
+			assert.Contains(t, template.Placeholders, "invoice_amount")
+
+			rendered, err := RenderEmailTemplateForLocale(EmailTemplateEventInvoiceDelivered, locale, values)
+			require.NoError(t, err)
+			assert.Contains(t, rendered.Subject, "42")
+			assert.Contains(t, rendered.Content, "USD 125.50")
+			assert.NotContains(t, rendered.Content, "{{application_id}}")
+		})
+	}
+}
+
 func TestUserPresenceTemplateExposesActivityDetails(t *testing.T) {
 	setupEmailTemplateTest(t)
 	template, err := GetEmailTemplateForLocale(EmailTemplateEventUserPresenceChanged, EmailTemplateLocaleChinese)
