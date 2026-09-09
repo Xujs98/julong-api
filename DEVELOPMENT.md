@@ -1,6 +1,6 @@
 # Julong-API 开发文档
 
-最后更新：2026-09-08
+最后更新：2026-09-10
 
 本文档是本二开项目的强制开发记录。以后新增、修改或删除任何 API、组件、数据模型、配置项、路由、数据库行为或部署行为时，必须在同一次改动中同步更新本文档，并在“变更日志”中新增记录。
 
@@ -30,7 +30,7 @@
 | 用户今日 Token 与分组分析 | 已实现 | 用户详情同时显示总 Token 和按服务器本地自然日统计的今日 Token；root 数据看板按分组分析真实额度、请求数、Token 和去重用户数。 |
 | 邮件群发与条件提醒 | 已实现 | 运维页面支持立即群发、定时发送和订阅到期条件提醒；创建任务时可选择中英文系统模板、预览后套用，使用注册邮箱、逐用户记录结果，并通过数据库任务租约防止多实例重复调度。 |
 | 邮件设置与自动提醒 | 已实现 | 运维“邮件设置”统一管理订阅到期、余额不足、渠道账号额度、渠道异常、数据看板报表、风险用户和用户上线/下线提醒，并编辑、实时预览、恢复 12 类中英文模板（含电子发票交付）；上线活动覆盖登录、已认证后台请求和 API Key 调用，默认连续 5 分钟无活动判定下线。 |
-| 用户运营管理 | 已实现 | 用户列表筛选栏在标签后展示全部或当前筛选用户的剩余总配额与匹配人数，可持久化选择不统计用户，并支持按用户名/姓名/邮箱、分组、状态、角色和标签过滤；同时支持自定义标签、内置中/高风险标签筛选、批量额度增减及可选邮件。用户详情展示今日消费、额度明细、已选分组实际扣费倍率及分组用量，并支持单用户在最终真实倍率上增减调整。 |
+| 用户运营管理 | 已实现 | 用户列表筛选栏在标签后展示全部或当前筛选用户的剩余总配额与匹配人数，可持久化选择不统计用户，并支持按用户名/姓名/邮箱、分组、状态、角色和标签过滤；同时支持自定义标签、内置中/高风险标签筛选、批量额度增减及可选邮件。用户详情展示今日消费、额度明细、已选分组实际扣费倍率及分组用量，并支持单用户在最终真实倍率上增减调整。编辑已有用户时绑定信息默认只读，启用开关后才提交绑定修改；创建用户仍可直接填写绑定信息。 |
 | 用户风险与设备管控 | 已实现 | 风险检测支持全局或逐用户开启，按 1/7/30 天请求、错误、退款、客户端断开、异常流和 IP 等信号评分；登录 IP 与设备面板支持识别设备、封禁设备并撤销对应会话。 |
 | 模型 Token 特殊倍率 | 已实现 | 分组定价可按用户分组、计费分组和模型分别增加输入、输出、缓存读取、缓存创建 Token；用户和管理员看到计费后 Token，管理员悬浮可查看真实 Token、原始费用及分组/模型倍率收益。 |
 | 日志与兑换码导出 | 已实现 | 使用日志支持下载本页、今日、自定义时间和全部记录，CSV 使用中文表头并防公式注入；兑换码支持新生成结果复制/下载及多选复制、下载、5 秒确认删除。 |
@@ -359,7 +359,7 @@ curl http://localhost:3000/api/error-reports \
 | POST | `/api/user/invoice/applications/:id/withdraw` | `controller.AdminWithdrawCompletedInvoiceApplication` | 撤回已完成的发票申请以修正错误附件 | path 正整数 `id` | 仅 `completed` 可撤回；事务内删除附件、清空完成时间并恢复 `pending`，来源账单继续占用，已发送邮件不会被召回 | 完成；管理员/root，写管理审计 |
 | GET | `/api/user/:id` | `controller.GetUser` | 可编辑用户详情 | path `id` | `User`（包含 `last_login_at`、`last_login_ip`） | 完成；管理员/root，同级/更高角色受限 |
 | POST | `/api/user/` | `controller.CreateUser` | 创建用户 | `UserFormData`；管理员/root 可通过 `binding_updates` 设置邮箱、GitHub、Discord、OIDC、WeChat、Telegram、LinuxDO 绑定，空字符串清除 | `User` | 完成 |
-| PUT | `/api/user/` | `controller.UpdateUser` | 更新用户 | `UserFormData & {id}`；`binding_updates` 仅更新传入字段，空字符串清除；非空值做长度与唯一性校验 | partial `User` | 完成 |
+| PUT | `/api/user/` | `controller.UpdateUser` | 更新用户 | `UserFormData & {id}`；绑定信息编辑开关打开时才传入 `binding_updates`，仅更新传入字段，空字符串清除；非空值做长度与唯一性校验；普通用户资料保存不传该字段以保持绑定不变 | partial `User` | 完成 |
 | DELETE | `/api/user/:id` | `controller.DeleteUser` | 删除用户 | path `id` | success | 完成 |
 | POST | `/api/user/manage` | `controller.ManageUser` | 晋升/降级/启用/禁用/删除/额度调整；`disable` 同时封禁全部已知登录 IP | `{id,action,...}` | partial `User` | 完成 |
 | GET | `/api/user/agent-detail/:id` | `controller.AdminGetAgentDetail` | 代理详情弹窗 | path `id` | `{agent,users,redemptions}` | 完成 |
@@ -1169,7 +1169,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 | `wallet` | recharge cards、subscription cards、affiliate rewards、redemption hook | 钱包充值、兑换码、订阅 | `/api/user/topup*`、`/api/subscription*`、支付 API | 完成 |
 | `invoices` | `index.tsx`、`api.ts`、`types.ts`、`eligible-credits-table.tsx`、`applications-table.tsx`、`cancel-invoice-dialog.tsx`、`manage-invoice-dialog.tsx`、`complete-invoice-dialog.tsx`、`withdraw-invoice-dialog.tsx` | 用户多选符合条件的充值额度记录申请发票并查看历史；待确认申请可二次确认后取消，已完成申请可下载交付附件。管理员/root 可打开全部状态申请查看卡片式账单来源明细，来源请求 ID 一键复制且长文本完整换行；选择已完成后在详情内上传附件、确认发送邮件并保存邮件模板设置，最终保存时发送；已完成详情可二次确认撤回，删除错误附件并恢复待确认 | `/api/user/invoice*`；React Query、Card、Checkbox、Dialog、AlertDialog、Clipboard、Blob 下载、multipart、i18n | 完成 |
 | `redemption-codes` | `redemptions-generated-dialog.tsx`、`data-table-bulk-actions.tsx`、`redemptions-multi-delete-dialog.tsx`、表格和编辑弹窗 | 管理员/代理兑换码管理；刚生成的兑换码支持仅复制代码、复制名称和代码、一键下载；多选支持仅复制代码、下载和管理员 5 秒确认批量删除 | `/api/redemption*`、`POST /api/redemption/batch`、`/api/user/agent/topup-link` | 完成 |
-| `users` | `index.tsx`、`users-table.tsx`、`users-columns.tsx`、`users-mutate-drawer.tsx`、`user-detail-dialog.tsx`、`user-quota-summary-control.tsx`、`user-quota-summary-badge.tsx`、`user-tags-dialog.tsx`、`user-batch-quota-dialog.tsx`、`user-risk-panel.tsx`、`user-login-access-panel.tsx`、`user-group-ratios-card.tsx`、`lib/user-quota-summary.ts` | 后台用户管理、筛选余额汇总、标签筛选/标注、批量额度、代理详情和用户详情；标签后可持久化选择不统计用户，剩余总配额和匹配人数会排除该名单后再按表格 URL 筛选实时汇总，被排除用户仍正常显示。详情含今日消费、总/今日 Token、额度明细、已选分组真实倍率及额度/Token、风险报告、登录 IP 与设备、上下文审计。编辑用户可在特殊规则后的最终真实倍率上增加或减少单用户调整，并实时预览已有分组结果 | `/api/user*`、`/api/user/quota-summary*`、`/api/user/tags*`、`/api/user/options*`、`/api/user/batch-quota`、`/api/user/:id/{usage-summary,quota-increases,risk,login-ips,login-devices,request-content}*` | 完成 |
+| `users` | `index.tsx`、`users-table.tsx`、`users-columns.tsx`、`users-mutate-drawer.tsx`、`user-detail-dialog.tsx`、`user-quota-summary-control.tsx`、`user-quota-summary-badge.tsx`、`user-tags-dialog.tsx`、`user-batch-quota-dialog.tsx`、`user-risk-panel.tsx`、`user-login-access-panel.tsx`、`user-group-ratios-card.tsx`、`lib/user-quota-summary.ts` | 后台用户管理、筛选余额汇总、标签筛选/标注、批量额度、代理详情和用户详情；标签后可持久化选择不统计用户，剩余总配额和匹配人数会排除该名单后再按表格 URL 筛选实时汇总，被排除用户仍正常显示。详情含今日消费、总/今日 Token、额度明细、已选分组真实倍率及额度/Token、风险报告、登录 IP 与设备、上下文审计。编辑用户可在特殊规则后的最终真实倍率上增加或减少单用户调整，并实时预览已有分组结果；绑定信息区域对已有用户默认只读，打开编辑开关后才可修改，创建用户时默认可编辑 | `/api/user*`、`/api/user/quota-summary*`、`/api/user/tags*`、`/api/user/options*`、`/api/user/batch-quota`、`/api/user/:id/{usage-summary,quota-increases,risk,login-ips,login-devices,request-content}*` | 完成 |
 | `models` | metadata/deployment tables and drawers | 模型元数据和部署管理 | `/api/models*`、`/api/vendors*`、`/api/deployments*` | 完成 |
 | `subscriptions` | subscription table/drawers | 后台订阅计划/用户绑定 | `/api/subscription/admin*` | 完成 |
 | `system-settings` | 各一级菜单 section registries；`maintenance/{log-settings-section,update-checker-section}.tsx`、`models/group-ratio-form.tsx`、`model-token-ratio-editor.tsx`、邮件设置组件和 `ImageStorageSettings` | 管理员/root 运行时设置；系统维护展示 Julong 与已合并 New API 双版本并按上游版本检查更新；日志维护含全局风险检测；分组定价含模型 Token 特殊倍率；邮件设置维护数据报表、风险及用户上线/下线提醒；其余站点徽标、普通用户倍率展示、MinIO 生命周期等既有功能保持 | `/api/status`、`/api/option*`、`/api/email-settings*`、`/api/site-assets/logo*`、`/api/performance/image-storage*`、`/api/system-task/*` | 完成 |
@@ -1378,6 +1378,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 
 | 日期 | 变更 | 更新文件/API/模型 | 验证 |
 | --- | --- | --- | --- |
+| 2026-09-10 | 修复管理员编辑用户时的 `unsupported data`：普通用户资料保存不再默认提交绑定信息；用户编辑抽屉的绑定信息改为只读，只有打开“启用绑定信息编辑”开关后才会提交绑定修改，创建用户仍可直接填写绑定信息。 | `users-mutate-drawer.tsx`、`user-form.ts`、`PUT /api/user/`、七语言 locale | 绑定字段提交/省略回归测试、前端 typecheck、目标文件格式与 lint、i18n 同步、`git diff --check`。 |
 | 2026-09-08 | 用户新增/更新抽屉新增内置绑定信息编辑，管理员/root 可设置、修改或清除邮箱及六类第三方账号绑定；修复自助发票“用户申请列表”操作按钮点击后管理弹窗未渲染的问题。 | `UserBindingUpdates`、`POST/PUT /api/user/`、`users-mutate-drawer.tsx`、`invoices/index.tsx`、`manage-invoice-dialog.tsx` | 绑定长度/唯一性及 Telegram 身份占用事务测试；前端 typecheck、目标 lint、生产构建；真实浏览器验证弹窗打开、取消关闭、再次打开。 |
 | 2026-09-08 | 控制台新增“自助发票”：所有用户可查看在线充值、兑换码和管理员增加形成的可申请记录，多选累计达到可配置门槛后提交；申请金额、单位和邮箱留存快照，来源明细唯一占用并从可申请列表移除。管理员/root 同页查看全用户申请并流转待处理、处理中、已完成、已驳回状态；计费设置新增功能开关、最低金额、单位和预计工作日，关闭时用户页展示内测提示。 | `InvoiceApplication`、`InvoiceItem`、`invoice_setting.*`、`controller/invoice.go`、`/api/user/invoice*`、`web/src/features/invoices/*`、`/invoices`、`/system-settings/billing/invoice`、侧边栏与七语言 locale | Model 来源过滤、门槛、金额快照、唯一占用、申请后移除、管理员列表和状态流转测试；Controller 备注长度、Router/Authz 测试、前端门槛选择/关闭提示测试、typecheck/lint/build、i18n 同步、后端重启及接口验证。 |
 | 2026-08-17 | 新增面向终端用户和智能体的文生图接口使用说明，补充请求参数、同步调用、URL/Base64 结果处理、Prompt 模板、智能体执行规则、异步轮询入口和常见错误。 | `文生图接口用户使用说明.md`、`POST /v1/images/generations` | 文档与 `relaykit/dto/openai_image.go`、`relay/helper/valid_request.go`、`controller/image_generation_task.go` 逐项核对；`git diff --check` |

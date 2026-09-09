@@ -113,6 +113,7 @@ export function UsersMutateDrawer({
   const currentUser = useAuthStore((s) => s.auth.user)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [quotaDialogOpen, setQuotaDialogOpen] = useState(false)
+  const [bindingEditingEnabled, setBindingEditingEnabled] = useState(false)
 
   // Fetch groups
   const { data: groupsData } = useQuery({
@@ -148,6 +149,7 @@ export function UsersMutateDrawer({
   // Load existing data when updating
   useEffect(() => {
     if (open && isUpdate && currentRow) {
+      setBindingEditingEnabled(false)
       // For update, fetch fresh data
       getUser(currentRow.id)
         .then((result) => {
@@ -158,6 +160,7 @@ export function UsersMutateDrawer({
         .catch(() => toast.error(t(ERROR_MESSAGES.UNEXPECTED)))
     } else if (open && !isUpdate) {
       // For create, reset to defaults
+      setBindingEditingEnabled(true)
       form.reset(USER_FORM_DEFAULT_VALUES)
     }
   }, [open, isUpdate, currentRow, form, t])
@@ -207,7 +210,8 @@ export function UsersMutateDrawer({
       const payload = transformFormDataToPayload(
         data,
         currentRow?.id,
-        permissionCatalog
+        permissionCatalog,
+        !isUpdate || bindingEditingEnabled
       )
       const result = isUpdate
         ? await updateUser(payload as typeof payload & { id: number })
@@ -659,14 +663,37 @@ export function UsersMutateDrawer({
                 )}
 
               <SideDrawerSection>
-                <h3 className='text-sm font-medium'>
-                  {t('Binding Information')}
-                </h3>
-                <p className='text-muted-foreground text-xs'>
-                  {t(
-                    'Administrators can add, update, or clear account bindings for this user.'
+                <div className='flex items-start justify-between gap-4'>
+                  <div className='space-y-1'>
+                    <h3 className='text-sm font-medium'>
+                      {t('Binding Information')}
+                    </h3>
+                    <p className='text-muted-foreground text-xs'>
+                      {t(
+                        'Administrators can add, update, or clear account bindings for this user.'
+                      )}
+                    </p>
+                  </div>
+                  {isUpdate && (
+                    <div className='flex shrink-0 items-center gap-2'>
+                      <span className='text-muted-foreground text-xs'>
+                        {t('Enable binding information editing')}
+                      </span>
+                      <Switch
+                        checked={bindingEditingEnabled}
+                        onCheckedChange={setBindingEditingEnabled}
+                        aria-label={t('Enable binding information editing')}
+                      />
+                    </div>
                   )}
-                </p>
+                </div>
+                {isUpdate && (
+                  <p className='text-muted-foreground text-xs'>
+                    {bindingEditingEnabled
+                      ? t('Binding information editing is enabled.')
+                      : t('Binding information is read-only until enabled.')}
+                  </p>
+                )}
 
                 <div className='grid gap-3 sm:grid-cols-2'>
                   {BINDING_FIELDS.map(({ key, label }) => (
@@ -682,6 +709,7 @@ export function UsersMutateDrawer({
                               {...field}
                               autoComplete='off'
                               placeholder={t('Not bound')}
+                              readOnly={isUpdate && !bindingEditingEnabled}
                             />
                           </FormControl>
                           <FormMessage />

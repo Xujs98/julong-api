@@ -105,7 +105,8 @@ export const USER_FORM_DEFAULT_VALUES: UserFormValues = {
 export function transformFormDataToPayload(
   data: UserFormValues,
   userId?: number,
-  catalog?: PermissionCatalog
+  catalog?: PermissionCatalog,
+  includeBindingUpdates = true
 ): UserFormData & { id?: number } {
   const payload: UserFormData & { id?: number } = {
     username: data.username,
@@ -114,7 +115,10 @@ export function transformFormDataToPayload(
     is_agent: data.is_agent || false,
     agent_discount: data.is_agent ? (data.agent_discount ?? 100) : 100,
     agent_topup_link: data.is_agent ? data.agent_topup_link || '' : '',
-    binding_updates: data.binding_updates,
+  }
+
+  if (includeBindingUpdates) {
+    payload.binding_updates = data.binding_updates
   }
 
   const role = userId === undefined ? data.role || 1 : (data.role ?? 0)
