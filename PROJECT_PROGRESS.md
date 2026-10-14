@@ -4,7 +4,7 @@
 > 详细 API、路由、配置和数据模型以 [DEVELOPMENT.md](./DEVELOPMENT.md) 为技术登记入口。
 > 代码与实际命令输出优先于旧文档、历史回复和截图；“代码已写”“本地可用”“已提交”“已上线”必须分开。
 
-最后更新：2026-10-15 08:38:00（Asia/Shanghai）
+最后更新：2026-10-15 07:45:00（Asia/Shanghai）
 项目根目录：`/Users/xujs/.docker_dir/new-api`
 
 ## 1. 新对话接续入口（必须先读）
@@ -22,15 +22,15 @@
 
 | 项目 | 状态（截至最后更新时间） | 依据与边界 |
 | --- | --- | --- |
-| 当前分支 / HEAD | codex/upstream-sync-20261013 / f99b63cfc | `git branch --show-current`、`git log -1`；HEAD 是双父合并提交，origin/main 是其矩龙父提交；当前工作区另有 235 个已修改路径及未跟踪功能文件 |
-| 上游整合 | 本地 Git 合并提交已存在；后续功能改动尚未提交 | `f99b63cfc` parents=`7d3fba2f4` + `ef60ef27f`，MERGE_HEAD 为空；尚未确认推送到用户 origin；绝不推 upstream |
+| 当前分支 / HEAD | `codex/upstream-sync-20261013` / `efa2da356` | 本地分支跟踪 `origin/codex/upstream-sync-20261013`；仅剩未跟踪 `web/pnpm-lock.yaml`，不属于本批功能 |
+| 上游整合 | 已包含在待合并分支，当前可快进至主分支 | `f99b63cfc` parents=`7d3fba2f4` + `ef60ef27f`；`origin/main...HEAD = 0 374`，主分支是当前 HEAD 祖先，无冲突路径；尚未推送到 main |
 | 用户 GitHub 仓库 | origin = https://github.com/Xujs98/julong-api.git | upstream = https://github.com/QuantumNous/new-api.git，仅跟踪上游；不得把用户改动推到 upstream |
 | 本地服务 | 最新前端已重新构建并嵌入，PID49923监听3000，健康检查通过 | `GET /api/status success=true`；路由 `/models/document-templates` 返回首页回退及 `/static/js/index.5f11f9b712.js`；页面需管理员登录后验证真实管理交互 |
 | 模型广场按秒/按次价格 | 当前代码已实现，历史交付有验证记录 | 两项都有价格同时显示；只配一项只显示该项；模型名及分辨率价格区规则一致 |
 | 视频输入素材 | 已完成本地实现/定向回归、三库复验、浏览器预览和视频直链、最终重启 | SQLite3.50.4/MySQL5.7.44/PostgreSQL16.15最终矩阵8/8无Skip；图片及嵌入视频/音频正常、素材视频直链可播放；Safari/原生音频直链/线上公网未实测 |
 | 成品列阴影与滚轮 | 已完成（本地）；17项通过，Chromium已验证并激活；Safari待人工复核 | 独立复核10/10，主任务4文件17/17；Chromium明暗阴影、全列固定、滚轮/splitHeader已验；首页资源与dist一致，Safari无连接未实测 |
 | 项目进度入口 | 已完成（文档本地） | 本文 + AGENTS.md 必读入口；持续按批次更新 |
-| Git 提交 / 线上发布 | 3批改动已本地提交；推送待网络恢复 | `298b2cf33` 后端、`dfb2b1425` 前端、`734a26746` 文档/进度。两次 `git push origin` 均因无法连接 github.com:443 失败；按规则下次任务再推。线上 `api.julongkj.top` 未部署/验证 |
+| Git 提交 / 线上发布 | 分批提交已推至用户仓库功能分支；正在检查合并到 `main` | `origin/codex/upstream-sync-20261013` 指向 `efa2da356`；推送已成功。线上 `api.julongkj.top` 未部署/验证 |
 
 ## 3. 状态口径
 
@@ -59,10 +59,10 @@
 - 后端定向验证（本轮）：`go test ./controller -run 'Test(ModelDocumentTemplate|GetModelDocumentation)' -count=1` 通过。
 - 本地重启（本轮）：重新构建前端并嵌入 Go 二进制；旧PID15826已停止，最新PID49923监听3000，`GET /api/status success=true`，模型模板路径回退页面返回新主包哈希 `index.5f11f9b712.js` 和CSS。未提供管理员登录态，因此没有假称真实已登录交互已验。
 - 页面反馈回归：原标签列表允许换行且文档模板顺序落在供应商与部署之间；现移到部署之后，同一 TabsList 设置单行与 `overflow-x-auto`，避免挤出灰色标签组。顺序契约回归新增 `section-registry.test.ts`。
-- Git交付：已生成三批本地提交 `298b2cf33`（后端/渠道/计费/素材/模板API）、`dfb2b1425`（前端及bun.lock）、`734a26746`（AGENTS/DEVELOPMENT/进度与两份文档）；当前只有意外未跟踪 `web/pnpm-lock.yaml` 被排除，未纳入提交。向 origin 分支 `codex/upstream-sync-20261013` 的推送已尝试两次，均失败：`Failed to connect to github.com port 443`；依规则留待下次任务重推。没有推向 upstream。
-- 工作区收尾更改：为记录推送失败再更新本文与DEVELOPMENT；提交前必须把该进度变更作为额外文档提交。
-- 未完成：origin 推送（网络阻断，已用尽本轮两次尝试）；api.julongkj.top 未部署。
-- 下一步：网络恢复后的下一任务先推送当前分支至同一 origin，再处理 `web/pnpm-lock.yaml` 是否删除/保留（需避免误加生成文件）。
+- Git交付：功能与文档提交已推送至 `origin/codex/upstream-sync-20261013`，含 `298b2cf33`、`dfb2b1425`、`734a26746`、`efa2da356`。本轮远端比较 `origin/main...HEAD = 0 374`，主分支是当前 HEAD 祖先；`git diff --check origin/main...HEAD` 通过，分支可 fast-forward 到 main，尚未执行主分支推送。
+- `web/pnpm-lock.yaml` 为单独未跟踪文件；项目使用 `web/bun.lock`，该额外文件排除在合并外。
+- api.julongkj.top 未部署；全量 `go test ./...` 有已知失败记录 `/tmp/julong-documents-full-go-tests.log`，不包装成全量通过。
+- 下一步：复核远端 `main` 未移动后，在用户授权下 fast-forward 推送至 `origin/main`，验证远端 main SHA 与本地 HEAD 一致。
 
 ### B01：矩龙原功能与上游整合基线
 
@@ -144,8 +144,8 @@
 
 | 优先级 | 事项 | 下一步 | 禁止误报 |
 | --- | --- | --- | --- |
-| 待推送 | 三批本地提交 | `298b2cf33`, `dfb2b1425`, `734a26746`；网络恢复后仅推 origin | 两次连接 github.com:443 失败；已达到本轮重试上限，不宣称推送成功 |
-| 已完成（本地） | B08：模型文档模板及全部获授权历史工作 | 代码、验证、进度/技术文档及本地重启完成 | 后端定向通过不等于全量 Go 测试通过；历史三库矩阵不冒充本轮实测；未登录未声称已点测；本地运行不等于线上发布 |
+| 待合并 | `codex/upstream-sync-20261013` → `origin/main` | 远端 main 是当前 HEAD 祖先（0/374），可 fast-forward；再次检查 main SHA 后推送；不 force-push |
+| 待合并 | B08：模型文档模板及全部获授权历史工作 | 代码、验证、进度/技术文档及本地重启完成 | 后端定向通过不等于全量 Go 测试通过；历史三库矩阵不冒充本轮实测；未登录未声称已点测；本地运行不等于线上发布 |
 | 已完成（本地） | B06：成品列阴影/滚轮 | Chromium真实组件验证和17项回归、构建重启均完成；Safari可用后人工复核 | 未宣称Safari已实测，旧实现不等于新增滚轮完成 |
 | 已本地验证 | B03：成品直链播放 | Range/嵌入播放/直接签名URL已验；线上及第三方工具部署后再验 | 单个已有视频成功不代表全部上游永久可用 |
 | 已完成（本地）/上线待验 | B04：素材/线上文档 | 最终三库8/8、回归、文档、浏览器图片/嵌入媒体/视频直链和重启已完成；部署配置公网地址后验上游访问 | Safari和原生音频直链未实测，不把本地成功等同线上付费端到端，不混淆素材与成品 |
