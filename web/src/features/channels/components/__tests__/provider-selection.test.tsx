@@ -520,7 +520,7 @@ test.each([true, false])(
         screen.getByRole('option', { name: 'Sub2API Built-in #59' })
       ).toBeVisible()
     }
-    expect(screen.getAllByRole('option')).toHaveLength(2)
+    expect(screen.getAllByRole('option')).toHaveLength(3)
     await user.click(
       screen.getByRole('option', { name: 'New API Built-in #60' })
     )
@@ -864,4 +864,57 @@ test('an empty plugin filter reports that no plugins can be bound', async () => 
   await user.click(screen.getByRole('tab', { name: 'Plugins' }))
   expect(screen.getByText('No plugins available for binding')).toBeVisible()
   expect(screen.queryByRole('option')).not.toBeInTheDocument()
+})
+
+test('Gateways lists Suanli AI and selecting it returns the configured gateway preset', async () => {
+  const user = userEvent.setup()
+  const select = vi.fn()
+  render(
+    <ChannelProviderPicker
+      isCreating
+      canBindPlugin
+      plugins={[
+        {
+          key: 'suanliai-video',
+          name: 'Suanli AI Video',
+          models: [],
+          upstreams: ['new_api'],
+        },
+      ]}
+      loading={false}
+      failed={false}
+      disabled={false}
+      onRetry={vi.fn()}
+      onSelect={select}
+    />
+  )
+  await user.click(screen.getByRole('tab', { name: 'Gateways' }))
+  await user.click(
+    screen.getByRole('option', { name: 'Suanli AI Built-in #60' })
+  )
+  expect(select).toHaveBeenCalledWith({
+    kind: 'builtin',
+    type: 60,
+    preset: 'suanliai',
+  })
+})
+
+test('Suanli AI gateway is disabled while its video plugin is unavailable', async () => {
+  const user = userEvent.setup()
+  render(
+    <ChannelProviderPicker
+      isCreating
+      canBindPlugin
+      plugins={[]}
+      loading={false}
+      failed={false}
+      disabled={false}
+      onRetry={vi.fn()}
+      onSelect={vi.fn()}
+    />
+  )
+  await user.click(screen.getByRole('tab', { name: 'Gateways' }))
+  expect(
+    screen.getByRole('option', { name: 'Suanli AI Built-in #60' })
+  ).toHaveAttribute('aria-disabled', 'true')
 })

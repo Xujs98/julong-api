@@ -290,21 +290,24 @@ export const MJ_SUBMIT_RESULT_MAPPINGS: Record<string, StatusMapping> = {
  * Task action type mappings
  */
 export const TASK_ACTION_MAPPINGS: Record<string, StatusMapping> = {
-  [TASK_ACTIONS.MUSIC]: { label: 'Generate Music', variant: 'neutral' },
+  text_to_video: { label: 'Text to Video', variant: 'blue' },
+  image_to_video: { label: 'Image to Video', variant: 'violet' },
+  reference_to_video: { label: 'Reference Video', variant: 'orange' },
+  [TASK_ACTIONS.MUSIC]: { label: 'Generate Music', variant: 'green' },
   [TASK_ACTIONS.LYRICS]: { label: 'Generate Lyrics', variant: 'pink' },
-  [TASK_ACTIONS.GENERATE]: { label: 'Image to Video', variant: 'blue' },
+  [TASK_ACTIONS.GENERATE]: { label: 'Image to Video', variant: 'violet' },
   [TASK_ACTIONS.TEXT_GENERATE]: { label: 'Text to Video', variant: 'blue' },
   [TASK_ACTIONS.FIRST_TAIL_GENERATE]: {
     label: 'First/Last Frame to Video',
-    variant: 'blue',
+    variant: 'cyan',
   },
   [TASK_ACTIONS.REFERENCE_GENERATE]: {
     label: 'Reference Video',
-    variant: 'blue',
+    variant: 'orange',
   },
   [TASK_ACTIONS.REMIX_GENERATE]: {
     label: 'Video Remix',
-    variant: 'blue',
+    variant: 'pink',
   },
 }
 
@@ -345,6 +348,7 @@ export const LOG_CATEGORY_LABELS: Record<LogCategory, string> = {
   drawing: 'Drawing',
   image: 'Image Generation',
   task: 'Task',
+  assets: '素材',
 }
 
 // ============================================================================

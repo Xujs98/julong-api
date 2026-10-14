@@ -40,6 +40,10 @@ import {
 } from '../channel-plugin-extensions'
 import { getChannelTypeConfig } from '../channel-type-config'
 import { getChannelTypeIcon, getKeyPromptForType } from '../channel-utils'
+import {
+  createSuanliVideoModelPresets,
+  SUANLIAI_VIDEO_MODELS,
+} from '../suanliai-video'
 
 function newAPIForm(baseUrl: string) {
   return {
@@ -222,6 +226,8 @@ describe('New API channel task plugin extensions', () => {
       test_time: 0,
       response_time: 0,
       balance_updated_time: 0,
+      other: '',
+      remark: '',
       models: 'seedance',
       group: 'default',
       base_url: 'https://gateway.example',
@@ -256,5 +262,82 @@ describe('New API channel task plugin extensions', () => {
     expect(JSON.parse(openai.channel.setting ?? '{}')).not.toHaveProperty(
       'task_extend_plugin_keys'
     )
+  })
+})
+
+describe('Suanli AI gateway model configuration', () => {
+  test('round-trips exact Chinese model names, disabled capability flags, zero limits, and separate pricing', () => {
+    const profiles = createSuanliVideoModelPresets()
+    profiles[SUANLIAI_VIDEO_MODELS[1]] = {
+      ...profiles[SUANLIAI_VIDEO_MODELS[1]],
+      default_seconds: 10,
+      billing_mode: 'per_task',
+      unit_price: 0.12,
+      unit_cost: 0.5,
+      cost_currency: 'CNY',
+    }
+    const form = channelFormSchema.parse({
+      ...newAPIForm('https://suanliai.top'),
+      models: SUANLIAI_VIDEO_MODELS.join(','),
+      gateway_provider: 'suanliai',
+      task_extend_plugin_keys: ['suanliai-video'],
+      video_model_configs: profiles,
+    })
+    const payload = transformFormDataToCreatePayload(form)
+    const setting = JSON.parse(payload.channel.setting || '{}')
+    expect(setting.gateway_provider).toBe('suanliai')
+    expect(setting.video_model_configs).toEqual(profiles)
+    const channel = channelSchema.parse({
+      ...payload.channel,
+      id: 7,
+      created_time: 1,
+      test_time: 0,
+      response_time: 0,
+      balance_updated_time: 0,
+      other: '',
+      remark: '',
+    })
+    const restored = transformChannelToFormDefaults(channel)
+    expect(restored.gateway_provider).toBe('suanliai')
+    expect(restored.video_model_configs).toEqual(profiles)
+    expect(
+      restored.video_model_configs?.[SUANLIAI_VIDEO_MODELS[0]]
+    ).toMatchObject({
+      supports_videos: false,
+      max_videos: 0,
+      max_seconds: 15,
+      max_images: 9,
+    })
+  })
+
+  test.each([
+    { min_seconds: 30, max_seconds: 15 },
+    { default_seconds: 20, max_seconds: 15 },
+    { max_seconds: 3601 },
+    { max_images: -1 },
+    { supported_seconds: [5, 8], default_seconds: 10 },
+    { resolutions: ['720p'], default_resolution: '1080p' },
+  ])(
+    'rejects unsupported or unsafe video capability configuration %#',
+    (profile) => {
+      expect(
+        channelFormSchema.safeParse({
+          ...newAPIForm('https://suanliai.top'),
+          video_model_configs: { 'custom.video': profile },
+        }).success
+      ).toBe(false)
+    }
+  )
+
+  test('changing away from a gateway omits its protocol marker and per-model settings', () => {
+    const payload = transformFormDataToCreatePayload({
+      ...newAPIForm('https://suanliai.top'),
+      type: 1,
+      gateway_provider: 'suanliai',
+      video_model_configs: createSuanliVideoModelPresets(),
+    })
+    const setting = JSON.parse(payload.channel.setting || '{}')
+    expect(setting).not.toHaveProperty('gateway_provider')
+    expect(setting).not.toHaveProperty('video_model_configs')
   })
 })

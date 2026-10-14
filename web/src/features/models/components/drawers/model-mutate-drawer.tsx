@@ -19,7 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useRef, useState } from 'react'
-import { useForm } from 'react-hook-form'
+import { useForm, useWatch } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
@@ -81,492 +81,41 @@ import {
 } from '../../lib/model-form'
 import type { Model } from '../../types'
 import { ModelConnections } from '../model-connections'
+import { ModelDocumentTemplateField } from '../model-document-template-field'
 
-export function ModelMutateDrawer(props: {
+type ModelMutateDrawerProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   currentRow?: Model | null
   initialSection?: 'metadata' | 'pricing'
-}) {
+}
+
+export function ModelMutateDrawer(props: ModelMutateDrawerProps) {
+  const drawerKey = [
+    props.open ? 'open' : 'closed',
+    props.initialSection ?? 'metadata',
+    props.currentRow?.id ?? 'new',
+    props.currentRow?.model_name ?? '',
+  ].join(':')
+
+  return <ModelMutateDrawerContent key={drawerKey} {...props} />
+}
+
+function ModelMutateDrawerContent(props: ModelMutateDrawerProps) {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
-  const currentModelId = currentRow?.id
-  const isEditing = Boolean(currentModelId)
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [pricingMode, setPricingMode] = useState<PricingMode>('per-token')
-  const [pricingSubMode, setPricingSubMode] = useState<PricingSubMode>('ratio')
-  const [advancedOpen, setAdvancedOpen] = useState(false)
-  const [promptPrice, setPromptPrice] = useState('')
-  const [completionPrice, setCompletionPrice] = useState('')
-  const [oldModelName, setOldModelName] = useState<string>('')
-  // Model name whose pricing was read into the form when the drawer opened.
-  // Submit may only rewrite pricing for this name, or for a name the user
-  // explicitly priced; anything else it never saw and must leave alone.
-  const [loadedPricingName, setLoadedPricingName] = useState<string>('')
-  // Keep a ref so the load effect can read the latest modelSettings without
-  // depending on it: modelSettings is a fresh object on every system-options
-  // refetch, and including it in the deps would reset the form under the user.
-  const modelSettingsRef = useRef<ModelSettings | null>(null)
-
-  // Fetch vendors for dropdown
-  const { data: vendorsData } = useQuery({
-    queryKey: vendorsQueryKeys.list(),
-    queryFn: () => getVendors({ page_size: 1000 }),
-    enabled: open,
-  })
-
-  const vendors = vendorsData?.data?.items || []
-
-  // Fetch model detail if editing
-  const { data: modelData } = useQuery({
-    queryKey: modelsQueryKeys.detail(currentModelId || 0),
-    queryFn: () => {
-      if (!currentModelId) {
-        throw new Error('Model ID is required')
-      }
-      return getModel(currentModelId)
-    },
-    enabled: open && isEditing,
-  })
-
-  // Fetch system options for ratio configuration
-  const { data: systemOptionsData } = useSystemOptions()
-
-  const updateOption = useUpdateOption()
-
-  // Get model settings from system options
-  const modelSettings = useMemo(() => {
-    if (!systemOptionsData?.data) return null
-    const defaultModelSettings: ModelSettings = {
-      'global.pass_through_request_enabled': false,
-      'global.thinking_model_blacklist': '[]',
-      'global.chat_completions_to_responses_policy': '{}',
-      'general_setting.ping_interval_enabled': false,
-      'general_setting.ping_interval_seconds': 60,
-      'gemini.safety_settings': '',
-      'gemini.version_settings': '',
-      'gemini.supported_imagine_models': '',
-      'gemini.thinking_adapter_enabled': false,
-      'gemini.thinking_adapter_budget_tokens_percentage': 0.6,
-      'gemini.function_call_thought_signature_enabled': false,
-      'gemini.remove_function_response_id_enabled': true,
-      'claude.model_headers_settings': '',
-      'claude.default_max_tokens': '',
-      'claude.thinking_adapter_enabled': true,
-      'claude.thinking_adapter_budget_tokens_percentage': 0.8,
-      ModelPrice: '',
-      ModelRatio: '',
-      CacheRatio: '',
-      CompletionRatio: '',
-      ImageRatio: '',
-      AudioRatio: '',
-      AudioCompletionRatio: '',
-      ExposeRatioEnabled: false,
-      'billing_setting.billing_mode': '{}',
-      'billing_setting.billing_expr': '{}',
-      'billing_setting.per_request_subscription_allowed': '{}',
-      'tool_price_setting.prices': '{}',
-      TopupGroupRatio: '',
-      GroupRatio: '',
-      UserUsableGroups: '',
-      GroupGroupRatio: '',
-      AutoGroups: '',
-      DefaultUseAutoGroup: false,
-      CreateCacheRatio: '',
-      'group_ratio_setting.group_special_usable_group': '{}',
-      'group_ratio_setting.model_token_ratio': '{}',
-      'grok.violation_deduction_enabled': false,
-      'grok.violation_deduction_amount': 0,
-      RetryTimes: 0,
-      ChannelDisableThreshold: '',
-      AutomaticDisableChannelEnabled: false,
-      AutomaticEnableChannelEnabled: false,
-      AutomaticDisableKeywords: '',
-      AutomaticDisableStatusCodes: '401',
-      AutomaticRetryStatusCodes:
-        '100-199,300-399,401-407,409-499,500-503,505-523,525-599',
-      'monitor_setting.auto_test_channel_enabled': false,
-      'monitor_setting.auto_test_channel_minutes': 10,
-      'monitor_setting.channel_test_mode': 'scheduled_all',
-      'channel_affinity_setting.enabled': false,
-      'channel_affinity_setting.switch_on_success': true,
-      'channel_affinity_setting.keep_on_channel_disabled': false,
-      'channel_affinity_setting.max_entries': 100000,
-      'channel_affinity_setting.default_ttl_seconds': 3600,
-      'channel_affinity_setting.rules': '[]',
-      'model_deployment.ionet.api_key': '',
-      'model_deployment.ionet.enabled': false,
-    }
-    return getOptionValue(systemOptionsData.data, defaultModelSettings)
-  }, [systemOptionsData])
-
-  // The load effect keys off this boolean, not the object: it re-runs once
-  // when the settings first arrive (so a drawer opened before that still gets
-  // its pricing prefilled), while later refetches only produce a new object
-  // reference and must not reset a form the user may be editing.
-  const hasModelSettings = modelSettings !== null
-  useEffect(() => {
-    modelSettingsRef.current = modelSettings
-  })
-
-  const form = useForm<ExtendedModelFormValues>({
-    resolver: zodResolver(extendedModelFormSchema),
-    defaultValues: {
-      model_name: '',
-      description: '',
-      icon: '',
-      tags: [],
-      vendor_id: undefined,
-      endpoints: '',
-      name_rule: 0,
-      status: true,
-      sync_official: true,
-      price: '',
-      ratio: '',
-      cacheRatio: '',
-      completionRatio: '',
-      imageRatio: '',
-      audioRatio: '',
-      audioCompletionRatio: '',
-    },
-  })
-
-  const validateNumber = (value: string) => {
-    if (value === '') return true
-    return !Number.isNaN(Number.parseFloat(value))
-  }
-
-  const handlePromptPriceChange = (value: string) => {
-    setPromptPrice(value)
-    if (value && !Number.isNaN(Number.parseFloat(value))) {
-      const ratio = Number.parseFloat(value) / 2
-      form.setValue('ratio', ratio.toString())
-    } else {
-      form.setValue('ratio', '')
-    }
-  }
-
-  const handleCompletionPriceChange = (value: string) => {
-    setCompletionPrice(value)
-    if (
-      value &&
-      !Number.isNaN(Number.parseFloat(value)) &&
-      promptPrice &&
-      !Number.isNaN(Number.parseFloat(promptPrice)) &&
-      Number.parseFloat(promptPrice) > 0
-    ) {
-      const completionRatio =
-        Number.parseFloat(value) / Number.parseFloat(promptPrice)
-      form.setValue('completionRatio', completionRatio.toString())
-    } else {
-      form.setValue('completionRatio', '')
-    }
-  }
-
-  // Load model data for editing and ratio configuration
-  useEffect(() => {
-    if (open && isEditing && modelData?.data) {
-      const model = modelData.data
-      setOldModelName(model.model_name)
-
-      const pricing = readPricingConfig(
-        modelSettingsRef.current,
-        model.model_name
-      )
-      setLoadedPricingName(model.model_name)
-      setPricingMode(pricing.mode)
-      setPromptPrice(pricing.promptPrice)
-      setCompletionPrice(pricing.completionPrice)
-      setAdvancedOpen(pricing.advancedOpen)
-      form.reset({
-        id: model.id,
-        model_name: model.model_name,
-        description: model.description || '',
-        icon: model.icon || '',
-        tags: parseModelTags(model.tags),
-        vendor_id: model.vendor_id,
-        endpoints: model.endpoints || '',
-        name_rule: model.name_rule || 0,
-        status: model.status === 1,
-        sync_official: model.sync_official === 1,
-        ...pricing.fields,
-      })
-    } else if (open && !isEditing) {
-      // Pre-fill model name if passed from missing models, along with any
-      // pricing that name already has, so the user edits it instead of being
-      // shown an empty form that hides existing configuration.
-      const modelName = currentRow?.model_name || ''
-      const pricing = readPricingConfig(modelSettingsRef.current, modelName)
-      setOldModelName('')
-      setLoadedPricingName(modelName)
-      setPricingSubMode('ratio')
-      setPricingMode(pricing.mode)
-      setPromptPrice(pricing.promptPrice)
-      setCompletionPrice(pricing.completionPrice)
-      setAdvancedOpen(pricing.advancedOpen)
-      form.reset({
-        model_name: modelName,
-        description: '',
-        icon: '',
-        tags: [],
-        vendor_id: undefined,
-        endpoints: '',
-        name_rule: 0,
-        status: true,
-        sync_official: true,
-        ...pricing.fields,
-      })
-    }
-  }, [open, isEditing, modelData, currentRow, form, hasModelSettings])
-
-  const onSubmit = useCallback(
-    async (values: ExtendedModelFormValues): Promise<void> => {
-      setIsSubmitting(true)
-      try {
-        const submitData = {
-          ...values,
-          id: isEditing ? currentModelId : undefined,
-          tags: Array.isArray(values.tags) ? values.tags.join(',') : '',
-          status: values.status ? 1 : 0,
-          sync_official: values.sync_official ? 1 : 0,
-        }
-
-        // Remove ratio fields from model data (they're stored in system settings)
-        const {
-          price,
-          ratio,
-          cacheRatio,
-          completionRatio,
-          imageRatio,
-          audioRatio,
-          audioCompletionRatio,
-          ...modelData
-        } = submitData
-
-        const response =
-          isEditing && currentModelId
-            ? await updateModel({ ...modelData, id: currentModelId })
-            : await createModel(modelData)
-
-        if (response.success) {
-          // Handle ratio configuration updates in system settings
-          const finalModelName = values.model_name
-          const hasRatioConfig =
-            (pricingMode === 'per-request' &&
-              values.price &&
-              values.price !== '') ||
-            (pricingMode === 'per-token' &&
-              (values.ratio ||
-                values.cacheRatio ||
-                values.completionRatio ||
-                values.imageRatio ||
-                values.audioRatio ||
-                values.audioCompletionRatio))
-
-          // Always process system settings updates if we have modelSettings
-          // This ensures we can remove stale entries even when clearing all pricing fields
-          if (modelSettings) {
-            // Read existing configurations
-            const priceMap = safeJsonParse<Record<string, number>>(
-              modelSettings.ModelPrice,
-              { fallback: {}, silent: true }
-            )
-            const ratioMap = safeJsonParse<Record<string, number>>(
-              modelSettings.ModelRatio,
-              { fallback: {}, silent: true }
-            )
-            const cacheMap = safeJsonParse<Record<string, number>>(
-              modelSettings.CacheRatio,
-              { fallback: {}, silent: true }
-            )
-            const completionMap = safeJsonParse<Record<string, number>>(
-              modelSettings.CompletionRatio,
-              { fallback: {}, silent: true }
-            )
-            const imageMap = safeJsonParse<Record<string, number>>(
-              modelSettings.ImageRatio,
-              { fallback: {}, silent: true }
-            )
-            const audioMap = safeJsonParse<Record<string, number>>(
-              modelSettings.AudioRatio,
-              { fallback: {}, silent: true }
-            )
-            const audioCompletionMap = safeJsonParse<Record<string, number>>(
-              modelSettings.AudioCompletionRatio,
-              { fallback: {}, silent: true }
-            )
-
-            // Remove old model name entries if model name changed (always, even if no new config)
-            if (isEditing && oldModelName && oldModelName !== finalModelName) {
-              delete priceMap[oldModelName]
-              delete ratioMap[oldModelName]
-              delete cacheMap[oldModelName]
-              delete completionMap[oldModelName]
-              delete imageMap[oldModelName]
-              delete audioMap[oldModelName]
-              delete audioCompletionMap[oldModelName]
-            }
-
-            // Rebuild this model name's entries from the form, but only when
-            // the form speaks for that name: it loaded the name's pricing when
-            // the drawer opened, so clearing every field means "remove
-            // pricing", or the user typed pricing in, which then wins outright
-            // (this is also what replaces the old entries across a mode
-            // switch). A name the form never loaded may still have pricing
-            // configured elsewhere, and an untouched pricing section must not
-            // wipe it -- that covers creating a model over an existing name,
-            // and renaming onto one.
-            if (hasRatioConfig || finalModelName === loadedPricingName) {
-              delete priceMap[finalModelName]
-              delete ratioMap[finalModelName]
-              delete cacheMap[finalModelName]
-              delete completionMap[finalModelName]
-              delete imageMap[finalModelName]
-              delete audioMap[finalModelName]
-              delete audioCompletionMap[finalModelName]
-            }
-
-            // Only add new entries if user provided new configuration
-            if (hasRatioConfig) {
-              if (
-                pricingMode === 'per-request' &&
-                values.price &&
-                values.price !== ''
-              ) {
-                priceMap[finalModelName] = Number.parseFloat(values.price)
-              } else if (pricingMode === 'per-token') {
-                if (values.ratio && values.ratio !== '') {
-                  ratioMap[finalModelName] = Number.parseFloat(values.ratio)
-                }
-                if (values.cacheRatio && values.cacheRatio !== '') {
-                  cacheMap[finalModelName] = Number.parseFloat(
-                    values.cacheRatio
-                  )
-                }
-                if (values.completionRatio && values.completionRatio !== '') {
-                  completionMap[finalModelName] = Number.parseFloat(
-                    values.completionRatio
-                  )
-                }
-                if (values.imageRatio && values.imageRatio !== '') {
-                  imageMap[finalModelName] = Number.parseFloat(
-                    values.imageRatio
-                  )
-                }
-                if (values.audioRatio && values.audioRatio !== '') {
-                  audioMap[finalModelName] = Number.parseFloat(
-                    values.audioRatio
-                  )
-                }
-                if (
-                  values.audioCompletionRatio &&
-                  values.audioCompletionRatio !== ''
-                ) {
-                  audioCompletionMap[finalModelName] = Number.parseFloat(
-                    values.audioCompletionRatio
-                  )
-                }
-              }
-            }
-
-            // Update system options if there are changes
-            const updates: Array<{ key: string; value: string }> = []
-
-            const newModelPrice = normalizeJsonString(JSON.stringify(priceMap))
-            if (
-              newModelPrice !== normalizeJsonString(modelSettings.ModelPrice)
-            ) {
-              updates.push({ key: 'ModelPrice', value: newModelPrice })
-            }
-
-            const newModelRatio = normalizeJsonString(JSON.stringify(ratioMap))
-            if (
-              newModelRatio !== normalizeJsonString(modelSettings.ModelRatio)
-            ) {
-              updates.push({ key: 'ModelRatio', value: newModelRatio })
-            }
-
-            const newCacheRatio = normalizeJsonString(JSON.stringify(cacheMap))
-            if (
-              newCacheRatio !== normalizeJsonString(modelSettings.CacheRatio)
-            ) {
-              updates.push({ key: 'CacheRatio', value: newCacheRatio })
-            }
-
-            const newCompletionRatio = normalizeJsonString(
-              JSON.stringify(completionMap)
-            )
-            if (
-              newCompletionRatio !==
-              normalizeJsonString(modelSettings.CompletionRatio)
-            ) {
-              updates.push({
-                key: 'CompletionRatio',
-                value: newCompletionRatio,
-              })
-            }
-
-            const newImageRatio = normalizeJsonString(JSON.stringify(imageMap))
-            if (
-              newImageRatio !== normalizeJsonString(modelSettings.ImageRatio)
-            ) {
-              updates.push({ key: 'ImageRatio', value: newImageRatio })
-            }
-
-            const newAudioRatio = normalizeJsonString(JSON.stringify(audioMap))
-            if (
-              newAudioRatio !== normalizeJsonString(modelSettings.AudioRatio)
-            ) {
-              updates.push({ key: 'AudioRatio', value: newAudioRatio })
-            }
-
-            const newAudioCompletionRatio = normalizeJsonString(
-              JSON.stringify(audioCompletionMap)
-            )
-            if (
-              newAudioCompletionRatio !==
-              normalizeJsonString(modelSettings.AudioCompletionRatio)
-            ) {
-              updates.push({
-                key: 'AudioCompletionRatio',
-                value: newAudioCompletionRatio,
-              })
-            }
-
-            // Apply all updates (including deletions when clearing fields)
-            for (const update of updates) {
-              await updateOption.mutateAsync(update)
-            }
-          }
-
-          toast.success(
-            isEditing
-              ? 'Model updated successfully'
-              : 'Model created successfully'
-          )
-          queryClient.invalidateQueries({ queryKey: modelsQueryKeys.lists() })
-          queryClient.invalidateQueries({ queryKey: ['system-options'] })
-          onOpenChange(false)
-        } else {
-          toast.error(response.message || 'Operation failed')
-        }
-      } catch (error: unknown) {
-        toast.error((error as Error)?.message || 'Operation failed')
-      } finally {
-        setIsSubmitting(false)
-      }
-    },
-    [
-      isEditing,
-      currentModelId,
-      queryClient,
-      onOpenChange,
-      pricingMode,
-      oldModelName,
-      loadedPricingName,
-      modelSettings,
-      updateOption,
-    ]
+  const [createdModel, setCreatedModel] = useState<{
+    source: Model | null | undefined
+    model: Model
+  } | null>(null)
+  const currentRow =
+    createdModel && createdModel.source === props.currentRow
+      ? createdModel.model
+      : props.currentRow
+  const isEditing = Boolean(currentRow?.id)
+  const hasModelName = Boolean(currentRow?.model_name)
+  const [section, setSection] = useState<string>(
+    props.initialSection ?? 'metadata'
   )
   const [pricingName, setPricingName] = useState('')
   const [pricingVisited, setPricingVisited] = useState(
@@ -587,6 +136,14 @@ export function ModelMutateDrawer(props: {
       name_rule: 0,
     } as Model),
   })
+  const watchedVendorId = useWatch({
+    control: form.control,
+    name: 'vendor_id',
+  })
+  const watchedModelName = useWatch({
+    control: form.control,
+    name: 'model_name',
+  })
   const vendorsQuery = useQuery({
     queryKey: vendorsQueryKeys.list(),
     queryFn: async () =>
@@ -594,9 +151,7 @@ export function ModelMutateDrawer(props: {
     enabled: props.open,
   })
   const vendors = vendorsQuery.data?.data?.items ?? []
-  const selectedVendor = vendors.find(
-    (vendor) => vendor.id === form.watch('vendor_id')
-  )
+  const selectedVendor = vendors.find((vendor) => vendor.id === watchedVendorId)
   const modelQuery = useQuery({
     queryKey: modelsQueryKeys.detail(currentRow?.id ?? 0),
     queryFn: async () => {
@@ -612,23 +167,7 @@ export function ModelMutateDrawer(props: {
   const savedModel = modelQuery.data ?? currentRow
 
   useEffect(() => {
-    if (!props.open) return
-    setSection(props.initialSection ?? 'metadata')
-    setPricingVisited(props.initialSection === 'pricing')
-    setPricingName('')
-    setPricingDirty(false)
-    setPendingPricingName(null)
-    setCloseConfirm(false)
-  }, [
-    props.open,
-    props.initialSection,
-    props.currentRow?.id,
-    props.currentRow?.model_name,
-  ])
-
-  useEffect(() => {
     if (!props.open) {
-      setCreatedModel(null)
       loadedKey.current = ''
       return
     }
@@ -683,6 +222,7 @@ export function ModelMutateDrawer(props: {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: modelsQueryKeys.all }),
         queryClient.invalidateQueries({ queryKey: ['pricing'] }),
+        queryClient.invalidateQueries({ queryKey: ['model-documentation'] }),
         queryClient.invalidateQueries({ queryKey: vendorsQueryKeys.all }),
       ])
       toast.success(t('Model metadata saved'))
@@ -799,8 +339,7 @@ export function ModelMutateDrawer(props: {
                             <FormDescription>
                               {t('The unique identifier for this model')}
                               {isEditing &&
-                                form.watch('model_name') !==
-                                  currentRow?.model_name && (
+                                watchedModelName !== currentRow?.model_name && (
                                   <span className='text-warning mt-1 block'>
                                     {t(
                                       'Renaming metadata does not rename channel models or move pricing. Existing prices stay with the original model name.'
@@ -998,6 +537,11 @@ export function ModelMutateDrawer(props: {
                             <FormMessage />
                           </FormItem>
                         )}
+                      />
+
+                      <ModelDocumentTemplateField
+                        control={form.control}
+                        disabled={isSubmitting}
                       />
                     </SideDrawerSection>
 

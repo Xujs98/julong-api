@@ -31,6 +31,8 @@ import { listDeployments } from './api'
 import { DeploymentAccessGuard } from './components/deployment-access-guard'
 import { DeploymentsTable } from './components/deployments-table'
 import { CreateDeploymentDrawer } from './components/dialogs/create-deployment-drawer'
+import { DocumentTemplateDialog } from './components/dialogs/document-template-dialog'
+import { DocumentTemplatesTable } from './components/document-templates-table'
 import { ModelsDialogs } from './components/models-dialogs'
 import { ModelsPrimaryButtons } from './components/models-primary-buttons'
 import { ModelsProvider, useModels } from './components/models-provider'
@@ -59,6 +61,10 @@ const SECTION_META: Record<
     titleKey: 'Deployments',
     tabKey: 'Deployments',
   },
+  'document-templates': {
+    titleKey: 'Document templates',
+    tabKey: 'Document templates',
+  },
 }
 
 function ModelsContent() {
@@ -71,6 +77,7 @@ function ModelsContent() {
 
   // Deployment create dialog state
   const [createDeploymentOpen, setCreateDeploymentOpen] = useState(false)
+  const [uploadDocumentOpen, setUploadDocumentOpen] = useState(false)
 
   // keep context state in sync (for components that rely on it)
   useEffect(() => {
@@ -116,6 +123,14 @@ function ModelsContent() {
       </Button>
     )
     content = <DeploymentsSection />
+  } else if (activeSection === 'document-templates') {
+    actions = (
+      <Button onClick={() => setUploadDocumentOpen(true)} size='sm'>
+        <Plus className='size-4' />
+        {t('Upload document template')}
+      </Button>
+    )
+    content = <DocumentTemplatesTable />
   }
 
   return (
@@ -129,9 +144,13 @@ function ModelsContent() {
         <SectionPageLayout.Content>
           <div className='flex h-full min-h-0 flex-col gap-4'>
             <Tabs value={activeSection} onValueChange={handleSectionChange}>
-              <TabsList className='max-w-full flex-wrap justify-start group-data-horizontal/tabs:h-auto'>
+              <TabsList className='w-fit max-w-full flex-nowrap justify-start overflow-x-auto group-data-horizontal/tabs:h-auto'>
                 {MODELS_SECTION_IDS.map((section) => (
-                  <TabsTrigger key={section} value={section}>
+                  <TabsTrigger
+                    key={section}
+                    value={section}
+                    className='flex-none'
+                  >
                     {t(SECTION_META[section].tabKey)}
                   </TabsTrigger>
                 ))}
@@ -142,6 +161,11 @@ function ModelsContent() {
         </SectionPageLayout.Content>
       </SectionPageLayout>
 
+      <DocumentTemplateDialog
+        open={uploadDocumentOpen}
+        onOpenChange={setUploadDocumentOpen}
+        mode='upload'
+      />
       <ModelsDialogs />
       <CreateDeploymentDrawer
         open={createDeploymentOpen}

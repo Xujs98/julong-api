@@ -22,6 +22,7 @@ import * as React from 'react'
 import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table'
 import { cn } from '@/lib/utils'
 
+import { useHorizontalWheelScroll } from '../hooks/use-horizontal-wheel-scroll'
 import {
   getPinnedColumnMap,
   getResolvedColumnClassNameFromMap,
@@ -98,9 +99,10 @@ function UnifiedTableView<TData>({
   getColumnClassName: DataTableColumnClassName
 }) {
   const tableSizing = getTableSizing(props)
+  const wheelRef = useHorizontalWheelScroll(props.horizontalWheelColumnId)
 
   return (
-    <div className={props.tableContainerClassName}>
+    <div ref={wheelRef} className={props.tableContainerClassName}>
       <Table className={props.tableClassName} style={tableSizing.style}>
         {tableSizing.colgroup}
         <DataTableHeader
@@ -128,6 +130,7 @@ function SplitHeaderTableView<TData>({
   getColumnClassName: DataTableColumnClassName
 }) {
   const tableSizing = getTableSizing(props)
+  const wheelRef = useHorizontalWheelScroll(props.horizontalWheelColumnId)
 
   return (
     <div
@@ -137,6 +140,8 @@ function SplitHeaderTableView<TData>({
       )}
     >
       <div
+        ref={wheelRef}
+        data-table-scroll-viewport
         className={cn(
           'min-h-0 flex-1 overflow-auto',
           '**:data-[slot=table-header]:[--table-header-bg:var(--table-header)]',

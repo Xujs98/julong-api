@@ -19,7 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, describe, expect, test } from 'vitest'
 
-import { CodeBlockEditor } from '../code-block'
+import { CodeBlock, CodeBlockEditor } from '../code-block'
 
 afterEach(() => {
   cleanup()
@@ -74,4 +74,27 @@ describe('CodeBlockEditor', () => {
     expect(contentAfter).toBe(contentBefore)
     expect(contentAfter?.textContent).toContain('hi')
   })
+})
+
+test('JSON preview highlights keys, strings and numbers and wraps long result URLs', () => {
+  const code = JSON.stringify(
+    { result_url: 'https://example.com/' + 'video'.repeat(80), seconds: 15 },
+    null,
+    2
+  )
+  const { getByRole } = render(
+    <CodeBlock language='json' code={code} wrapLines />
+  )
+  const editor = getByRole('textbox', { name: 'json' })
+  const key = [...editor.querySelectorAll('span')].find(
+    (node) => node.textContent === '"result_url"'
+  )
+  const number = [...editor.querySelectorAll('span')].find(
+    (node) => node.textContent === '15'
+  )
+  expect(key).toBeTruthy()
+  expect(number).toBeTruthy()
+  expect(key?.className).not.toBe(number?.className)
+  expect(editor.querySelector('.cm-content')).toHaveClass('cm-lineWrapping')
+  expect(editor).toHaveAttribute('aria-readonly', 'true')
 })

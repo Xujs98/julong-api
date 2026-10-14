@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { z } from 'zod'
+import * as z from 'zod'
 
 import {
   CLAUDE_FIELD_PASSTHROUGH_TYPES,
@@ -42,6 +42,10 @@ import {
 } from './advanced-custom'
 import { readTaskExtendPluginKeys } from './channel-plugin-extensions'
 import { supportsResponsesWebSocket } from './responses-websocket'
+import {
+  videoModelConfigsSchema,
+  type VideoModelConfigs,
+} from './suanliai-video'
 
 // ============================================================================
 // Form Validation Schema
@@ -209,6 +213,8 @@ export const channelFormSchema = z
     base_url: z.string().optional(),
     task_plugin_key: z.string().optional(),
     task_extend_plugin_keys: z.array(z.string()).optional(),
+    gateway_provider: z.enum(['', 'suanliai']).optional(),
+    video_model_configs: videoModelConfigsSchema.optional(),
     key: z.string(),
     openai_organization: z.string().optional(),
     models: z.string().min(1, ERROR_MESSAGES.REQUIRED_MODELS),
@@ -433,6 +439,8 @@ export const CHANNEL_FORM_DEFAULT_VALUES: ChannelFormValues = {
   base_url: '',
   task_plugin_key: '',
   task_extend_plugin_keys: [],
+  gateway_provider: '',
+  video_model_configs: {},
   key: '',
   openai_organization: '',
   models: '',
@@ -501,6 +509,8 @@ export function transformChannelToFormDefaults(
   let extraSettings = {
     task_plugin_key: '',
     task_extend_plugin_keys: [] as string[],
+    gateway_provider: '' as '' | 'suanliai',
+    video_model_configs: {} as VideoModelConfigs,
     force_format: false,
     thinking_to_content: false,
     proxy: '',
@@ -523,10 +533,16 @@ export function transformChannelToFormDefaults(
       extraSettings = {
         task_plugin_key: parsed.task_plugin_key || '',
         task_extend_plugin_keys: readTaskExtendPluginKeys(channel.type, parsed),
+        gateway_provider:
+          parsed.gateway_provider === 'suanliai' ? 'suanliai' : '',
+        video_model_configs:
+          videoModelConfigsSchema.safeParse(parsed.video_model_configs).data ||
+          {},
         force_format: parsed.force_format || false,
         thinking_to_content: parsed.thinking_to_content || false,
         proxy: parsed.proxy || '',
         http_protocol: protocol,
+        tls_insecure_skip_verify: Boolean(parsed.tls_insecure_skip_verify),
         http2_connection_shards: protocol === HTTP_PROTOCOL_HTTP1 ? 1 : shards,
         pass_through_body_enabled: parsed.pass_through_body_enabled || false,
         responses_websocket_enabled:
@@ -647,6 +663,16 @@ export function transformChannelToFormDefaults(
  */
 export function buildSettingJSON(formData: ChannelFormValues): string {
   const settingObj: Record<string, unknown> = {
+    gateway_provider:
+      formData.type === CHANNEL_TYPE_NEW_API &&
+      formData.gateway_provider === 'suanliai'
+        ? 'suanliai'
+        : undefined,
+    video_model_configs:
+      formData.type === CHANNEL_TYPE_NEW_API &&
+      Object.keys(formData.video_model_configs || {}).length
+        ? formData.video_model_configs
+        : undefined,
     task_plugin_key:
       formData.type === CHANNEL_TYPE_TASK_PLUGIN
         ? formData.task_plugin_key?.trim() || ''

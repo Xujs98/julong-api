@@ -150,7 +150,7 @@ export async function getChannelOps(
   const res = await api.get('/api/channel/ops', {
     ...channelActionConfig(),
     params: autoBan === undefined ? undefined : { auto_ban: autoBan },
-  })
+  } as ApiRequestConfig)
   return res.data
 }
 

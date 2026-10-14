@@ -24,11 +24,7 @@ import {
   createRouter,
   RouterProvider,
 } from '@tanstack/react-router'
-import {
-  flexRender,
-  getCoreRowModel,
-  useReactTable,
-} from '@tanstack/react-table'
+import { flexRender } from '@tanstack/react-table'
 import {
   act,
   cleanup,
@@ -43,6 +39,8 @@ import { I18nextProvider } from 'react-i18next'
 import { Toaster, toast } from 'sonner'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 
+import { useDataTable } from '@/components/data-table'
+import { ApiKeys } from '@/features/keys'
 import zh from '@/i18n/locales/zh.json'
 import { api } from '@/lib/api'
 import {
@@ -83,10 +81,9 @@ function QuotaTable(props: { apiKey: ApiKey }) {
   const columns = useApiKeysColumns(now).filter(
     (column) => column.id === 'quota'
   )
-  const table = useReactTable({
+  const { table } = useDataTable({
     columns,
     data: [props.apiKey],
-    getCoreRowModel: getCoreRowModel(),
   })
   return (
     <table>
@@ -294,7 +291,15 @@ it('keeps a long amount within its column while showing the full amount in detai
   ).toHaveLength(2)
 })
 
-function KeysPage() {
+function KeysPage(props: { fullPage?: boolean }) {
+  if (props.fullPage) {
+    return (
+      <>
+        <ApiKeys />
+        <Toaster />
+      </>
+    )
+  }
   return (
     <ApiKeysProvider>
       <ApiKeysTable />
@@ -303,12 +308,23 @@ function KeysPage() {
   )
 }
 
-async function renderKeysPage(status = 1, overrides: Partial<ApiKey> = {}) {
+async function renderKeysPage(
+  status = 1,
+  overrides: Partial<ApiKey> = {},
+  fullPage = false
+) {
   let currentKey = { ...key, status, ...overrides }
   vi.mocked(api.get).mockImplementation(async (url) => {
     if (url.startsWith('/api/token/')) {
+      const items = fullPage
+        ? Array.from({ length: 10 }, (_, index) => ({
+            ...currentKey,
+            id: index + 7,
+            name: index === 0 ? currentKey.name : `production-${index + 1}`,
+          }))
+        : [currentKey]
       return {
-        data: { success: true, data: { items: [currentKey], total: 1 } },
+        data: { success: true, data: { items, total: items.length } },
       }
     }
     return { data: { success: true, data: { default: { ratio: 1 } } } }
@@ -324,14 +340,25 @@ async function renderKeysPage(status = 1, overrides: Partial<ApiKey> = {}) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   })
-  client.setQueryData(['status'], {})
+  client.setQueryData(['status'], {
+    custom_endpoints: fullPage
+      ? [
+          {
+            id: 'local',
+            name: 'Local API',
+            url: 'http://localhost:3000',
+            description: '',
+          },
+        ]
+      : [],
+  })
   clients.push(client)
   const root = createRootRoute()
   const auth = createRoute({ getParentRoute: () => root, id: '_authenticated' })
   const keysRoute = createRoute({
     getParentRoute: () => auth,
     path: 'keys/',
-    component: KeysPage,
+    component: () => <KeysPage fullPage={fullPage} />,
   })
   const router = createRouter({
     routeTree: root.addChildren([auth.addChildren([keysRoute])]),
@@ -348,6 +375,41 @@ async function renderKeysPage(status = 1, overrides: Partial<ApiKey> = {}) {
   await screen.findByText(currentKey.name)
   return { post, put }
 }
+
+it.each(['desktop', 'mobile'])(
+  'keeps a long %s key list scrollable below custom endpoints with pagination outside the scroller',
+  async (viewport) => {
+    if (viewport === 'mobile') {
+      const matchMedia = window.matchMedia
+      vi.spyOn(window, 'matchMedia').mockImplementation((query) => ({
+        ...matchMedia(query),
+        matches: query.includes('max-width'),
+      }))
+    }
+    await renderKeysPage(1, {}, true)
+    const endpoint = screen
+      .getByRole('button', { name: /Local API/ })
+      .closest('section')
+    expect(endpoint).toHaveClass('shrink-0')
+    const layout = endpoint?.parentElement
+    expect(layout).toHaveClass('flex', 'flex-col', 'h-full', 'min-h-0')
+    const listRegion = layout?.lastElementChild
+    expect(listRegion).toHaveClass('min-h-0', 'flex-1')
+    const lastKey = await screen.findByText('production-10')
+    const scroller = lastKey.closest(
+      viewport === 'mobile' ? '.overflow-y-auto' : '.overflow-auto'
+    )
+    expect(scroller).toHaveClass('min-h-0', 'flex-1')
+    if (viewport === 'desktop') {
+      expect(
+        screen.getByRole('columnheader', { name: 'Name' }).closest('thead')
+      ).toHaveClass('sticky', 'top-0')
+    }
+    const pagination = screen.getByText('Rows per page')
+    expect(screen.getByRole('main')).toContainElement(pagination)
+    expect(scroller).not.toContainElement(pagination)
+  }
+)
 
 it('combines creation and last use while keeping expiry, models and IP restrictions separate', async () => {
   await renderKeysPage()

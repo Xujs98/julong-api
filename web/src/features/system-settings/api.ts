@@ -170,3 +170,17 @@ export async function fetchUpstreamRatios(request: FetchUpstreamRatiosRequest) {
   )
   return res.data
 }
+
+export async function updatePasskeyDomains(
+  request: UpdatePasskeyDomainsRequest
+) {
+  const res = await api.put<UpdatePasskeyDomainsResponse>(
+    '/api/option/passkey/domains',
+    request,
+    {
+      validateStatus: (status) =>
+        (status >= 200 && status < 300) || status === 409,
+    }
+  )
+  return res.data
+}

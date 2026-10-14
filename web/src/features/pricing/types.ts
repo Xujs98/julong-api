@@ -143,3 +143,13 @@ export type PriceType =
   | 'audio_input'
   | 'audio_output'
 export type QuotaType = 0 | 1 // 0: token-based, 1: per-request
+
+export type ModelDocumentation = {
+  id: number
+  name: string
+  format: 'markdown' | 'docx'
+  original_filename: string
+  content: string
+  created_time: number
+  updated_time: number
+}

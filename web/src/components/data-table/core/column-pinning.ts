@@ -60,11 +60,11 @@ function getPinnedColumnClassName(
 ) {
   const edgeClassName =
     pinnedColumn.side === 'left'
-      ? 'shadow-[8px_0_10px_-10px_hsl(var(--foreground))]'
-      : 'shadow-[-8px_0_10px_-10px_hsl(var(--foreground))]'
+      ? 'data-table-pinned-left'
+      : 'data-table-pinned-right'
 
   return cn(
-    'sticky whitespace-nowrap',
+    'sticky overflow-visible whitespace-nowrap',
     pinnedColumn.side === 'left' ? 'left-0' : 'right-0',
     edgeClassName,
     kind === 'header'

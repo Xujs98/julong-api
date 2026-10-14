@@ -33,7 +33,6 @@ import {
 } from '@/components/drawer-layout'
 import { PermissionMatrix } from '@/components/permission-matrix'
 import { Button } from '@/components/ui/button'
-import { Combobox } from '@/components/ui/combobox'
 import {
   Form,
   FormControl,
@@ -76,7 +75,6 @@ import { formatQuota, parseQuotaFromDollars } from '@/lib/format'
 import { handleServerError } from '@/lib/handle-server-error'
 import { accountPasswordSchema } from '@/lib/password-policy'
 import { ROLE } from '@/lib/roles'
-import { AuthOperationError } from '@/lib/secure-verification'
 import { requireServerSuccess } from '@/lib/server-error-message'
 import { useAuthStore } from '@/stores/auth-store'
 
@@ -118,6 +116,7 @@ export function UsersMutateDrawer({
   const { triggerRefresh, requestVerification } = useUsers()
   const currentUser = useAuthStore((s) => s.auth.user)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const loadedPermissions = useRef<AdminPermissionMatrix | undefined>(undefined)
   const [quotaDialogOpen, setQuotaDialogOpen] = useState(false)
   const [bindingEditingEnabled, setBindingEditingEnabled] = useState(false)
 
@@ -160,6 +159,7 @@ export function UsersMutateDrawer({
       getUser(currentRow.id)
         .then((result) => {
           if (result.success && result.data) {
+            loadedPermissions.current = result.data.admin_permissions
             form.reset(transformUserToFormDefaults(result.data))
           }
         })

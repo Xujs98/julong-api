@@ -21,8 +21,23 @@ import { Loader2, RefreshCw, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 import * as z from 'zod'
 
+import { DateTimePicker } from '@/components/datetime-picker'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog'
+import { Button } from '@/components/ui/button'
 import {
   Form,
   FormControl,
@@ -33,6 +48,16 @@ import {
   FormMessage,
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Progress } from '@/components/ui/progress'
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
@@ -41,26 +66,33 @@ import dayjs from '@/lib/dayjs'
 import { formatTimestampToDate } from '@/lib/format'
 
 import {
+  getCurrentLogCleanupTask,
+  getSystemTask,
+  startLogCleanupTask,
+} from '../api'
+import {
+  SettingsControlGroup,
   SettingsForm,
-  SettingsFormGrid,
   SettingsSwitchContent,
   SettingsSwitchItem,
 } from '../components/settings-form-layout'
 import { SettingsPageFormActions } from '../components/settings-page-context'
 import { SettingsSection } from '../components/settings-section'
 import { useUpdateOption } from '../hooks/use-update-option'
+import type { LogCleanupTask } from '../types'
 import { safeNumberFieldProps } from '../utils/numeric-field'
-import { HistoryLogCleanup } from './history-log-cleanup'
-import { ServerLogFiles } from './server-log-files'
 
 const logSettingsSchema = z.object({
   LogConsumeEnabled: z.boolean(),
+  userExportEnabled: z.boolean(),
+  maxRangeDays: z.number().int().min(1),
   UserRiskDetectionEnabled: z.boolean(),
   UserLogGroupRatioDisplayEnabled: z.boolean(),
   UserLogGroupRatioDisplayMode: z.enum(['system', 'pricing_group', 'manual']),
   UserLogGroupRatioManualValue: z.number().min(0),
   ImageGenerationLogEnabled: z.boolean(),
   ImageGenerationLogRetentionDays: z.number().int().min(0).max(3650),
+  MediaAssetRetentionDays: z.number().int().min(1).max(365),
   ImageGenerationLogPollingIntervalSeconds: z.number().int().min(5).max(3600),
   ImageGenerationLogImageAuthWhitelistEnabled: z.boolean(),
   ImageGenerationLogImageAuthWhitelist: z.string(),
@@ -70,12 +102,15 @@ type LogSettingsFormValues = z.infer<typeof logSettingsSchema>
 
 type LogSettingsSectionProps = {
   defaultEnabled: boolean
+  defaultUserExportEnabled: boolean
+  defaultMaxRangeDays: number
   defaultUserRiskDetectionEnabled: boolean
   defaultUserLogGroupRatioDisplayEnabled: boolean
   defaultUserLogGroupRatioDisplayMode: 'system' | 'pricing_group' | 'manual'
   defaultUserLogGroupRatioManualValue: number
   defaultImageLogEnabled: boolean
   defaultImageLogRetentionDays: number
+  defaultMediaAssetRetentionDays?: number
   defaultImageLogPollingIntervalSeconds: number
   defaultImageLogImageAuthWhitelistEnabled: boolean
   defaultImageLogImageAuthWhitelist: string
@@ -735,41 +770,34 @@ function isActiveLogCleanupTask(task: LogCleanupTask | null) {
 
 export function LogSettingsSection({
   defaultEnabled,
+  defaultUserExportEnabled,
+  defaultMaxRangeDays,
   defaultUserRiskDetectionEnabled,
   defaultUserLogGroupRatioDisplayEnabled,
   defaultUserLogGroupRatioDisplayMode,
   defaultUserLogGroupRatioManualValue,
   defaultImageLogEnabled,
   defaultImageLogRetentionDays,
+  defaultMediaAssetRetentionDays = 1,
   defaultImageLogPollingIntervalSeconds,
   defaultImageLogImageAuthWhitelistEnabled,
   defaultImageLogImageAuthWhitelist,
 }: LogSettingsSectionProps) {
   const { t } = useTranslation()
   const updateOption = useUpdateOption()
-  const recordingTitleId = useId()
-  const searchTitleId = useId()
-  const formDefaults = useMemo<LogSettingsFormValues>(
-    () => ({
-      LogConsumeEnabled: props.defaultValues.LogConsumeEnabled,
-      log_setting: {
-        user_export_enabled:
-          props.defaultValues['log_setting.user_export_enabled'],
-        max_range_days: props.defaultValues['log_setting.max_range_days'],
-      },
-    }),
-    [props.defaultValues]
-  )
   const form = useForm<LogSettingsFormValues>({
     resolver: zodResolver(logSettingsSchema),
     defaultValues: {
       LogConsumeEnabled: defaultEnabled,
+      userExportEnabled: defaultUserExportEnabled,
+      maxRangeDays: defaultMaxRangeDays,
       UserRiskDetectionEnabled: defaultUserRiskDetectionEnabled,
       UserLogGroupRatioDisplayEnabled: defaultUserLogGroupRatioDisplayEnabled,
       UserLogGroupRatioDisplayMode: defaultUserLogGroupRatioDisplayMode,
       UserLogGroupRatioManualValue: defaultUserLogGroupRatioManualValue,
       ImageGenerationLogEnabled: defaultImageLogEnabled,
       ImageGenerationLogRetentionDays: defaultImageLogRetentionDays,
+      MediaAssetRetentionDays: defaultMediaAssetRetentionDays,
       ImageGenerationLogPollingIntervalSeconds:
         defaultImageLogPollingIntervalSeconds,
       ImageGenerationLogImageAuthWhitelistEnabled:
@@ -812,12 +840,15 @@ export function LogSettingsSection({
   useEffect(() => {
     form.reset({
       LogConsumeEnabled: defaultEnabled,
+      userExportEnabled: defaultUserExportEnabled,
+      maxRangeDays: defaultMaxRangeDays,
       UserRiskDetectionEnabled: defaultUserRiskDetectionEnabled,
       UserLogGroupRatioDisplayEnabled: defaultUserLogGroupRatioDisplayEnabled,
       UserLogGroupRatioDisplayMode: defaultUserLogGroupRatioDisplayMode,
       UserLogGroupRatioManualValue: defaultUserLogGroupRatioManualValue,
       ImageGenerationLogEnabled: defaultImageLogEnabled,
       ImageGenerationLogRetentionDays: defaultImageLogRetentionDays,
+      MediaAssetRetentionDays: defaultMediaAssetRetentionDays,
       ImageGenerationLogPollingIntervalSeconds:
         defaultImageLogPollingIntervalSeconds,
       ImageGenerationLogImageAuthWhitelistEnabled:
@@ -835,6 +866,7 @@ export function LogSettingsSection({
     defaultImageLogImageAuthWhitelistEnabled,
     defaultImageLogPollingIntervalSeconds,
     defaultImageLogRetentionDays,
+    defaultMediaAssetRetentionDays,
     form,
   ])
 
@@ -920,6 +952,11 @@ export function LogSettingsSection({
   const onSubmit = async (values: LogSettingsFormValues) => {
     const updates = [
       {
+        key: 'log_setting.user_export_enabled',
+        value: values.userExportEnabled,
+      },
+      { key: 'log_setting.max_range_days', value: values.maxRangeDays },
+      {
         key: 'LogConsumeEnabled',
         value: values.LogConsumeEnabled,
       },
@@ -946,6 +983,10 @@ export function LogSettingsSection({
       {
         key: 'ImageGenerationLogRetentionDays',
         value: values.ImageGenerationLogRetentionDays,
+      },
+      {
+        key: 'MediaAssetRetentionDays',
+        value: values.MediaAssetRetentionDays,
       },
       {
         key: 'ImageGenerationLogPollingIntervalSeconds',
@@ -1038,7 +1079,7 @@ export function LogSettingsSection({
   }
 
   return (
-    <SettingsSection title={t('Log Maintenance')} className='gap-6'>
+    <SettingsSection title={t('Log Maintenance')}>
       <Form {...form}>
         <SettingsForm onSubmit={form.handleSubmit(onSubmit)}>
           <SettingsPageFormActions
@@ -1046,38 +1087,76 @@ export function LogSettingsSection({
             isSaving={updateOption.isPending}
             saveLabel='Save log settings'
           />
-          <div
-            role='group'
-            aria-labelledby={recordingTitleId}
-            className='flex min-w-0 flex-col gap-4'
-          >
-            <h4 id={recordingTitleId} className='font-medium'>
-              {t('Log recording')}
-            </h4>
-            <FormField
-              control={form.control}
-              name='LogConsumeEnabled'
-              render={({ field }) => (
-                <SettingsSwitchItem>
-                  <SettingsSwitchContent>
-                    <FormLabel>{t('Record quota usage')}</FormLabel>
-                    <FormDescription>
-                      {t(
-                        'Track per-request consumption to power usage analytics. Keeping this on increases database writes.'
-                      )}
-                    </FormDescription>
-                  </SettingsSwitchContent>
-                  <FormControl>
-                    <Switch
-                      checked={field.value}
-                      onCheckedChange={field.onChange}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </SettingsSwitchItem>
-              )}
-            />
-          </div>
+          <FormField
+            control={form.control}
+            name='LogConsumeEnabled'
+            render={({ field }) => (
+              <SettingsSwitchItem>
+                <SettingsSwitchContent>
+                  <FormLabel>{t('Record quota usage')}</FormLabel>
+                  <FormDescription>
+                    {t(
+                      'Track per-request consumption to power usage analytics. Keeping this on increases database writes.'
+                    )}
+                  </FormDescription>
+                </SettingsSwitchContent>
+                <FormControl>
+                  <Switch
+                    checked={field.value}
+                    onCheckedChange={field.onChange}
+                  />
+                </FormControl>
+                <FormMessage />
+              </SettingsSwitchItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name='userExportEnabled'
+            render={({ field }) => (
+              <SettingsSwitchItem>
+                <SettingsSwitchContent>
+                  <FormLabel>{t('Allow users to export logs')}</FormLabel>
+                  <FormDescription>
+                    {t(
+                      'Users can download their own logs from the usage log page. Administrators can always export.'
+                    )}
+                  </FormDescription>
+                </SettingsSwitchContent>
+                <FormControl>
+                  <Switch
+                    checked={field.value}
+                    onCheckedChange={field.onChange}
+                  />
+                </FormControl>
+                <FormMessage />
+              </SettingsSwitchItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name='maxRangeDays'
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>{t('Longest log time range (days)')}</FormLabel>
+                <FormControl>
+                  <Input
+                    type='number'
+                    min={1}
+                    step={1}
+                    {...safeNumberFieldProps(field)}
+                  />
+                </FormControl>
+                <FormDescription>
+                  {t(
+                    'The longest time range a user can view at once in the logs and on the dashboard, and the longest range any export can cover.'
+                  )}
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
 
           <FormField
             control={form.control}
@@ -1314,6 +1393,36 @@ export function LogSettingsSection({
             />
             <FormField
               control={form.control}
+              name='MediaAssetRetentionDays'
+              render={({ field }) => (
+                <div className='flex flex-col gap-2'>
+                  <FormLabel>{t('Video input media retention days')}</FormLabel>
+                  <FormControl>
+                    <Input
+                      type='number'
+                      min={1}
+                      max={365}
+                      className='max-w-40'
+                      value={field.value}
+                      onBlur={field.onBlur}
+                      name={field.name}
+                      ref={field.ref}
+                      onChange={(event) =>
+                        field.onChange(Number(event.target.value))
+                      }
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    {t(
+                      'Base64 image, video, and audio inputs are deleted with their records after this many days.'
+                    )}
+                  </FormDescription>
+                  <FormMessage />
+                </div>
+              )}
+            />
+            <FormField
+              control={form.control}
               name='ImageGenerationLogImageAuthWhitelistEnabled'
               render={({ field }) => (
                 <SettingsSwitchItem>
@@ -1379,42 +1488,243 @@ export function LogSettingsSection({
                 {t(
                   'Remove all log entries created before the selected timestamp.'
                 )}
-              />
-              <FormField
-                control={form.control}
-                name='log_setting.max_range_days'
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>{t('Longest log time range (days)')}</FormLabel>
-                    <FormControl>
-                      <Input
-                        type='number'
-                        min={1}
-                        step={1}
-                        {...safeNumberFieldProps(field)}
-                      />
-                    </FormControl>
-                    <FormDescription>
-                      {t(
-                        'The longest time range a user can view at once in the logs and on the dashboard, and the longest range any export can cover.'
-                      )}
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
+              </p>
+            </div>
+            <DateTimePicker value={purgeDate} onChange={setPurgeDate} />
+            <div className='flex flex-wrap gap-3'>
+              {quickSelectOptions.map((option) => (
+                <Button
+                  key={option.label}
+                  type='button'
+                  variant='outline'
+                  onClick={() => setPurgeDate(option.getValue())}
+                >
+                  {t(option.label)}
+                </Button>
+              ))}
+              <Button
+                type='button'
+                variant='destructive'
+                onClick={handleRequestCleanLogs}
+                disabled={isStartingLogCleanup || logCleanupActive}
+              >
+                {isStartingLogCleanup || logCleanupActive
+                  ? t('Cleaning...')
+                  : t('Clean logs')}
+              </Button>
+            </div>
+            {logCleanupTask && (
+              <div className='rounded-md border p-3'>
+                <div className='mb-2 flex items-center justify-between gap-3 text-sm'>
+                  <span className='font-medium'>
+                    {t('Log cleanup progress')}
+                  </span>
+                  <span className='text-muted-foreground tabular-nums'>
+                    {logCleanupProgress}%
+                  </span>
+                </div>
+                <Progress value={logCleanupProgress} />
+                <div className='text-muted-foreground mt-2 text-xs'>
+                  {t('{{processed}} of {{total}} log entries processed.', {
+                    processed: logCleanupProcessed,
+                    total: logCleanupTotal,
+                  })}
+                </div>
+                {logCleanupTask.status === 'failed' && logCleanupTask.error && (
+                  <div className='text-destructive mt-2 text-xs'>
+                    {logCleanupTask.error}
+                  </div>
                 )}
-              />
-            </SettingsFormGrid>
-          </div>
+              </div>
+            )}
+          </SettingsControlGroup>
         </SettingsForm>
       </Form>
 
       <Separator />
 
-      <HistoryLogCleanup />
+      <div className='space-y-4'>
+        <div>
+          <h4 className='font-medium'>{t('Server Log Management')}</h4>
+          <p className='text-muted-foreground mt-1 text-xs'>
+            {t(
+              'Manage server log files. Log files accumulate over time; regular cleanup is recommended to free disk space.'
+            )}
+          </p>
+        </div>
 
-      <Separator />
+        {serverLogInfo !== null &&
+          (serverLogInfo.enabled ? (
+            <div className='space-y-4'>
+              <div className='rounded-lg border p-4'>
+                <div className='grid grid-cols-2 gap-2 text-sm md:grid-cols-4'>
+                  <div>
+                    <span className='text-muted-foreground'>
+                      {t('Log Directory')}:
+                    </span>{' '}
+                    <span className='font-mono text-xs'>
+                      {serverLogInfo.log_dir}
+                    </span>
+                  </div>
+                  <div>
+                    <span className='text-muted-foreground'>
+                      {t('Log File Count')}:
+                    </span>{' '}
+                    {serverLogInfo.file_count}
+                  </div>
+                  <div>
+                    <span className='text-muted-foreground'>
+                      {t('Total Log Size')}:
+                    </span>{' '}
+                    {formatBytes(serverLogInfo.total_size)}
+                  </div>
+                  {serverLogInfo.oldest_time && serverLogInfo.newest_time && (
+                    <div>
+                      <span className='text-muted-foreground'>
+                        {t('Date Range')}:
+                      </span>{' '}
+                      {dayjs(serverLogInfo.oldest_time).format('YYYY-MM-DD')} ~{' '}
+                      {dayjs(serverLogInfo.newest_time).format('YYYY-MM-DD')}
+                    </div>
+                  )}
+                </div>
+              </div>
 
-      <ServerLogFiles />
+              <div className='flex flex-wrap items-end gap-3'>
+                <div className='grid gap-1.5'>
+                  <Label className='text-xs'>{t('Cleanup Mode')}</Label>
+                  <Select
+                    items={[
+                      { value: 'by_count', label: t('Retain last N files') },
+                      { value: 'by_days', label: t('Retain last N days') },
+                    ]}
+                    value={serverLogCleanupMode}
+                    onValueChange={(value) =>
+                      value !== null && setServerLogCleanupMode(value)
+                    }
+                  >
+                    <SelectTrigger className='w-[160px]'>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent alignItemWithTrigger={false}>
+                      <SelectGroup>
+                        <SelectItem value='by_count'>
+                          {t('Retain last N files')}
+                        </SelectItem>
+                        <SelectItem value='by_days'>
+                          {t('Retain last N days')}
+                        </SelectItem>
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className='grid gap-1.5'>
+                  <Label className='text-xs'>
+                    {serverLogCleanupMode === 'by_count'
+                      ? t('Files to Retain')
+                      : t('Days to Retain')}
+                  </Label>
+                  <Input
+                    type='number'
+                    min={1}
+                    max={serverLogCleanupMode === 'by_count' ? 1000 : 3650}
+                    value={serverLogCleanupValue}
+                    onChange={(event) =>
+                      setServerLogCleanupValue(Number(event.target.value))
+                    }
+                    className='w-[120px]'
+                  />
+                </div>
+                <AlertDialog>
+                  <AlertDialogTrigger
+                    render={
+                      <Button
+                        type='button'
+                        variant='destructive'
+                        size='sm'
+                        disabled={serverLogCleanupLoading}
+                      />
+                    }
+                  >
+                    {serverLogCleanupLoading
+                      ? t('Cleaning...')
+                      : t('Clean Up Log Files')}
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>
+                        {t('Confirm log file cleanup?')}
+                      </AlertDialogTitle>
+                      <AlertDialogDescription>
+                        {serverLogCleanupMode === 'by_count'
+                          ? t(
+                              'Only the last {{value}} log files will be retained; the rest will be deleted.',
+                              {
+                                value: serverLogCleanupValue,
+                              }
+                            )
+                          : t(
+                              'Log files older than {{value}} days will be deleted.',
+                              {
+                                value: serverLogCleanupValue,
+                              }
+                            )}
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>{t('Cancel')}</AlertDialogCancel>
+                      <AlertDialogAction
+                        variant='destructive'
+                        onClick={cleanupServerLogFiles}
+                      >
+                        {t('Confirm Cleanup')}
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              </div>
+            </div>
+          ) : (
+            <Alert>
+              <AlertDescription>
+                {t(
+                  'Server logging is not enabled (log directory not configured)'
+                )}
+              </AlertDescription>
+            </Alert>
+          ))}
+      </div>
+
+      <AlertDialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t('Confirm log cleanup')}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {formattedPurgeDate
+                ? t(
+                    'This will permanently remove all log entries created before {{date}}.',
+                    { date: formattedPurgeDate }
+                  )
+                : t(
+                    'This will permanently remove log entries before the selected timestamp.'
+                  )}{' '}
+              {t('This action cannot be undone.')}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isStartingLogCleanup}>
+              {t('Cancel')}
+            </AlertDialogCancel>
+            <AlertDialogAction
+              variant='destructive'
+              onClick={handleCleanLogs}
+              disabled={isStartingLogCleanup}
+            >
+              {isStartingLogCleanup ? t('Cleaning...') : t('Delete logs')}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </SettingsSection>
   )
 }

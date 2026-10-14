@@ -19,7 +19,6 @@ For commercial licensing, please contact support@quantumnous.com
 import type { TFunction } from 'i18next'
 import {
   Box,
-  Route,
   CreditCard,
   Layout,
   Settings,

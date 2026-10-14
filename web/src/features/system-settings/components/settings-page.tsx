@@ -119,7 +119,8 @@ export function SettingsPage<
   const permissionSection = category
     ? `${category}.${activeSection}`
     : undefined
-  const { data, isLoading } = useSystemOptions(permissionSection)
+  const { data, isLoading, isError, refetch } =
+    useSystemOptions(permissionSection)
   const sectionMeta = getSectionMeta(activeSection)
 
   const settings = useMemo(() => {

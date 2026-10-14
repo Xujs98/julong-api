@@ -19,7 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { useQuery } from '@tanstack/react-query'
 import { getRouteApi } from '@tanstack/react-router'
 import type { ColumnDef } from '@tanstack/react-table'
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import {
@@ -27,16 +27,11 @@ import {
   DataTableRow,
   useDataTable,
 } from '@/components/data-table'
-import {
-  getAdminPlans,
-  getSelfSubscriptionFull,
-} from '@/features/subscriptions/api'
 import { useMediaQuery } from '@/hooks'
 import { useStatus } from '@/hooks/use-status'
 import { useTableUrlState } from '@/hooks/use-table-url-state'
 import { createServerError } from '@/lib/server-error-message'
 import { cn } from '@/lib/utils'
-import { useAuthStore } from '@/stores/auth-store'
 
 import {
   DEFAULT_LOGS_DATA,
@@ -88,10 +83,6 @@ interface UsageLogsTableProps {
 
 export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
   const { t } = useTranslation()
-  const getColumnClassName = useCallback(
-    () => (logCategory === 'common' ? 'py-2' : 'py-3.5'),
-    [logCategory]
-  )
   const {
     isAdminView: isAdmin,
     isRootView: isRoot,
@@ -156,6 +147,7 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
       t,
     ],
     queryFn: async () => {
+      if (logCategory === 'assets') return DEFAULT_LOGS_DATA
       const result = await fetchLogsByCategory({
         logCategory,
         isAdmin,
@@ -197,6 +189,8 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
   const columns = useColumnsByCategory(
     logCategory,
     isAdmin,
+    isRoot,
+    false,
     setSelectedImageTask
   )
   const isLoadingData = isLoading || (isFetching && !data)
@@ -220,6 +214,12 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
   })
 
   const isCommon = logCategory === 'common'
+  let toolbar: ReactNode = null
+  if (isCommon) {
+    toolbar = <CommonLogsFilterBar table={table} />
+  } else if (logCategory !== 'assets') {
+    toolbar = <TaskLogsFilterBar table={table} logCategory={logCategory} />
+  }
 
   return (
     <>
@@ -234,6 +234,9 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
         )}
         skeletonKeyPrefix='usage-log-skeleton'
         applyHeaderSize
+        horizontalWheelColumnId={
+          logCategory === 'task' ? 'artifacts' : undefined
+        }
         tableClassName={cn(
           '[&_[data-slot=table]]:text-[13px] [&_[data-slot=table]_td]:text-[13px] [&_[data-slot=table]_td_*]:text-[13px] [&_[data-slot=table]_th]:text-[13px] [&_[data-slot=table]_th_*]:text-[13px]'
         )}
@@ -244,14 +247,8 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
             logCategory={logCategory}
           />
         }
-        toolbar={
-          isCommon ? (
-            <CommonLogsFilterBar table={table} />
-          ) : (
-            <TaskLogsFilterBar table={table} logCategory={logCategory} />
-          )
-        }
-        renderRow={(row) => {
+        toolbar={toolbar}
+        renderRow={(row, helpers) => {
           const logType = (row.original as Record<string, unknown>).type as
             | number
             | undefined
@@ -271,7 +268,9 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
               key={row.id}
               row={row}
               className={cn('transition-colors', tintClass)}
-              getColumnClassName={() => (isCommon ? 'py-2' : 'py-3.5')}
+              getColumnClassName={(columnId) =>
+                helpers.getCellClassName(columnId, isCommon ? 'py-2' : 'py-3.5')
+              }
             />
           )
         }}

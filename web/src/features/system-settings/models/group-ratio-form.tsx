@@ -68,8 +68,11 @@ import {
 } from '../components/settings-form-layout'
 import { SettingsPageActionsPortal } from '../components/settings-page-context'
 import { safeJsonParse } from '../utils/json-parser'
-import { GroupRatioVisualEditor } from './group-ratio-visual-editor'
-import { GroupSpecialUsableRulesEditor } from './group-special-usable-editor'
+import { safeNumberFieldProps } from '../utils/numeric-field'
+import {
+  GroupRatioVisualEditor,
+  type GroupSettingsSection,
+} from './group-ratio-visual-editor'
 import { ModelTokenRatioEditor } from './model-token-ratio-editor'
 
 type GroupFormValues = {
@@ -82,8 +85,8 @@ type GroupFormValues = {
   DefaultUseAutoGroup: boolean
   ModelSquareGroupRatioDisplayMode: 'actual' | 'pricing_group'
   TokenGroupRatioDisplayMode: 'actual' | 'pricing_group'
-  GroupSpecialUsableGroup: string
   ModelTokenRatio: string
+  GroupSpecialUsableGroup: string
 }
 
 type GroupRatioFormProps = {
@@ -99,6 +102,12 @@ export const GroupRatioForm = memo(function GroupRatioForm({
 }: GroupRatioFormProps) {
   const { t } = useTranslation()
   const values = useWatch({ control: form.control })
+  const groupNames = Object.keys(
+    safeJsonParse<Record<string, number>>(form.watch('GroupRatio'), {
+      fallback: {},
+      silent: true,
+    })
+  )
   const [editMode, setEditMode] = useState<'visual' | 'json'>('visual')
   const [guideOpen, setGuideOpen] = useState(false)
   const [section, setSection] = useState<GroupSettingsSection>('pricing')
@@ -119,44 +128,146 @@ export const GroupRatioForm = memo(function GroupRatioForm({
 
   return (
     <div className='space-y-6'>
-      <div className='flex flex-wrap items-center justify-between gap-3'>
-        <p className='text-muted-foreground text-sm'>
-          {editMode === 'visual'
-            ? t(
-                'Manage pricing, visibility and automatic routing for your groups.'
-              )
-            : t(
-                'Edit group settings as JSON. Changes are shared with the visual editor.'
-              )}
-        </p>
-        <div className='flex shrink-0 gap-2'>
-          <Button
-            variant='outline'
-            size='sm'
-            onClick={() => setGuideOpen(true)}
-          >
-            <HelpCircle className='mr-2 h-4 w-4' />
-            {t('Usage guide')}
-          </Button>
-          <Button variant='outline' size='sm' onClick={toggleEditMode}>
-            {editMode === 'visual' ? (
-              <>
-                <Code2 className='mr-2 h-4 w-4' />
-                {t('Switch to JSON')}
-              </>
-            ) : (
-              <>
-                <Eye className='mr-2 h-4 w-4' />
-                {t('Switch to Visual')}
-              </>
-            )}
-          </Button>
-        </div>
-      </div>
-
-      <GroupPricingGuide open={guideOpen} onOpenChange={setGuideOpen} />
-
       <Form {...form}>
+        <div className='flex flex-wrap items-center justify-between gap-3'>
+          <div className='min-w-0'>
+            <p className='text-muted-foreground text-sm'>
+              {editMode === 'visual'
+                ? t(
+                    'Manage pricing, visibility and automatic routing for your groups.'
+                  )
+                : t(
+                    'Edit group settings as JSON. Changes are shared with the visual editor.'
+                  )}
+            </p>
+            <div className='mt-4 grid gap-4 lg:grid-cols-2'>
+              <FormField
+                control={form.control}
+                name='ModelSquareGroupRatioDisplayMode'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>
+                      {t('Model Square ratio display mode')}
+                    </FormLabel>
+                    <FormControl>
+                      <Select
+                        items={[
+                          {
+                            value: 'actual',
+                            label: t('Actual ratio (including special rules)'),
+                          },
+                          {
+                            value: 'pricing_group',
+                            label: t('Always follow pricing group ratio'),
+                          },
+                        ]}
+                        value={field.value}
+                        onValueChange={(value) => {
+                          if (value !== null) field.onChange(value)
+                        }}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent alignItemWithTrigger={false}>
+                          <SelectGroup>
+                            <SelectItem value='actual'>
+                              {t('Actual ratio (including special rules)')}
+                            </SelectItem>
+                            <SelectItem value='pricing_group'>
+                              {t('Always follow pricing group ratio')}
+                            </SelectItem>
+                          </SelectGroup>
+                        </SelectContent>
+                      </Select>
+                    </FormControl>
+                    <FormDescription>
+                      {t(
+                        'This only changes Model Square display. Actual billing is unchanged.'
+                      )}
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name='TokenGroupRatioDisplayMode'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>
+                      {t('API key group ratio display mode')}
+                    </FormLabel>
+                    <FormControl>
+                      <Select
+                        items={[
+                          {
+                            value: 'actual',
+                            label: t('Actual ratio (including special rules)'),
+                          },
+                          {
+                            value: 'pricing_group',
+                            label: t('Always follow pricing group ratio'),
+                          },
+                        ]}
+                        value={field.value}
+                        onValueChange={(value) => {
+                          if (value !== null) field.onChange(value)
+                        }}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent alignItemWithTrigger={false}>
+                          <SelectGroup>
+                            <SelectItem value='actual'>
+                              {t('Actual ratio (including special rules)')}
+                            </SelectItem>
+                            <SelectItem value='pricing_group'>
+                              {t('Always follow pricing group ratio')}
+                            </SelectItem>
+                          </SelectGroup>
+                        </SelectContent>
+                      </Select>
+                    </FormControl>
+                    <FormDescription>
+                      {t(
+                        'This only changes ratios shown in API key group selectors. Actual billing is unchanged.'
+                      )}
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+          </div>
+          <div className='flex shrink-0 gap-2'>
+            <Button
+              variant='outline'
+              size='sm'
+              onClick={() => setGuideOpen(true)}
+            >
+              <HelpCircle className='mr-2 h-4 w-4' />
+              {t('Usage guide')}
+            </Button>
+            <Button variant='outline' size='sm' onClick={toggleEditMode}>
+              {editMode === 'visual' ? (
+                <>
+                  <Code2 className='mr-2 h-4 w-4' />
+                  {t('Switch to JSON')}
+                </>
+              ) : (
+                <>
+                  <Eye className='mr-2 h-4 w-4' />
+                  {t('Switch to Visual')}
+                </>
+              )}
+            </Button>
+          </div>
+        </div>
+
+        <GroupPricingGuide open={guideOpen} onOpenChange={setGuideOpen} />
+
         <SettingsPageActionsPortal>
           <Button
             type='button'
@@ -173,176 +284,79 @@ export const GroupRatioForm = memo(function GroupRatioForm({
             {isSaving ? t('Saving...') : t('Save group settings')}
           </Button>
         </SettingsPageActionsPortal>
-        <div className='grid gap-4 lg:grid-cols-2'>
-          <FormField
-            control={form.control}
-            name='ModelSquareGroupRatioDisplayMode'
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>{t('Model Square ratio display mode')}</FormLabel>
-                <FormControl>
-                  <Select
-                    items={[
-                      {
-                        value: 'actual',
-                        label: t('Actual ratio (including special rules)'),
-                      },
-                      {
-                        value: 'pricing_group',
-                        label: t('Always follow pricing group ratio'),
-                      },
-                    ]}
-                    value={field.value}
-                    onValueChange={(value) => {
-                      if (value !== null) field.onChange(value)
-                    }}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent alignItemWithTrigger={false}>
-                      <SelectGroup>
-                        <SelectItem value='actual'>
-                          {t('Actual ratio (including special rules)')}
-                        </SelectItem>
-                        <SelectItem value='pricing_group'>
-                          {t('Always follow pricing group ratio')}
-                        </SelectItem>
-                      </SelectGroup>
-                    </SelectContent>
-                  </Select>
-                </FormControl>
-                <FormDescription>
-                  {t(
-                    'This only changes Model Square display. Actual billing is unchanged.'
-                  )}
-                </FormDescription>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <FormField
-            control={form.control}
-            name='TokenGroupRatioDisplayMode'
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>{t('API key group ratio display mode')}</FormLabel>
-                <FormControl>
-                  <Select
-                    items={[
-                      {
-                        value: 'actual',
-                        label: t('Actual ratio (including special rules)'),
-                      },
-                      {
-                        value: 'pricing_group',
-                        label: t('Always follow pricing group ratio'),
-                      },
-                    ]}
-                    value={field.value}
-                    onValueChange={(value) => {
-                      if (value !== null) field.onChange(value)
-                    }}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent alignItemWithTrigger={false}>
-                      <SelectGroup>
-                        <SelectItem value='actual'>
-                          {t('Actual ratio (including special rules)')}
-                        </SelectItem>
-                        <SelectItem value='pricing_group'>
-                          {t('Always follow pricing group ratio')}
-                        </SelectItem>
-                      </SelectGroup>
-                    </SelectContent>
-                  </Select>
-                </FormControl>
-                <FormDescription>
-                  {t(
-                    'This only changes ratios shown in API key group selectors. Actual billing is unchanged.'
-                  )}
-                </FormDescription>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        </div>
         {editMode === 'visual' ? (
           <div className='space-y-6'>
             <GroupRatioVisualEditor
-              groupRatio={form.watch('GroupRatio')}
-              topupGroupRatio={form.watch('TopupGroupRatio')}
-              userUsableGroups={form.watch('UserUsableGroups')}
-              groupGroupRatio={form.watch('GroupGroupRatio')}
-              autoGroups={form.watch('AutoGroups')}
-              groupSpecialUsableGroup={form.watch('GroupSpecialUsableGroup')}
+              section={section}
+              onSectionChange={setSection}
+              groupRatio={values.GroupRatio ?? ''}
+              topupGroupRatio={values.TopupGroupRatio ?? ''}
+              userUsableGroups={values.UserUsableGroups ?? ''}
+              groupGroupRatio={values.GroupGroupRatio ?? ''}
+              autoGroups={values.AutoGroups ?? ''}
+              maxTokenAutoGroupsField={
+                <FormField
+                  control={form.control}
+                  name='MaxTokenAutoGroups'
+                  render={({ field, fieldState }) => (
+                    <FormItem data-invalid={fieldState.invalid}>
+                      <FormLabel>
+                        {t('Maximum custom groups per token')}
+                      </FormLabel>
+                      <FormControl>
+                        <Input
+                          {...safeNumberFieldProps(field)}
+                          type='number'
+                          min={1}
+                          step={1}
+                          aria-invalid={fieldState.invalid}
+                        />
+                      </FormControl>
+                      <FormDescription>
+                        {t(
+                          'Limits only token-specific Auto snapshots. Global Auto inheritance remains unlimited.'
+                        )}
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              }
+              defaultUseAutoGroupField={
+                <FormField
+                  control={form.control}
+                  name='DefaultUseAutoGroup'
+                  render={({ field }) => (
+                    <SettingsSwitchItem>
+                      <SettingsSwitchContent>
+                        <FormLabel>{t('Default to auto groups')}</FormLabel>
+                        <FormDescription>
+                          {t(
+                            'If default auto group is enabled, newly created tokens start with auto instead of an empty group.'
+                          )}
+                        </FormDescription>
+                      </SettingsSwitchContent>
+                      <FormControl>
+                        <Switch
+                          checked={field.value}
+                          onCheckedChange={field.onChange}
+                        />
+                      </FormControl>
+                    </SettingsSwitchItem>
+                  )}
+                />
+              }
+              groupSpecialUsableGroup={values.GroupSpecialUsableGroup ?? ''}
               onChange={(field, value) =>
                 handleFieldChange(field as keyof GroupFormValues, value)
               }
             />
-
             <ModelTokenRatioEditor
               value={form.watch('ModelTokenRatio')}
               groupOptions={groupNames}
               onChange={(value) => handleFieldChange('ModelTokenRatio', value)}
             />
-
-            <GroupSpecialUsableRulesEditor
-              value={form.watch('GroupSpecialUsableGroup')}
-              groupOptions={groupNames}
-              onChange={(value) =>
-                handleFieldChange('GroupSpecialUsableGroup', value)
-              }
-            />
-
-            <FormField
-              control={form.control}
-              name='DefaultUseAutoGroup'
-              render={({ field }) => (
-                <SettingsSwitchItem>
-                  <SettingsSwitchContent>
-                    <FormLabel>{t('Default to auto groups')}</FormLabel>
-                    <FormDescription>
-                      {t(
-                        'Limits only token-specific Auto snapshots. Global Auto inheritance remains unlimited.'
-                      )}
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            }
-            defaultUseAutoGroupField={
-              <FormField
-                control={form.control}
-                name='DefaultUseAutoGroup'
-                render={({ field }) => (
-                  <SettingsSwitchItem>
-                    <SettingsSwitchContent>
-                      <FormLabel>{t('Default to auto groups')}</FormLabel>
-                      <FormDescription>
-                        {t(
-                          'If default auto group is enabled, newly created tokens start with auto instead of an empty group.'
-                        )}
-                      </FormDescription>
-                    </SettingsSwitchContent>
-                    <FormControl>
-                      <Switch
-                        checked={field.value}
-                        onCheckedChange={field.onChange}
-                      />
-                    </FormControl>
-                  </SettingsSwitchItem>
-                )}
-              />
-            }
-            groupSpecialUsableGroup={values.GroupSpecialUsableGroup ?? ''}
-            onChange={(field, value) =>
-              handleFieldChange(field as keyof GroupFormValues, value)
-            }
-          />
+          </div>
         ) : (
           <SettingsForm onSubmit={form.handleSubmit(onSave)}>
             <FormField

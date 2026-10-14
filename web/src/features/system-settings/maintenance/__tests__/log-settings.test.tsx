@@ -40,11 +40,18 @@ function Fixture() {
       <div ref={setContainer} />
       <SettingsPageProvider actionsContainer={container}>
         <LogSettingsSection
-          defaultValues={{
-            LogConsumeEnabled: true,
-            'log_setting.user_export_enabled': true,
-            'log_setting.max_range_days': 30,
-          }}
+          defaultEnabled
+          defaultUserExportEnabled
+          defaultMaxRangeDays={30}
+          defaultUserRiskDetectionEnabled={false}
+          defaultUserLogGroupRatioDisplayEnabled
+          defaultUserLogGroupRatioDisplayMode='system'
+          defaultUserLogGroupRatioManualValue={1}
+          defaultImageLogEnabled={false}
+          defaultImageLogRetentionDays={30}
+          defaultImageLogPollingIntervalSeconds={15}
+          defaultImageLogImageAuthWhitelistEnabled={false}
+          defaultImageLogImageAuthWhitelist=''
         />
       </SettingsPageProvider>
     </>

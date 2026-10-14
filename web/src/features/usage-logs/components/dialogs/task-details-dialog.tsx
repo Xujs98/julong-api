@@ -117,7 +117,9 @@ export function TaskDetailsDialog(props: TaskDetailsDialogProps) {
       <div className='space-y-3'>
         <DetailSection label={t('Basic Information')}>
           <DetailRow label={t('Task ID')} value={props.log.task_id} mono />
-          <DetailRow label={t('Platform')} value={props.log.platform} mono />
+          {props.isAdmin ? (
+            <DetailRow label={t('Platform')} value={props.log.platform} mono />
+          ) : null}
           <DetailRow
             label={t('Action')}
             value={t(taskActionMapper.getLabel(props.log.action))}
@@ -142,6 +144,16 @@ export function TaskDetailsDialog(props: TaskDetailsDialogProps) {
             value={formatTaskTimestamp(props.log.finish_time)}
             mono
           />
+          {props.log.request_id ? (
+            <DetailRow
+              label={t('Request ID')}
+              value={props.log.request_id}
+              mono
+            />
+          ) : null}
+          {props.log.token_name ? (
+            <DetailRow label={t('Token')} value={props.log.token_name} />
+          ) : null}
           {properties?.origin_model_name ? (
             <DetailRow
               label={t('Original Model')}
@@ -256,6 +268,13 @@ export function TaskDetailsDialog(props: TaskDetailsDialogProps) {
               <DetailRow
                 label={t('Upstream Task ID')}
                 value={access.upstreamTaskId}
+                mono
+              />
+            ) : null}
+            {props.log.root_info?.origin_task_id ? (
+              <DetailRow
+                label={t('Origin Task ID')}
+                value={props.log.root_info.origin_task_id}
                 mono
               />
             ) : null}

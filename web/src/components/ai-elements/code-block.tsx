@@ -20,6 +20,7 @@ For commercial licensing, please contact support@quantumnous.com
 'use client'
 
 import { javascript } from '@codemirror/lang-javascript'
+import { json } from '@codemirror/lang-json'
 import { markdown } from '@codemirror/lang-markdown'
 import { HighlightStyle, syntaxHighlighting } from '@codemirror/language'
 import { EditorState, type Extension } from '@codemirror/state'
@@ -61,6 +62,7 @@ import { cn } from '@/lib/utils'
 
 type CodeBlockProps = HTMLAttributes<HTMLDivElement> & {
   code: string
+  wrapLines?: boolean
   collapsedLines?: number
   defaultCollapsed?: boolean
   enableCollapse?: boolean
@@ -98,6 +100,7 @@ type CodeMirrorCodeViewProps = {
   onKeyDown?: (event: globalThis.KeyboardEvent) => void
   placeholder?: string
   readOnly?: boolean
+  wrapLines?: boolean
   rows?: number
   showLineNumbers?: boolean
   value: string
@@ -224,6 +227,7 @@ function getRequestedCodeLanguage(language?: string) {
 
 function getCodeMirrorLanguageExtension(language: BundledLanguage | string) {
   const requestedLanguage = getRequestedCodeLanguage(language)
+  if (requestedLanguage === 'json') return json()
   if (
     requestedLanguage === 'markdown' ||
     requestedLanguage === 'md' ||
@@ -285,11 +289,14 @@ function getCodeMirrorExtensions(options: {
   onKeyDown: (event: globalThis.KeyboardEvent) => void
   placeholder?: string
   readOnly: boolean
+  wrapLines: boolean
   showLineNumbers: boolean
 }): Extension[] {
   const extensions: Extension[] = [
     getCodeMirrorLanguageExtension(options.language),
-    codeMirrorHighlightStyle,
+    ...(getRequestedCodeLanguage(options.language) === 'json'
+      ? []
+      : [codeMirrorHighlightStyle]),
     codeMirrorTheme,
     EditorState.tabSize.of(2),
     EditorState.readOnly.of(options.readOnly),
@@ -301,6 +308,36 @@ function getCodeMirrorExtensions(options: {
       },
     }),
   ]
+
+  if (getRequestedCodeLanguage(options.language) === 'json') {
+    extensions.push(
+      syntaxHighlighting(
+        HighlightStyle.define([
+          {
+            tag: highlightTags.propertyName,
+            color: 'light-dark(#6d45bb, #c7a1ff)',
+          },
+          { tag: highlightTags.string, color: 'light-dark(#347d39, #9bd785)' },
+          {
+            tag: [highlightTags.number, highlightTags.bool, highlightTags.null],
+            color: 'light-dark(#c9364c, #ff98a5)',
+          },
+        ])
+      )
+    )
+  }
+  if (options.wrapLines) {
+    extensions.push(
+      EditorView.lineWrapping,
+      EditorView.theme({
+        '.cm-content.cm-lineWrapping': {
+          minWidth: '0',
+          overflowWrap: 'anywhere',
+        },
+        '.cm-line': { overflowWrap: 'anywhere' },
+      })
+    )
+  }
 
   if (options.placeholder) {
     extensions.push(placeholderExtension(options.placeholder))
@@ -321,6 +358,7 @@ function CodeMirrorCodeView({
   onKeyDown,
   placeholder,
   readOnly = false,
+  wrapLines = false,
   rows = 8,
   showLineNumbers = true,
   value,
@@ -342,9 +380,10 @@ function CodeMirrorCodeView({
         onKeyDown: (event) => onKeyDownRef.current?.(event),
         placeholder,
         readOnly,
+        wrapLines,
         showLineNumbers,
       }),
-    [language, placeholder, readOnly, showLineNumbers]
+    [language, placeholder, readOnly, wrapLines, showLineNumbers]
   )
 
   useEffect(() => {
@@ -409,7 +448,7 @@ function CodeMirrorCodeView({
     <div
       aria-label={ariaLabel}
       aria-readonly={readOnly}
-      className='min-h-(--code-editor-min-height)'
+      className='min-h-(--code-editor-min-height) scheme-light dark:scheme-dark'
       ref={editorHostRef}
       role='textbox'
       style={
@@ -468,6 +507,7 @@ export const CodeBlockFrame = ({
 
 export const CodeBlock = ({
   code,
+  wrapLines = false,
   collapsedLines = 12,
   defaultCollapsed,
   enableCollapse = true,
@@ -587,6 +627,7 @@ export const CodeBlock = ({
           }
           language={language}
           readOnly
+          wrapLines={wrapLines}
           rows={Math.min(Math.max(lineCount, 4), maxExpandedLines ?? lineCount)}
           showLineNumbers={showLineNumbers}
           value={code}

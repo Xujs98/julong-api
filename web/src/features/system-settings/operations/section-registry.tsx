@@ -110,6 +110,8 @@ const OPERATIONS_SECTIONS = [
     build: (settings: OperationsSettings) => (
       <LogSettingsSection
         defaultEnabled={Boolean(settings.LogConsumeEnabled)}
+        defaultUserExportEnabled={settings['log_setting.user_export_enabled']}
+        defaultMaxRangeDays={settings['log_setting.max_range_days']}
         defaultUserRiskDetectionEnabled={Boolean(
           settings.UserRiskDetectionEnabled
         )}
@@ -125,6 +127,9 @@ const OPERATIONS_SECTIONS = [
         defaultImageLogEnabled={Boolean(settings.ImageGenerationLogEnabled)}
         defaultImageLogRetentionDays={Number(
           settings.ImageGenerationLogRetentionDays ?? 30
+        )}
+        defaultMediaAssetRetentionDays={Number(
+          settings.MediaAssetRetentionDays ?? 1
         )}
         defaultImageLogPollingIntervalSeconds={Number(
           settings.ImageGenerationLogPollingIntervalSeconds ?? 15

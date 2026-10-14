@@ -59,6 +59,9 @@ export function useUpdateOption() {
         if (variables.key === 'console_setting.announcements') {
           queryClient.invalidateQueries({ queryKey: ['user-announcements'] })
         }
+        if (variables.key.startsWith('invoice_setting.')) {
+          queryClient.invalidateQueries({ queryKey: ['invoice'] })
+        }
 
         // If updating frontend-display-related config, also refresh status
         if (STATUS_RELATED_KEYS.has(variables.key)) {

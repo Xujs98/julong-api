@@ -38,11 +38,10 @@ import {
 import { pricingOptions } from '@/features/model-pricing/pricing'
 import { handleServerError } from '@/lib/handle-server-error'
 
-import { resetModelRatios, updateSystemOption } from '../api'
 import { SettingsPageTitleStatusPortal } from '../components/settings-page-context'
 import { SettingsSection } from '../components/settings-section'
 import { useUpdateOption } from '../hooks/use-update-option'
-import type { SystemOptionsResponse } from '../types'
+import { positiveIntegerSchema } from '../utils/numeric-field'
 import { GroupRatioForm } from './group-ratio-form'
 import { ModelRatioForm } from './model-ratio-form'
 import { ToolPriceSettings } from './tool-price-settings'
@@ -129,6 +128,7 @@ const createModelSchema = (t: Translate) =>
     BillingMode: createJsonStringField(t),
     BillingExpr: createJsonStringField(t),
     PerRequestSubscriptionAllowed: createJsonStringField(t),
+    PluginBillingExpr: createJsonStringField(t),
   })
 
 const createGroupSchema = (t: Translate) =>
@@ -147,8 +147,8 @@ const createGroupSchema = (t: Translate) =>
     DefaultUseAutoGroup: z.boolean(),
     ModelSquareGroupRatioDisplayMode: z.enum(['actual', 'pricing_group']),
     TokenGroupRatioDisplayMode: z.enum(['actual', 'pricing_group']),
-    GroupSpecialUsableGroup: createJsonStringField(t),
     ModelTokenRatio: createJsonStringField(t),
+    GroupSpecialUsableGroup: createJsonStringField(t),
   })
 
 type ModelFormValues = z.infer<ReturnType<typeof createModelSchema>>
@@ -177,8 +177,6 @@ export function RatioSettingsCard({
 }: RatioSettingsCardProps) {
   const { t } = useTranslation()
   const updateOption = useUpdateOption()
-  const queryClient = useQueryClient()
-  const [isSavingModelRatios, setIsSavingModelRatios] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
 
   const pricingQuery = useModelPricing()
@@ -200,6 +198,10 @@ export function RatioSettingsCard({
               pricingBaseline.options['billing_setting.billing_mode'],
             BillingExpr:
               pricingBaseline.options['billing_setting.billing_expr'],
+            PerRequestSubscriptionAllowed:
+              pricingBaseline.options[
+                'billing_setting.per_request_subscription_allowed'
+              ],
             PluginBillingExpr:
               pricingBaseline.options['billing_setting.plugin_billing_expr'],
           }
@@ -244,6 +246,7 @@ export function RatioSettingsCard({
     PerRequestSubscriptionAllowed: normalizeJsonString(
       modelDefaults.PerRequestSubscriptionAllowed
     ),
+    PluginBillingExpr: normalizeJsonString(modelDefaults.PluginBillingExpr),
   })
   const [savedModelValues, setSavedModelValues] = useState(
     modelNormalizedDefaults.current
@@ -260,10 +263,10 @@ export function RatioSettingsCard({
     ModelSquareGroupRatioDisplayMode:
       groupDefaults.ModelSquareGroupRatioDisplayMode,
     TokenGroupRatioDisplayMode: groupDefaults.TokenGroupRatioDisplayMode,
+    ModelTokenRatio: normalizeJsonString(groupDefaults.ModelTokenRatio),
     GroupSpecialUsableGroup: normalizeJsonString(
       groupDefaults.GroupSpecialUsableGroup
     ),
-    ModelTokenRatio: normalizeJsonString(groupDefaults.ModelTokenRatio),
   })
   const modelSchema = useMemo(() => createModelSchema(t), [t])
   const groupSchema = useMemo(() => createGroupSchema(t), [t])
@@ -288,6 +291,7 @@ export function RatioSettingsCard({
       PerRequestSubscriptionAllowed: formatJsonForTextarea(
         modelDefaults.PerRequestSubscriptionAllowed
       ),
+      PluginBillingExpr: formatJsonForTextarea(modelDefaults.PluginBillingExpr),
     },
   })
 
@@ -326,6 +330,7 @@ export function RatioSettingsCard({
       PerRequestSubscriptionAllowed: normalizeJsonString(
         modelDefaults.PerRequestSubscriptionAllowed
       ),
+      PluginBillingExpr: normalizeJsonString(modelDefaults.PluginBillingExpr),
     }
     setSavedModelValues(modelNormalizedDefaults.current)
 
@@ -346,6 +351,7 @@ export function RatioSettingsCard({
       PerRequestSubscriptionAllowed: formatJsonForTextarea(
         modelDefaults.PerRequestSubscriptionAllowed
       ),
+      PluginBillingExpr: formatJsonForTextarea(modelDefaults.PluginBillingExpr),
     })
   }, [modelDefaults, modelForm])
 
@@ -361,10 +367,10 @@ export function RatioSettingsCard({
       ModelSquareGroupRatioDisplayMode:
         groupDefaults.ModelSquareGroupRatioDisplayMode,
       TokenGroupRatioDisplayMode: groupDefaults.TokenGroupRatioDisplayMode,
+      ModelTokenRatio: normalizeJsonString(groupDefaults.ModelTokenRatio),
       GroupSpecialUsableGroup: normalizeJsonString(
         groupDefaults.GroupSpecialUsableGroup
       ),
-      ModelTokenRatio: normalizeJsonString(groupDefaults.ModelTokenRatio),
     }
 
     groupForm.reset({
@@ -398,72 +404,40 @@ export function RatioSettingsCard({
         PerRequestSubscriptionAllowed: normalizeJsonString(
           values.PerRequestSubscriptionAllowed
         ),
+        PluginBillingExpr: normalizeJsonString(values.PluginBillingExpr),
       }
 
-      const apiKeyMap: Record<string, string> = {
-        BillingMode: 'billing_setting.billing_mode',
-        BillingExpr: 'billing_setting.billing_expr',
-        PerRequestSubscriptionAllowed:
-          'billing_setting.per_request_subscription_allowed',
-      }
-
-      const updates = (
-        Object.keys(normalized) as Array<keyof ModelFormValues>
-      ).filter(
-        (key) => normalized[key] !== modelNormalizedDefaults.current[key]
-      )
-
-      if (updates.length === 0) {
-        toast.info(t('No model price changes to save'))
-        return
-      }
-
-      setIsSavingModelRatios(true)
+      if (!pricingBaseline) return
       try {
-        for (const key of updates) {
-          const apiKey = apiKeyMap[key as string] || (key as string)
-          const result = await updateSystemOption({
-            key: apiKey,
-            value: normalized[key],
-          })
-          if (!result.success) {
-            throw new Error(result.message || t('Failed to update setting'))
-          }
+        const changes = buildPricingChanges(
+          pricingBaseline,
+          pricingOptions(modelNormalizedDefaults.current),
+          pricingOptions(normalized)
+        )
+        const visibilityChanged =
+          normalized.ExposeRatioEnabled !==
+          modelNormalizedDefaults.current.ExposeRatioEnabled
+        if (!changes.length && !visibilityChanged) {
+          toast.info(t('No model price changes to save'))
+          return
         }
-
+        await savePricing.mutateAsync(changes)
+        if (visibilityChanged) {
+          await updateOption.mutateAsync({
+            key: 'ExposeRatioEnabled',
+            value: normalized.ExposeRatioEnabled,
+          })
+        }
+        const refreshed = await pricingQuery.refetch()
+        setPricingBaseline(refreshed.data ?? null)
         modelNormalizedDefaults.current = normalized
         setSavedModelValues(normalized)
-        queryClient.setQueryData<SystemOptionsResponse>(
-          ['system-options'],
-          (current) => {
-            if (!current?.data) return current
-            const nextData = current.data.map((option) => ({ ...option }))
-            for (const key of Object.keys(normalized) as Array<
-              keyof ModelFormValues
-            >) {
-              const apiKey = apiKeyMap[key as string] || (key as string)
-              const existing = nextData.find((option) => option.key === apiKey)
-              const value = String(normalized[key])
-              if (existing) {
-                existing.value = value
-              } else {
-                nextData.push({ key: apiKey, value })
-              }
-            }
-            return { ...current, data: nextData }
-          }
-        )
-        toast.success(t('Setting updated successfully'))
+        toast.success(t('Model pricing saved'))
       } catch (error) {
-        toast.error(
-          error instanceof Error ? error.message : t('Failed to update setting')
-        )
-        throw error
-      } finally {
-        setIsSavingModelRatios(false)
+        handleServerError(error)
       }
     },
-    [queryClient, t]
+    [t, updateOption, pricingBaseline, savePricing, pricingQuery]
   )
 
   const saveGroupRatios = useCallback(
@@ -479,17 +453,17 @@ export function RatioSettingsCard({
         ModelSquareGroupRatioDisplayMode:
           values.ModelSquareGroupRatioDisplayMode,
         TokenGroupRatioDisplayMode: values.TokenGroupRatioDisplayMode,
+        ModelTokenRatio: normalizeJsonString(values.ModelTokenRatio),
         GroupSpecialUsableGroup: normalizeJsonString(
           values.GroupSpecialUsableGroup
         ),
-        ModelTokenRatio: normalizeJsonString(values.ModelTokenRatio),
       }
 
       // Map form field names to API keys (most are 1:1, except GroupSpecialUsableGroup)
       const apiKeyMap: Record<string, string> = {
+        ModelTokenRatio: 'group_ratio_setting.model_token_ratio',
         GroupSpecialUsableGroup:
           'group_ratio_setting.group_special_usable_group',
-        ModelTokenRatio: 'group_ratio_setting.model_token_ratio',
       }
 
       const updates = (
@@ -503,16 +477,9 @@ export function RatioSettingsCard({
         await updateOption.mutateAsync({ key: apiKey, value: normalized[key] })
       }
 
-      if (updates.length > 0) {
-        groupNormalizedDefaults.current = normalized
-        await Promise.all([
-          queryClient.invalidateQueries({ queryKey: ['pricing'] }),
-          queryClient.invalidateQueries({ queryKey: ['user-groups'] }),
-          queryClient.invalidateQueries({ queryKey: ['playground-groups'] }),
-        ])
-      }
+      groupNormalizedDefaults.current = normalized
     },
-    [queryClient, updateOption]
+    [updateOption]
   )
 
   const handleResetRatios = useCallback(() => {
@@ -553,15 +520,30 @@ export function RatioSettingsCard({
       }
       if (!pricingBaseline) return <LoadingState />
       return (
-        <ModelRatioForm
-          form={modelForm}
-          savedValues={savedModelValues}
-          onSave={saveModelRatios}
-          onReset={handleResetRatios}
-          isSaving={updateOption.isPending || isSavingModelRatios}
-          isResetting={resetMutation.isPending}
-          variant={tab === 'unset-models' ? 'unset' : 'default'}
-        />
+        <>
+          {savePricing.isError && (
+            <Button
+              variant='outline'
+              size='sm'
+              onClick={async () => {
+                const refreshed = await pricingQuery.refetch()
+                if (refreshed.data) setPricingBaseline(refreshed.data)
+                savePricing.reset()
+              }}
+            >
+              {t('Reload pricing')}
+            </Button>
+          )}
+          <ModelRatioForm
+            form={modelForm}
+            savedValues={savedModelValues}
+            onSave={saveModelRatios}
+            onReset={handleResetRatios}
+            isSaving={updateOption.isPending || savePricing.isPending}
+            isResetting={resetMutation.isPending}
+            variant={tab === 'unset-models' ? 'unset' : 'default'}
+          />
+        </>
       )
     }
     if (tab === 'groups') {
@@ -576,24 +558,7 @@ export function RatioSettingsCard({
     if (tab === 'tool-prices') {
       return <ToolPriceSettings defaultValue={toolPricesDefault} />
     }
-    return (
-      <UpstreamRatioSync
-        modelRatios={{
-          ModelPrice: modelDefaults.ModelPrice,
-          ModelRatio: modelDefaults.ModelRatio,
-          CompletionRatio: modelDefaults.CompletionRatio,
-          CacheRatio: modelDefaults.CacheRatio,
-          CreateCacheRatio: modelDefaults.CreateCacheRatio,
-          ImageRatio: modelDefaults.ImageRatio,
-          AudioRatio: modelDefaults.AudioRatio,
-          AudioCompletionRatio: modelDefaults.AudioCompletionRatio,
-          'billing_setting.billing_mode': modelDefaults.BillingMode,
-          'billing_setting.billing_expr': modelDefaults.BillingExpr,
-          'billing_setting.per_request_subscription_allowed':
-            modelDefaults.PerRequestSubscriptionAllowed,
-        }}
-      />
-    )
+    return <UpstreamRatioSync />
   }
 
   const renderTabSwitcher = () => (

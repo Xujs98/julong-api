@@ -138,6 +138,38 @@ For commercial licensing, please contact support@quantumnous.com
   }
 }
 
+.data-table-pinned-left::before,
+.data-table-pinned-right::before {
+  content: '';
+  position: absolute;
+  top: -1px;
+  bottom: -1px;
+  width: 14px;
+  pointer-events: none;
+}
+
+/* Paint outside the sticky cell rather than using collapsed-table box-shadow,
+ * whose clipping differs between Chromium and Safari. */
+.data-table-pinned-right::before {
+  left: -14px;
+  border-right: 1px solid var(--border);
+  background: linear-gradient(to right, transparent, rgb(0 0 0 / 0.18));
+}
+
+.data-table-pinned-left::before {
+  right: -14px;
+  border-left: 1px solid var(--border);
+  background: linear-gradient(to left, transparent, rgb(0 0 0 / 0.18));
+}
+
+.dark .data-table-pinned-right::before {
+  background: linear-gradient(to right, transparent, rgb(0 0 0 / 0.5));
+}
+
+.dark .data-table-pinned-left::before {
+  background: linear-gradient(to left, transparent, rgb(0 0 0 / 0.5));
+}
+
 /* Vercel Geist-style skeleton shimmer */
 .skeleton-shimmer {
   background: linear-gradient(

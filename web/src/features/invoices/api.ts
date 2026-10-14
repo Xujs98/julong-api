@@ -17,10 +17,12 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { api } from '@/lib/api'
+import { requireServerSuccess } from '@/lib/server-error-message'
 
 import type {
   ApiResponse,
   InvoiceApplication,
+  InvoiceApplicationRequest,
   InvoiceApplicationPage,
   InvoiceInfo,
   InvoiceEmailTemplate,
@@ -50,11 +52,43 @@ export async function getInvoiceEmailTemplates(): Promise<
 }
 
 export async function applyForInvoice(
-  requestIds: string[]
+  request: InvoiceApplicationRequest
 ): Promise<ApiResponse<InvoiceApplication>> {
-  const response = await api.post('/api/user/invoice/apply', {
-    request_ids: requestIds,
-  })
+  const form = new FormData()
+  form.append('request_ids', JSON.stringify(request.request_ids))
+  form.append('invoice_type', request.invoice_type)
+  form.append('company_name', request.company_name)
+  form.append('tax_number', request.tax_number)
+  form.append('email', request.email)
+  form.append('notes', request.notes)
+  for (const proof of request.payment_proofs) {
+    form.append('payment_proofs', proof)
+  }
+  const response = await api.post('/api/user/invoice/apply', form)
+  return requireServerSuccess(response.data)
+}
+
+export async function getInvoicePaymentProof(
+  applicationId: number,
+  proofId: string | number,
+  signal?: AbortSignal
+): Promise<Blob> {
+  const response = await api.get<Blob>(
+    `/api/user/invoice/applications/${applicationId}/payment-proofs/${encodeURIComponent(String(proofId))}`,
+    {
+      responseType: 'blob',
+      signal,
+      disableDuplicate: true,
+      skipBusinessError: true,
+    }
+  )
+  if (
+    !['image/png', 'image/jpeg', 'image/webp'].includes(
+      response.data.type.split(';')[0]
+    )
+  ) {
+    throw new Error('Failed to load payment screenshot')
+  }
   return response.data
 }
 

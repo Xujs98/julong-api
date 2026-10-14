@@ -30,10 +30,7 @@ import {
 } from '@/components/data-table'
 import { useMediaQuery } from '@/hooks'
 import { useTableUrlState } from '@/hooks/use-table-url-state'
-import {
-  createServerError,
-  requireServerSuccess,
-} from '@/lib/server-error-message'
+import { createServerError } from '@/lib/server-error-message'
 
 import { getUserQuotaSummary, getUsers, searchUsers } from '../api'
 import {
@@ -62,7 +59,7 @@ const USER_SORTABLE_COLUMNS = new Set<UserSortBy>([
 const USER_INITIAL_COLUMN_VISIBILITY = { tag_id: false }
 
 type UsersTableProps = {
-  tags: UserTag[]
+  tags?: UserTag[]
 }
 
 function isDisabledUserRow(user: User) {
@@ -76,7 +73,7 @@ function getUserRowClassName(user: User, isMobile: boolean) {
 
 export function UsersTable(props: UsersTableProps) {
   const { t } = useTranslation()
-  const columns = useUsersColumns(props.tags)
+  const columns = useUsersColumns(props.tags ?? [])
   const { refreshTrigger } = useUsers()
   const isMobile = useMediaQuery('(max-width: 640px)')
   const [sorting, setSorting] = useState<SortingState>([])
@@ -284,7 +281,7 @@ export function UsersTable(props: UsersTableProps) {
                   <span className='border-muted-foreground/50 size-3 rounded-full border' />
                 ),
               },
-              ...props.tags.map((tag) => ({
+              ...(props.tags ?? []).map((tag) => ({
                 label: tag.built_in ? t(tag.name) : tag.name,
                 value: String(tag.id),
                 iconNode: (

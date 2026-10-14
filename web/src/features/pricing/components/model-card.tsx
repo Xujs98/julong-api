@@ -16,11 +16,12 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { ChevronRight } from 'lucide-react'
+import { ChevronRight, Zap } from 'lucide-react'
 import { memo, useMemo, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { CopyButton } from '@/components/copy-button'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card'
 import { getLobeIcon } from '@/lib/lobe-icon'
@@ -29,20 +30,32 @@ import { useSystemConfigStore } from '@/stores/system-config-store'
 
 import { DEFAULT_TOKEN_UNIT } from '../constants'
 import { useBillingTime } from '../hooks/use-billing-time'
+import type { ParsedTaskTier } from '../lib/billing-expr'
 import {
   getCardExamplePrice,
   getDynamicDisplayGroupRatio,
   getDynamicPriceUnitLabelKey,
   getDynamicPricingSummary,
   isUnconfiguredTaskUsageModel,
+  formatTaskUsageUnitPrice,
+  type DynamicPricingTier,
 } from '../lib/dynamic-price'
 import { parseTags } from '../lib/filters'
 import { isTokenBasedModel } from '../lib/model-helpers'
 import { formatPrice, formatRequestPrice } from '../lib/price'
-import { taskPriceLabel, taskUsageUnitLabel } from '../lib/task-price-display'
+import { getTaskNumberFields } from '../lib/task-expr'
+import {
+  taskPriceLabel,
+  taskPricingConditions,
+  taskUsageUnitLabel,
+} from '../lib/task-price-display'
 import type { PricingModel, PriceType, TokenUnit } from '../types'
 import { ModelBillingModeBadge } from './model-billing-mode-badge'
 import { ModelPerfBadge, type ModelPerfBadgeData } from './model-perf-badge'
+
+function isTaskTier(tier: DynamicPricingTier): tier is ParsedTaskTier {
+  return 'unitPrices' in tier
+}
 
 export interface ModelCardProps {
   model: PricingModel
@@ -106,6 +119,97 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [props.model, dynamicPriceOptions, currency]
   )
+  const taskTiers = dynamicSummary?.tiers.filter(isTaskTier) ?? []
+  const usageSchemas = [
+    props.model.billing_usage_schema,
+    ...(props.model.billing_plugin_variants?.map(
+      (variant) => variant.billing_usage_schema
+    ) ?? []),
+  ]
+  const isVideoModel =
+    props.model.output_modalities?.includes('video') === true ||
+    endpoints.includes('openai-video') ||
+    usageSchemas.some((schema) =>
+      Object.values(schema ?? {}).some((definition) => {
+        const descriptions =
+          typeof definition.description === 'string'
+            ? [definition.description]
+            : Object.values(definition.description ?? {})
+        return descriptions.some((description) =>
+          /\bvideo\b|视频|視頻/.test(description.toLowerCase())
+        )
+      })
+    )
+  const hasTaskPriceMatrix =
+    isVideoModel &&
+    dynamicSummary?.isTaskUsage === true &&
+    !dynamicSummary.providerCount &&
+    !dynamicSummary.isSpecialExpression &&
+    taskTiers.every((tier) => !tier.conditionText) &&
+    taskTiers.length > 0
+  const configuredFields = getTaskNumberFields(
+    props.model.billing_usage_schema
+  ).filter(([field]) =>
+    taskTiers.some((tier) => Number.isFinite(tier.unitPrices[field]))
+  )
+  const hasPaidTaskPrice = taskTiers.some(
+    (tier) =>
+      tier.constant > 0 ||
+      Object.values(tier.unitPrices).some((price) => price > 0)
+  )
+  // Video presets retain both quantities even when only one is charged.
+  // Preserve free tiers, but omit a quantity that is zero in every tier.
+  const pricedFields = configuredFields.filter(
+    ([field]) =>
+      !isVideoModel ||
+      !hasPaidTaskPrice ||
+      taskTiers.some((tier) => tier.unitPrices[field] > 0)
+  )
+  const conditionFields = [
+    ...new Set(
+      taskTiers.flatMap((tier) => tier.conditions.map(({ field }) => field))
+    ),
+  ]
+  const billingBasisParts = [
+    ...conditionFields.map((field) =>
+      taskPriceLabel(
+        props.model.billing_usage_schema?.[field]?.description,
+        field,
+        i18n.language
+      )
+    ),
+    ...new Set(
+      pricedFields.map(([, definition]) => {
+        if (definition.unit === 'second') return t('Actual duration')
+        if (definition.unit === 'count') {
+          if (isVideoModel) return t('Per-call')
+          return taskUsageUnitLabel(definition, i18n.language, t('times'))
+        }
+        return taskUsageUnitLabel(
+          definition,
+          i18n.language,
+          t(
+            definition.unit === 'token' ? '1M token' : definition.unit || 'unit'
+          )
+        )
+      })
+    ),
+  ]
+  const videoPriceEntries =
+    dynamicSummary?.primaryEntries.filter(
+      (entry) =>
+        (entry.unit === 'second' ||
+          entry.unit === 'count' ||
+          entry.unit === 'request') &&
+        (!hasPaidTaskPrice || (entry.maxValue ?? entry.value) > 0)
+    ) ?? []
+  const videoHeadlineEntries =
+    isVideoModel &&
+    !dynamicSummary?.isSpecialExpression &&
+    !dynamicSummary?.hasRequestRules &&
+    taskTiers.every((tier) => tier.constant === 0)
+      ? videoPriceEntries
+      : []
   let priceSummary: ReactNode
   if (dynamicSummary) {
     const cacheReadEntries = dynamicSummary.secondaryEntries.filter(
@@ -136,15 +240,28 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
             cacheReadEntries,
           ]
             .flat()
+            .filter(
+              (entry) =>
+                !isVideoModel ||
+                !hasPaidTaskPrice ||
+                (entry.maxValue ?? entry.value) > 0
+            )
             .map((entry) => {
+              const isVideoUsageUnit =
+                isVideoModel &&
+                (entry.unit === 'second' || entry.unit === 'count')
               const unitLabelKey = getDynamicPriceUnitLabelKey(entry)
-              const unitLabel = taskUsageUnitLabel(
-                entry,
-                i18n.language,
-                unitLabelKey ? t(unitLabelKey) : tokenUnitLabel
-              )
+              const unitLabel = isVideoUsageUnit
+                ? t(entry.unit === 'second' ? 's' : 'times')
+                : taskUsageUnitLabel(
+                    entry,
+                    i18n.language,
+                    unitLabelKey ? t(unitLabelKey) : tokenUnitLabel
+                  )
               let label: ReactNode = null
-              if (entry.labelKind !== 'schema') {
+              if (isVideoUsageUnit) {
+                label = null
+              } else if (entry.labelKind !== 'schema') {
                 label = t(entry.shortLabel)
               } else {
                 label = taskPriceLabel(
@@ -156,10 +273,7 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
               return (
                 <div
                   key={entry.key}
-                  className={cn(
-                    'flex min-w-0 flex-col gap-1',
-                    dynamicSummary.isTaskUsage && 'col-span-full'
-                  )}
+                  className='bg-muted/20 flex min-w-0 flex-col gap-1 rounded-md border px-3 py-2.5'
                 >
                   {label && (
                     <span className='text-muted-foreground text-xs break-words whitespace-normal'>
@@ -226,7 +340,10 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
         : []),
     ]
     priceSummary = prices.map((price) => (
-      <div key={price.type} className='flex min-w-0 flex-col gap-1'>
+      <div
+        key={price.type}
+        className='bg-muted/20 flex min-w-0 flex-col gap-1 rounded-md border px-3 py-2.5'
+      >
         <span className='text-muted-foreground text-xs'>{price.label}</span>
         <span className='font-mono text-sm font-semibold tabular-nums'>
           {formatPrice(
@@ -247,7 +364,7 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
     ))
   } else {
     priceSummary = (
-      <div className='col-span-full flex min-w-0 flex-col gap-1'>
+      <div className='bg-muted/20 col-span-full flex min-w-0 flex-col gap-1 rounded-md border px-3 py-2.5'>
         <span className='font-mono text-sm font-semibold tabular-nums'>
           {formatRequestPrice(
             props.model,
@@ -266,7 +383,7 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
   }
 
   return (
-    <Card className='hover:ring-foreground/20 h-full min-w-0 gap-3 transition-colors'>
+    <Card className='hover:ring-foreground/20 h-full min-w-0 gap-3 rounded-lg transition-colors'>
       <CardHeader className='flex flex-row items-start gap-3'>
         <div
           aria-hidden
@@ -285,6 +402,29 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
           >
             {props.model.model_name}
           </h3>
+          {videoHeadlineEntries.length > 0 && (
+            <div
+              role='group'
+              aria-label={t('Price')}
+              className='mt-1 flex flex-wrap items-baseline gap-x-1 font-mono text-base font-semibold tabular-nums'
+            >
+              {videoHeadlineEntries.map((entry, index) => (
+                <span
+                  key={entry.key}
+                  className='inline-flex flex-wrap items-baseline gap-x-1'
+                >
+                  {index > 0 && (
+                    <span className='text-muted-foreground mx-1'>{' + '}</span>
+                  )}
+                  <span>{entry.formattedRange ?? entry.formatted}</span>
+                  <span className='text-muted-foreground text-sm font-normal'>
+                    {' '}
+                    / {t(entry.unit === 'second' ? 's' : 'times')}
+                  </span>
+                </span>
+              ))}
+            </div>
+          )}
           {props.model.vendor_name && (
             <p
               className='text-muted-foreground mt-1 truncate text-xs'
@@ -294,12 +434,23 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
             </p>
           )}
         </div>
-        <CopyButton
-          value={props.model.model_name}
-          tooltip={t('Copy model name')}
-          className='size-7'
-          iconClassName='size-3.5'
-        />
+        <div className='flex shrink-0 items-center gap-1.5'>
+          <Button
+            variant='outline'
+            size='sm'
+            className='h-8 gap-1 px-2.5'
+            onClick={() => props.onClick(props.model.model_name || '')}
+          >
+            {t('Details')}
+            <ChevronRight aria-hidden className='size-3.5' />
+          </Button>
+          <CopyButton
+            value={props.model.model_name}
+            tooltip={t('Copy model name')}
+            className='size-8'
+            iconClassName='size-3.5'
+          />
+        </div>
       </CardHeader>
       <CardContent className='flex flex-1 flex-col gap-3'>
         <div className='flex min-w-0 flex-col gap-1.5'>
@@ -329,7 +480,18 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
           aria-label={t('Pricing')}
           className='mt-auto flex min-w-0 flex-col gap-1.5'
         >
-          <ModelBillingModeBadge model={props.model} appearance='caption' />
+          {isVideoModel && (
+            <Badge
+              variant='outline'
+              className='h-7 gap-1.5 rounded-full border-blue-200 bg-blue-50 px-2.5 text-blue-700 dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-300'
+            >
+              <Zap aria-hidden className='text-amber-500' />
+              {t('Video generation')}
+            </Badge>
+          )}
+          {!isVideoModel && (
+            <ModelBillingModeBadge model={props.model} appearance='caption' />
+          )}
           {dynamicSummary?.providerCount && (
             <span className='text-muted-foreground text-xs break-words'>
               {t('{{count}} providers', {
@@ -339,9 +501,135 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
                 ` · ${t('Not configured for some providers')}`}
             </span>
           )}
-          <div className='grid grid-cols-[repeat(auto-fit,minmax(88px,1fr))] gap-x-3 gap-y-2'>
-            {priceSummary}
-          </div>
+          {hasTaskPriceMatrix ? (
+            <>
+              <div className='grid grid-cols-[repeat(auto-fit,minmax(110px,1fr))] gap-2'>
+                {taskTiers.map((tier) => {
+                  const conditionLabel = taskPricingConditions(
+                    tier.conditions,
+                    props.model.billing_usage_schema,
+                    i18n.language,
+                    t
+                  )
+                  const title =
+                    conditionLabel ||
+                    (isVideoModel && tier.label === 'base'
+                      ? t('Base price')
+                      : tier.label) ||
+                    t('Base price')
+                  const tierHasCharge =
+                    tier.constant > 0 ||
+                    Object.values(tier.unitPrices).some((price) => price > 0)
+                  const unitPrices = pricedFields.flatMap(
+                    ([field, definition]) => {
+                      const value = Number(tier.unitPrices[field])
+                      if (!Number.isFinite(value) || value < 0) return []
+                      if (isVideoModel && tierHasCharge && value === 0) {
+                        return []
+                      }
+                      const isVideoUsageUnit =
+                        isVideoModel &&
+                        (definition.unit === 'second' ||
+                          definition.unit === 'count')
+                      let unitFallback = t('unit')
+                      if (definition.unit === 'second') {
+                        unitFallback = t('s')
+                      } else if (definition.unit === 'count') {
+                        unitFallback = t('times')
+                      } else if (definition.unit === 'token') {
+                        unitFallback = t('1M token')
+                      } else if (definition.unit === 'credit') {
+                        unitFallback = t('credit')
+                      }
+                      return [
+                        {
+                          field,
+                          label: isVideoUsageUnit
+                            ? null
+                            : taskPriceLabel(
+                                definition.description,
+                                field,
+                                i18n.language
+                              ),
+                          price: formatTaskUsageUnitPrice(
+                            value,
+                            dynamicPriceOptions
+                          ),
+                          unit: isVideoUsageUnit
+                            ? t(definition.unit === 'second' ? 's' : 'times')
+                            : taskUsageUnitLabel(
+                                definition,
+                                i18n.language,
+                                unitFallback
+                              ),
+                        },
+                      ]
+                    }
+                  )
+                  if (tier.constant > 0) {
+                    unitPrices.push({
+                      field: 'constant',
+                      label: t('Additional charge'),
+                      price: formatTaskUsageUnitPrice(
+                        tier.constant,
+                        dynamicPriceOptions
+                      ),
+                      unit: t('request'),
+                    })
+                  }
+                  return (
+                    <div
+                      role='group'
+                      aria-label={title}
+                      key={JSON.stringify([
+                        tier.label,
+                        tier.conditions,
+                        tier.unitPrices,
+                        tier.constant,
+                      ])}
+                      className='bg-muted/20 flex min-w-0 flex-col gap-2 rounded-md border px-3 py-2.5'
+                    >
+                      <span className='text-sm font-semibold break-words'>
+                        {title}
+                      </span>
+                      {unitPrices.map((entry, index) => (
+                        <div
+                          key={entry.field}
+                          className='flex min-w-0 flex-col gap-0.5'
+                        >
+                          {entry.label && (
+                            <span className='text-muted-foreground text-[11px] break-words'>
+                              {entry.label}
+                            </span>
+                          )}
+                          <span className='font-mono text-sm font-semibold tabular-nums'>
+                            {isVideoModel && index > 0 && '+ '}
+                            {entry.price}
+                            <span className='text-muted-foreground ml-1 text-xs font-normal'>
+                              {' '}
+                              / {entry.unit}
+                            </span>
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )
+                })}
+              </div>
+              {billingBasisParts.length > 0 && (
+                <p className='text-muted-foreground text-xs break-words'>
+                  {t('Billing basis')}:{' '}
+                  {billingBasisParts.join(
+                    isVideoModel && pricedFields.length > 1 ? ' · ' : ' × '
+                  )}
+                </p>
+              )}
+            </>
+          ) : (
+            <div className='grid grid-cols-[repeat(auto-fit,minmax(110px,1fr))] gap-2'>
+              {priceSummary}
+            </div>
+          )}
         </div>
         {(groups.length > 0 || endpoints.length > 0) && (
           <dl
@@ -397,16 +685,7 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
         <ModelPerfBadge
           perf={props.perf}
           className='border-border/60 border-t pt-2'
-        >
-          <Button
-            variant='ghost'
-            size='sm'
-            onClick={() => props.onClick(props.model.model_name || '')}
-          >
-            {t('Details')}
-            <ChevronRight aria-hidden className='size-3.5' />
-          </Button>
-        </ModelPerfBadge>
+        />
       </CardFooter>
     </Card>
   )

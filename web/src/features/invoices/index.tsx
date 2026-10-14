@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Clock3, ReceiptText } from 'lucide-react'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
@@ -39,13 +39,25 @@ import {
   withdrawCompletedInvoiceApplication,
 } from './api'
 import { ApplicationsTable } from './components/applications-table'
+import { ApplyInvoiceDialog } from './components/apply-invoice-dialog'
 import { CancelInvoiceDialog } from './components/cancel-invoice-dialog'
 import { EligibleCreditsTable } from './components/eligible-credits-table'
 import { InvoiceAvailabilityNotice } from './components/invoice-availability-notice'
 import { ManageInvoiceDialog } from './components/manage-invoice-dialog'
-import type { InvoiceApplication, InvoiceCredit, InvoiceStatus } from './types'
+import { getInvoiceSourceLabel } from './labels'
+import type {
+  InvoiceApplication,
+  InvoiceApplicationRequest,
+  InvoiceCredit,
+  InvoiceStatus,
+} from './types'
 
 const PAGE_SIZE = 20
+const DEFAULT_INVOICE_SOURCES: InvoiceCredit['source'][] = [
+  'online_recharge',
+  'redemption',
+  'admin_adjustment',
+]
 
 export function Invoices() {
   const { t } = useTranslation()
@@ -56,6 +68,7 @@ export function Invoices() {
   const [applicationPage, setApplicationPage] = useState(1)
   const [adminPage, setAdminPage] = useState(1)
   const [selected, setSelected] = useState(new Map<string, InvoiceCredit>())
+  const [applyingOpen, setApplyingOpen] = useState(false)
   const [managedApplication, setManagedApplication] =
     useState<InvoiceApplication | null>(null)
   const [cancellingApplication, setCancellingApplication] =
@@ -71,14 +84,10 @@ export function Invoices() {
     enabled: isAdmin,
   })
   const applyMutation = useMutation({
-    mutationFn: (requestIds: string[]) => applyForInvoice(requestIds),
-    onSuccess: async (response) => {
-      if (!response.success) {
-        toast.error(
-          response.message || t('Failed to submit invoice application')
-        )
-        return
-      }
+    mutationFn: (request: InvoiceApplicationRequest) =>
+      applyForInvoice(request),
+    meta: { errorToast: false },
+    onSuccess: async () => {
       setSelected(new Map())
       toast.success(t('Invoice application submitted'))
       await queryClient.invalidateQueries({ queryKey: ['invoice'] })
@@ -190,8 +199,28 @@ export function Invoices() {
 
   const data = invoiceQuery.data?.data
   const adminData = adminQuery.data?.data
+  const allowedSources = data?.allowed_sources ?? DEFAULT_INVOICE_SOURCES
+  const eligibleSelected = useMemo(
+    () =>
+      new Map(
+        [...selected].filter(([, credit]) =>
+          allowedSources.includes(credit.source)
+        )
+      ),
+    [allowedSources, selected]
+  )
+
+  if (eligibleSelected.size !== selected.size) {
+    setSelected(eligibleSelected)
+  }
 
   function toggleCredit(credit: InvoiceCredit, checked: boolean) {
+    if (
+      checked &&
+      (!data?.enabled || !allowedSources.includes(credit.source))
+    ) {
+      return
+    }
     setSelected((current) => {
       const next = new Map(current)
       if (checked) next.set(credit.request_id, credit)
@@ -201,11 +230,17 @@ export function Invoices() {
   }
 
   function toggleCurrentPage(checked: boolean) {
+    if (checked && !data?.enabled) return
     setSelected((current) => {
       const next = new Map(current)
       const now = Math.floor(Date.now() / 1000)
       for (const credit of data?.credits ?? []) {
-        if ((credit.frozen_until ?? 0) > now) continue
+        if (
+          (credit.frozen_until ?? 0) > now ||
+          !allowedSources.includes(credit.source)
+        ) {
+          continue
+        }
         if (checked) next.set(credit.request_id, credit)
         else next.delete(credit.request_id)
       }
@@ -244,9 +279,13 @@ export function Invoices() {
                 </span>
                 <span className='flex items-center gap-2'>
                   <ReceiptText className='size-4' />
-                  {t(
-                    'Eligible sources include online top-ups, redemptions, and administrator credits.'
-                  )}
+                  {allowedSources.length > 0
+                    ? t('Eligible payment methods: {{sources}}', {
+                        sources: allowedSources
+                          .map((source) => getInvoiceSourceLabel(t, source))
+                          .join(', '),
+                      })
+                    : t('No payment methods are enabled for invoicing')}
                 </span>
               </div>
             </section>
@@ -273,12 +312,13 @@ export function Invoices() {
                   unit={data?.unit ?? 'USD'}
                   minimumAmount={data?.minimum_amount ?? 0}
                   enabled={data?.enabled ?? false}
-                  selected={selected}
+                  selected={eligibleSelected}
+                  allowedSources={allowedSources}
                   applying={applyMutation.isPending}
                   onToggle={toggleCredit}
                   onTogglePage={toggleCurrentPage}
                   onClear={() => setSelected(new Map())}
-                  onApply={() => applyMutation.mutate([...selected.keys()])}
+                  onApply={() => setApplyingOpen(true)}
                   onRefresh={() => invoiceQuery.refetch()}
                   onPageChange={setCreditPage}
                 />
@@ -332,6 +372,14 @@ export function Invoices() {
           </div>
         </SectionPageLayout.Content>
       </SectionPageLayout>
+      <ApplyInvoiceDialog
+        open={applyingOpen}
+        email={data?.email ?? ''}
+        requestIds={[...eligibleSelected.keys()]}
+        applying={applyMutation.isPending}
+        onOpenChange={setApplyingOpen}
+        onApply={(request) => applyMutation.mutateAsync(request)}
+      />
       <ManageInvoiceDialog
         application={managedApplication}
         saving={updateMutation.isPending || completeMutation.isPending}

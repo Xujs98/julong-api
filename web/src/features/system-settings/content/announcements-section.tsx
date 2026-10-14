@@ -48,8 +48,6 @@ import type {
 } from '@/features/announcements/types'
 import { getAdminPlans } from '@/features/subscriptions/api'
 import dayjs from '@/lib/dayjs'
-import { formatTimestampRelative } from '@/lib/format'
-import { handleServerError } from '@/lib/handle-server-error'
 
 import { SettingsSwitchField } from '../components/settings-form-layout'
 import { SettingsSection } from '../components/settings-section'
@@ -103,8 +101,7 @@ export function AnnouncementsSection({
   enabled,
   data,
 }: AnnouncementsSectionProps) {
-  const { t, i18n } = useTranslation()
-  const locale = toIntlLocale(i18n.resolvedLanguage || i18n.language)
+  const { t } = useTranslation()
   const updateOption = useUpdateOption()
   const [announcements, setAnnouncements] = useState<Announcement[]>([])
   const [isEnabled, setIsEnabled] = useState(enabled)

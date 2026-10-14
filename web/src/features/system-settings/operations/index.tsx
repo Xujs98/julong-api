@@ -27,6 +27,8 @@ import {
 } from './section-registry.tsx'
 
 const defaultOperationsSettings: OperationsSettings = {
+  'log_setting.user_export_enabled': false,
+  'log_setting.max_range_days': 30,
   DefaultCollapseSidebar: false,
   DemoSiteEnabled: false,
   SelfUseModeEnabled: false,
@@ -51,6 +53,7 @@ const defaultOperationsSettings: OperationsSettings = {
   UserLogGroupRatioManualValue: 1,
   ImageGenerationLogEnabled: false,
   ImageGenerationLogRetentionDays: 30,
+  MediaAssetRetentionDays: 1,
   ImageGenerationLogPollingIntervalSeconds: 15,
   ImageGenerationLogImageAuthWhitelistEnabled: false,
   ImageGenerationLogImageAuthWhitelist: '',

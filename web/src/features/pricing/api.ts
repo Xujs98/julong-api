@@ -17,8 +17,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { api } from '@/lib/api'
+import { requireServerSuccess } from '@/lib/server-error-message'
 
-import type { PricingData } from './types'
+import type { ModelDocumentation, PricingData } from './types'
 
 // ----------------------------------------------------------------------------
 // Pricing APIs
@@ -28,4 +29,17 @@ import type { PricingData } from './types'
 export async function getPricing(): Promise<PricingData> {
   const res = await api.get('/api/pricing')
   return res.data
+}
+
+// Read only a document bound to a visible model; never enumerate admin templates.
+export async function getModelDocumentation(
+  modelName: string,
+  signal?: AbortSignal
+): Promise<ModelDocumentation | null> {
+  const res = await api.get<{
+    success: boolean
+    message?: string
+    data: ModelDocumentation | null
+  }>('/api/model-documentation', { params: { model: modelName }, signal })
+  return requireServerSuccess(res.data).data
 }

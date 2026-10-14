@@ -188,6 +188,9 @@ export type DataTablePageProps<TData> = {
    */
   pinnedColumns?: DataTablePinnedColumn[]
 
+  /** Opt in to horizontal wheel navigation while hovering this desktop column. */
+  horizontalWheelColumnId?: string
+
   /**
    * Apply explicit column widths from `header.getSize()` to `<TableHead>`.
    * Enable this when your column definitions include `size` and you want it honored.
@@ -548,6 +551,7 @@ function renderDesktop<TData>(
       )}
       getColumnClassName={props.getColumnClassName}
       pinnedColumns={props.pinnedColumns}
+      horizontalWheelColumnId={props.horizontalWheelColumnId}
       containerClassName={cn(
         fixedHeight && 'min-h-0 flex-1',
         'transition-opacity duration-150',

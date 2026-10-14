@@ -36,9 +36,11 @@ export function ApiKeys() {
           <ApiKeysPrimaryButtons />
         </SectionPageLayout.Actions>
         <SectionPageLayout.Content>
-          <div className='space-y-5'>
+          <div className='flex h-full min-h-0 flex-col gap-5'>
             <CustomEndpoints />
-            <ApiKeysTable />
+            <div className='min-h-0 flex-1'>
+              <ApiKeysTable />
+            </div>
           </div>
         </SectionPageLayout.Content>
       </SectionPageLayout>

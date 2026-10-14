@@ -22,6 +22,7 @@ import userEvent from '@testing-library/user-event'
 import i18next from 'i18next'
 import { afterEach, expect, it, vi } from 'vitest'
 
+import zhCN from '@/i18n/locales/zh.json'
 import { api } from '@/lib/api'
 import {
   DEFAULT_CURRENCY_CONFIG,
@@ -347,6 +348,170 @@ it('labels even a single task price on model cards', async () => {
   expect(screen.getByText('Song generation unit price')).toBeVisible()
   await act(() => i18next.changeLanguage('zhCN'))
   expect(screen.getByText('生成歌曲单价')).toBeVisible()
+})
+
+it('shows video prices with clear units instead of internal usage descriptions', async () => {
+  i18next.addResourceBundle('zhCN', 'translation', zhCN.translation, true, true)
+  const secondsModel: PricingModel = {
+    ...model,
+    model_name: 'video-seconds',
+    output_modalities: ['video'],
+    billing_expr:
+      'u("resolution") == "480p" ? tier("480p", u("seconds") * 0.03) : tier("720p", u("seconds") * 0.05)',
+    billing_usage_schema: {
+      seconds: {
+        type: 'number',
+        unit: 'second',
+        description: { en: 'Video generation unit price' },
+      },
+      resolution: {
+        enum: ['480p', '720p'],
+        description: { en: 'Resolution' },
+      },
+    },
+  }
+  const requestModel: PricingModel = {
+    ...secondsModel,
+    model_name: 'video-request',
+    billing_expr:
+      'u("resolution") == "480p" ? tier("480p", u("clips") * 1.25) : tier("720p", u("clips") * 2)',
+    billing_usage_schema: {
+      clips: {
+        type: 'number',
+        unit: 'count',
+        description: { en: 'Video generation unit price' },
+      },
+      resolution: secondsModel.billing_usage_schema?.resolution ?? {
+        enum: ['480p', '720p'],
+      },
+    },
+  }
+
+  render(
+    <>
+      <ModelCard model={secondsModel} onClick={() => {}} />
+      <ModelCard model={requestModel} onClick={() => {}} />
+    </>
+  )
+
+  const cards = screen.getAllByRole('group', { name: 'Pricing' })
+  expect(cards[0]).toHaveTextContent('Video generation')
+  expect(cards[0]).toHaveTextContent('480p')
+  expect(cards[0]).toHaveTextContent(/\$0\.03\s*\/\s*s/)
+  expect(cards[0]).toHaveTextContent('720p')
+  expect(cards[0]).toHaveTextContent(/\$0\.05\s*\/\s*s/)
+  expect(cards[0]).toHaveTextContent(
+    'Billing basis: Resolution × Actual duration'
+  )
+  expect(cards[0]).not.toHaveTextContent('Video generation unit price')
+  expect(cards[1]).toHaveTextContent(/\$1\.25\s*\/\s*times/)
+  expect(cards[1]).toHaveTextContent(/\$2\s*\/\s*times/)
+  expect(cards[1]).not.toHaveTextContent('Video generation unit price')
+  const summaries = screen.getAllByRole('group', { name: 'Price' })
+  expect(summaries[0]).toHaveTextContent(/\$0\.03 – \$0\.05\s*\/\s*s/)
+  expect(summaries[1]).toHaveTextContent(/\$1\.25 – \$2\s*\/\s*times/)
+
+  await act(async () => {
+    await i18next.changeLanguage('zhCN')
+  })
+  const localizedCards = screen.getAllByRole('group', { name: '定价' })
+  expect(localizedCards[0]).toHaveTextContent(/\$0\.03\s*\/\s*秒/)
+  expect(localizedCards[0]).toHaveTextContent(/\$0\.05\s*\/\s*秒/)
+  expect(localizedCards[1]).toHaveTextContent(/\$1\.25\s*\/\s*次/)
+  expect(localizedCards[1]).toHaveTextContent(/\$2\s*\/\s*次/)
+  i18next.removeResourceBundle('zhCN', 'translation')
+})
+
+it.each([
+  ['tier("base", u("seconds") * 0 + u("tasks") * 10)', '$10', 'times', 's'],
+  ['tier("base", u("seconds") * 0.3 + u("tasks") * 0)', '$0.3', 's', 'times'],
+  ['tier("base", u("tasks") * 10)', '$10', 'times', 's'],
+  ['tier("base", u("seconds") * 0.3)', '$0.3', 's', 'times'],
+])(
+  'hides the unused zero rate in legacy video cards: %s',
+  (expression, price, unit, unusedUnit) => {
+    render(
+      <ModelCard
+        model={{
+          ...model,
+          model_name: 'legacy-video',
+          billing_expr: expression,
+          billing_usage_schema: {
+            seconds: {
+              type: 'number',
+              unit: 'second',
+              description: {
+                en: 'Video generation unit price',
+                zh: '视频生成单价',
+              },
+            },
+            tasks: {
+              type: 'number',
+              unit: 'count',
+              description: { en: 'Video task unit price', zh: '视频任务单价' },
+            },
+          },
+        }}
+        onClick={vi.fn()}
+      />
+    )
+    expect(screen.getByRole('group', { name: 'Price' })).toHaveTextContent(
+      `${price} / ${unit}`
+    )
+    const pricing = screen.getByRole('group', { name: 'Pricing' })
+    expect(pricing).toHaveTextContent('Video generation')
+    expect(pricing).not.toHaveTextContent('unit price')
+    expect(
+      within(pricing).queryByText(`/ ${unusedUnit}`)
+    ).not.toBeInTheDocument()
+    if (unit === 'times') {
+      expect(pricing).not.toHaveTextContent('Actual duration')
+    }
+  }
+)
+
+it('shows both configured video rates in the headline and each resolution price', () => {
+  render(
+    <ModelCard
+      model={{
+        ...model,
+        model_name: 'video-seconds-and-request',
+        output_modalities: ['video'],
+        billing_expr:
+          'u("resolution") == "480p" ? tier("480p", u("seconds") * 0.03 + u("tasks") * 1.25) : tier("720p", u("seconds") * 0.05 + u("tasks") * 2)',
+        billing_usage_schema: {
+          seconds: {
+            type: 'number',
+            unit: 'second',
+            description: 'Video generation unit price',
+          },
+          tasks: {
+            type: 'number',
+            unit: 'count',
+            description: 'Video task unit price',
+          },
+          resolution: {
+            enum: ['480p', '720p'],
+            description: 'Resolution',
+          },
+        },
+      }}
+      onClick={vi.fn()}
+    />
+  )
+
+  const headline = screen.getByRole('group', { name: 'Price' })
+  expect(headline).toHaveTextContent('$0.03 – $0.05 / s')
+  expect(headline).toHaveTextContent('+ $1.25 – $2 / times')
+  const lowResolution = screen.getByRole('group', { name: 'Resolution: 480p' })
+  expect(lowResolution).toHaveTextContent('$0.03 / s')
+  expect(lowResolution).toHaveTextContent('+ $1.25 / times')
+  const highResolution = screen.getByRole('group', { name: 'Resolution: 720p' })
+  expect(highResolution).toHaveTextContent('$0.05 / s')
+  expect(highResolution).toHaveTextContent('+ $2 / times')
+  expect(screen.getByRole('group', { name: 'Pricing' })).not.toHaveTextContent(
+    'unit price'
+  )
 })
 
 it('preserves condition tables, boolean states and additional charges', () => {

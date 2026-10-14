@@ -41,12 +41,13 @@ export const PRICING_KEYS = [
   'billing_setting.billing_mode',
   'billing_setting.billing_expr',
   'billing_setting.plugin_billing_expr',
+  'billing_setting.per_request_subscription_allowed',
 ] as const
 export type PricingKey = (typeof PRICING_KEYS)[number]
 export type PricingValues = Partial<
   Record<
     Exclude<PricingKey, 'billing_setting.plugin_billing_expr'>,
-    number | string
+    boolean | number | string
   >
 > & {
   'billing_setting.plugin_billing_expr'?: Record<string, string>
@@ -135,6 +136,9 @@ export function pricingOptions(
       let value = values[key]
       if (key === 'billing_setting.billing_mode') value ??= values.BillingMode
       if (key === 'billing_setting.billing_expr') value ??= values.BillingExpr
+      if (key === 'billing_setting.per_request_subscription_allowed') {
+        value ??= values.PerRequestSubscriptionAllowed
+      }
       if (key === 'billing_setting.plugin_billing_expr') {
         value ??= values.PluginBillingExpr
       }
@@ -155,6 +159,8 @@ export function pricingRows(options: PricingOptions): ModelPricingSnapshot[] {
     audioCompletionRatio: options.AudioCompletionRatio,
     billingMode: options['billing_setting.billing_mode'],
     billingExpr: options['billing_setting.billing_expr'],
+    perRequestSubscriptionAllowed:
+      options['billing_setting.per_request_subscription_allowed'],
     pluginBillingExpr: options['billing_setting.plugin_billing_expr'],
   })
 }
@@ -205,6 +211,10 @@ export function pricingFromDraft(data: ModelRatioData): PricingValues {
       : { 'billing_setting.plugin_billing_expr': data.pluginBillingExpr }),
     'billing_setting.billing_mode':
       data.billingMode === 'tiered_expr' ? 'tiered_expr' : 'ratio',
+  }
+  if (data.allowSubscriptionDeduction !== undefined) {
+    values['billing_setting.per_request_subscription_allowed'] =
+      data.allowSubscriptionDeduction
   }
   for (const [field, key] of Object.entries(pricingFieldMap)) {
     const value = data[field as keyof typeof pricingFieldMap]
@@ -259,7 +269,7 @@ function applyPricingValues(
     PRICING_KEYS.map((key) => {
       const map = JSON.parse(options[key] ?? '{}') as Record<
         string,
-        number | string
+        boolean | number | string
       >
       if (key === 'billing_setting.plugin_billing_expr') {
         // Model-only imports and batch copies retain each target's provider prices.
@@ -302,7 +312,11 @@ export function pricingValuesByModel(
       throw new Error(t('Pricing must be a JSON object'))
     }
     for (const [name, value] of Object.entries(map)) {
-      if (typeof value !== 'number' && typeof value !== 'string') {
+      if (
+        typeof value !== 'boolean' &&
+        typeof value !== 'number' &&
+        typeof value !== 'string'
+      ) {
         throw new Error(t('Invalid pricing value'))
       }
       if (key === 'billing_setting.plugin_billing_expr') {
@@ -326,7 +340,7 @@ export function pricingValuesByModel(
 
 export function applyPriceSyncSelections(
   options: PricingOptions,
-  selections: Record<string, Record<string, number | string>>
+  selections: Record<string, Record<string, boolean | number | string>>
 ): PricingOptions {
   let result = options
   for (const [name, fields] of Object.entries(selections)) {

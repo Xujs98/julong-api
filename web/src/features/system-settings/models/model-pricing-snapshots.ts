@@ -33,7 +33,8 @@ export type ModelPricingSnapshotInput = {
   audioCompletionRatio: string
   billingMode: string
   billingExpr: string
-  perRequestSubscriptionAllowed: string
+  perRequestSubscriptionAllowed?: string
+  pluginBillingExpr?: string
 }
 
 export type ModelPricingSnapshot = {
@@ -167,7 +168,8 @@ export const buildModelSnapshots = ({
   audioCompletionRatio,
   billingMode,
   billingExpr,
-  perRequestSubscriptionAllowed,
+  perRequestSubscriptionAllowed = '{}',
+  pluginBillingExpr = '{}',
 }: ModelPricingSnapshotInput): ModelPricingSnapshot[] => {
   const priceMap = safeJsonParse<Record<string, number>>(modelPrice, {
     fallback: {},
@@ -209,13 +211,10 @@ export const buildModelSnapshots = ({
     fallback: {},
     context: 'billing expression',
   })
+
   const perRequestSubscriptionAllowedMap = safeJsonParse<
     Record<string, boolean>
-  >(perRequestSubscriptionAllowed, {
-    fallback: {},
-    context: 'per-request subscription deduction',
-  })
-
+  >(perRequestSubscriptionAllowed, { fallback: {}, silent: true })
   const pluginExprMap = safeJsonParse<Record<string, string>>(
     pluginBillingExpr,
     { fallback: {}, context: 'plugin billing expressions' }
@@ -231,6 +230,7 @@ export const buildModelSnapshots = ({
     })
   }
   const modelNames = new Set([
+    ...Object.keys(perRequestSubscriptionAllowedMap),
     ...pluginExpressionsByModel.keys(),
     ...Object.keys(priceMap),
     ...Object.keys(ratioMap),
@@ -242,7 +242,6 @@ export const buildModelSnapshots = ({
     ...Object.keys(audioCompletionMap),
     ...Object.keys(billingModeMap),
     ...Object.keys(billingExprMap),
-    ...Object.keys(perRequestSubscriptionAllowedMap),
   ])
 
   return [...modelNames].map((name) => {
@@ -324,5 +323,8 @@ export const getSnapshotSignature = (snapshot?: ModelPricingSnapshot) => {
     billingExpr: snapshot.billingExpr || '',
     requestRuleExpr: snapshot.requestRuleExpr || '',
     allowSubscriptionDeduction: Boolean(snapshot.allowSubscriptionDeduction),
+    pluginBillingExpr: Object.entries(snapshot.pluginBillingExpr ?? {}).sort(
+      ([a], [b]) => a.localeCompare(b)
+    ),
   })
 }

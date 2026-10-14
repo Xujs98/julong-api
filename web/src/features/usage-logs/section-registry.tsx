@@ -42,6 +42,11 @@ const USAGE_LOGS_SECTIONS = [
     titleKey: 'Task Logs',
     build: () => null, // Content is rendered directly in the page component
   },
+  {
+    id: 'assets',
+    titleKey: 'Media assets',
+    build: () => null,
+  },
 ] as const
 
 export type UsageLogsSectionId = (typeof USAGE_LOGS_SECTIONS)[number]['id']

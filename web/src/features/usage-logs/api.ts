@@ -19,7 +19,10 @@ For commercial licensing, please contact support@quantumnous.com
 import { api, getFreshAuthHeaders, type ApiRequestConfig } from '@/lib/api'
 import { createServerError } from '@/lib/server-error-message'
 
+import type { UsageLog } from './data/schema'
+import { parseTaskArtifactsResponse } from './lib/task-artifacts'
 import type {
+  TaskArtifactsResponse,
   GetLogsParams,
   GetLogsResponse,
   GetLogStatsParams,
@@ -28,6 +31,7 @@ import type {
   GetTaskLogsParams,
   GetImageGenerationLogsParams,
   UserInfo,
+  TaskRequestPreview,
 } from './types'
 
 function buildQueryParams(params: Record<string, unknown>): URLSearchParams {
@@ -122,6 +126,60 @@ export async function downloadUsageLogs(
   }
 }
 
+/**
+ * Stream the logs matching params, newest first. The server sends one JSON
+ * log per line and ends with an API response object; a stream that ends
+ * without a successful one is a failed export. Resolves with the log count.
+ */
+export async function exportLogs(
+  params: GetLogsParams,
+  isAdmin: boolean,
+  options: { signal: AbortSignal; onLog: (log: UsageLog) => void }
+): Promise<number> {
+  const queryParams = buildQueryParams(
+    params as unknown as Record<string, unknown>
+  )
+  const response = await fetch(
+    `${buildApiPath('/api/log', isAdmin)}/export/stream?${queryParams}`,
+    {
+      credentials: 'include',
+      headers: await getFreshAuthHeaders(),
+      signal: options.signal,
+    }
+  )
+  if (!response.ok || !response.body) {
+    const body: unknown = await response.json().catch(() => null)
+    throw createServerError(body ?? { status: response.status })
+  }
+
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  let result: { success?: unknown; data?: { count?: number } } | null = null
+  for (;;) {
+    const { done, value } = await reader.read()
+    buffer += done ? decoder.decode() : decoder.decode(value, { stream: true })
+    const lines = buffer.split('\n')
+    buffer = done ? '' : (lines.pop() ?? '')
+    for (const line of lines) {
+      if (!line.trim()) continue
+      let parsed
+      try {
+        parsed = JSON.parse(line)
+      } catch {
+        throw createServerError(null)
+      }
+      if (typeof parsed.success === 'boolean') result = parsed
+      else options.onLog(parsed as UsageLog)
+    }
+    if (done) break
+  }
+  if (result?.success !== true) {
+    throw createServerError(result)
+  }
+  return result.data?.count ?? 0
+}
+
 export async function getUserInfo(
   userId: number
 ): Promise<{ success: boolean; message?: string; data?: UserInfo }> {
@@ -156,4 +214,35 @@ export const getImageGenerationLogs = (
   return api
     .get(`/api/image-generation-logs?${queryParams}`)
     .then((res) => res.data as GetLogsResponse)
+}
+
+const taskArtifactRequestConfig = {
+  skipBusinessError: true,
+  skipErrorHandler: true,
+} satisfies ApiRequestConfig
+
+export async function getTaskArtifacts(taskId: string) {
+  const response = await api.get<TaskArtifactsResponse>(
+    `/api/task/${encodeURIComponent(taskId)}/artifacts`,
+    taskArtifactRequestConfig
+  )
+  return parseTaskArtifactsResponse(response.data)
+}
+
+export async function getTaskRequest(taskId: string) {
+  const response = await api.get<{
+    success: boolean
+    message?: string
+    data: TaskRequestPreview
+  }>(`/api/task/${encodeURIComponent(taskId)}/request`)
+  return response.data
+}
+
+export async function getTaskDetail(taskId: string) {
+  const response = await api.get<{
+    success: boolean
+    message?: string
+    data: { task_id: string; status: string; [key: string]: unknown }
+  }>(`/api/task/${encodeURIComponent(taskId)}/detail`)
+  return response.data
 }

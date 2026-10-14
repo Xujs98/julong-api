@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { z } from 'zod'
+import * as z from 'zod'
 
 // ============================================================================
 // Model Types
@@ -45,6 +45,7 @@ export interface Model {
   icon?: string
   tags?: string
   vendor_id?: number
+  document_template_id?: number
   endpoints?: string
   supported_endpoints?: string[]
   status: number
@@ -273,6 +274,7 @@ export const modelFormSchema = z.object({
   tags: z.array(z.string()).default([]),
   vendor_id: z.number().optional(),
   endpoints: z.string().default(''),
+  document_template_id: z.number().int().nonnegative().default(0),
   name_rule: z.number().min(0).max(3).default(0),
   status: z.boolean().default(true),
   sync_official: z.boolean().default(true),
@@ -349,7 +351,11 @@ export type SyncSource = 'official'
 /**
  * Model tab type
  */
-export type ModelTabCategory = 'metadata' | 'vendors' | 'deployments'
+export type ModelTabCategory =
+  | 'metadata'
+  | 'vendors'
+  | 'deployments'
+  | 'document-templates'
 
 /**
  * Deployment entity from API

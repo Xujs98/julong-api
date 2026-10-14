@@ -492,6 +492,7 @@ export function CommonLogsFilterBar<TData>(
       actionStart={
         <div className='flex items-center gap-1'>
           {sensitiveToggle}
+          <ExportLogsDialog />
           <UsageLogsExportMenu
             table={props.table}
             searchParams={searchParams}

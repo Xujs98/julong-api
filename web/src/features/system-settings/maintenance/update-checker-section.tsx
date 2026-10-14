@@ -25,6 +25,7 @@ import { formatTimestamp } from '@/lib/format'
 import { SettingsSection } from '../components/settings-section'
 
 type UpdateCheckerSectionProps = {
+  currentVersion?: string | null
   julongVersion?: string | null
   upstreamVersion?: string | null
   upstreamCommit?: string | null
@@ -33,94 +34,38 @@ type UpdateCheckerSectionProps = {
 
 export function UpdateCheckerSection(props: UpdateCheckerSectionProps) {
   const { t } = useTranslation()
-  const [checking, setChecking] = useState(false)
-  const [dialogOpen, setDialogOpen] = useState(false)
-  const [release, setRelease] = useState<ReleaseInfo | null>(null)
-
+  const { status } = useStatus()
   const uptime = props.startTime
     ? formatTimestamp(props.startTime)
     : t('Unknown')
-  const julongVersion = props.julongVersion || t('Unknown')
-  const upstreamVersion = props.upstreamVersion || t('Unknown')
-  const upstreamCommit = props.upstreamCommit || t('Unknown')
-
-  const handleCheckUpdates = async () => {
-    setChecking(true)
-    try {
-      const response = await fetch(
-        'https://api.github.com/repos/QuantumNous/new-api/releases/latest',
-        {
-          headers: {
-            Accept: 'application/vnd.github+json',
-            'User-Agent': 'new-api-dashboard',
-          },
-        }
-      )
-
-      if (!response.ok) {
-        throw new Error(t('Failed to contact GitHub releases API'))
-      }
-
-      const data = (await response.json()) as ReleaseInfo
-      if (!data?.tag_name) {
-        throw new Error(t('Unexpected release payload'))
-      }
-
-      if (props.upstreamVersion && data.tag_name === props.upstreamVersion) {
-        toast.success(
-          t('You are running the latest version ({{version}}).', {
-            version: data.tag_name,
-          })
-        )
-        return
-      }
-
-      setRelease(data)
-      setDialogOpen(true)
-    } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : t('Failed to check for updates')
-      toast.error(message)
-    } finally {
-      setChecking(false)
-    }
-  }
-
-  const goToRelease = () => {
-    if (release?.html_url) {
-      window.open(release.html_url, '_blank', 'noopener,noreferrer')
-    }
-  }
+  const julongVersion =
+    props.julongVersion || status?.julong_version || t('Unknown')
+  const upstreamVersion =
+    props.upstreamVersion ||
+    props.currentVersion ||
+    status?.upstream_version ||
+    t('Unknown')
+  const upstreamCommit =
+    props.upstreamCommit || status?.upstream_commit || t('Unknown')
 
   return (
-    <>
-      <SettingsSection title={t('System maintenance')}>
-        <div className='space-y-6'>
-          <div className='grid gap-4 md:grid-cols-3'>
-            <div className='rounded-lg border p-4'>
-              <div className='text-muted-foreground text-sm'>
-                {t('Julong version')}
-              </div>
-              <div className='text-lg font-semibold'>{julongVersion}</div>
+    <SettingsSection title={t('System maintenance')}>
+      <div className='space-y-6'>
+        <div className='grid gap-4 md:grid-cols-3'>
+          <div className='rounded-lg border p-4'>
+            <div className='text-muted-foreground text-sm'>
+              {t('Julong version')}
             </div>
-            <div className='rounded-lg border p-4'>
-              <div className='text-muted-foreground text-sm'>
-                {t('Merged New API version')}
-              </div>
-              <div className='text-lg font-semibold'>{upstreamVersion}</div>
-              <div className='text-muted-foreground mt-1 font-mono text-xs break-all'>
-                {t('Upstream commit')}: {upstreamCommit}
-              </div>
+            <div className='text-lg font-semibold'>{julongVersion}</div>
+          </div>
+          <div className='rounded-lg border p-4'>
+            <div className='text-muted-foreground text-sm'>
+              {t('Merged New API version')}
             </div>
-            <div className='rounded-lg border p-4'>
-              <div className='text-muted-foreground text-sm'>
-                {t('Uptime since')}
-              </div>
-              <div className='text-lg font-semibold'>{uptime}</div>
+            <div className='text-lg font-semibold'>{upstreamVersion}</div>
+            <div className='text-muted-foreground mt-1 font-mono text-xs break-all'>
+              {t('Upstream commit')}: {upstreamCommit}
             </div>
-            <div className='text-lg font-semibold break-all'>{version}</div>
           </div>
           <div className='rounded-lg border p-4'>
             <div className='text-muted-foreground text-sm'>
@@ -129,6 +74,7 @@ export function UpdateCheckerSection(props: UpdateCheckerSectionProps) {
             <div className='text-lg font-semibold'>{uptime}</div>
           </div>
         </div>
+
         <SystemUpdateAction compact={false} />
       </div>
     </SettingsSection>

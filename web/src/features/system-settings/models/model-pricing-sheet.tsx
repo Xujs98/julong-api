@@ -60,7 +60,6 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet'
-import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   previewModelPricing,
@@ -155,6 +154,9 @@ export const ModelPricingSheet = forwardRef<
     perRequestSubscriptionAllowed,
     onSave,
     isSaving,
+    usageSchema,
+    pluginVariants,
+    onDirtyChange,
   },
   ref
 ) {
@@ -176,6 +178,9 @@ export const ModelPricingSheet = forwardRef<
           ref={ref}
           editData={editData}
           perRequestSubscriptionAllowed={perRequestSubscriptionAllowed}
+          usageSchema={usageSchema}
+          pluginVariants={pluginVariants}
+          onDirtyChange={onDirtyChange}
           onSave={onSave}
           isSaving={isSaving}
           className='h-full rounded-none border-0'
@@ -189,7 +194,18 @@ export const ModelPricingEditorPanel = forwardRef<
   ModelPricingEditorPanelHandle,
   ModelPricingEditorPanelProps
 >(function ModelPricingEditorPanel(
-  { editData, perRequestSubscriptionAllowed, className, onSave, isSaving },
+  {
+    editData,
+    perRequestSubscriptionAllowed,
+    className,
+    onSave,
+    isSaving,
+    usageSchema,
+    pluginVariants,
+    onDirtyChange,
+    embedded = false,
+    scrollHeader,
+  },
   ref
 ) {
   const { t } = useTranslation()
@@ -360,16 +376,12 @@ export const ModelPricingEditorPanel = forwardRef<
         imageRatio: editData.imageRatio || '',
         audioRatio: editData.audioRatio || '',
         audioCompletionRatio: editData.audioCompletionRatio || '',
-        allowSubscriptionDeduction: Boolean(allowedMap[editData.name]),
+        allowSubscriptionDeduction:
+          editData.allowSubscriptionDeduction ??
+          Boolean(allowedMap[editData.name]),
       })
-      let nextPricingMode: PricingMode = 'per-token'
-      if (editData.billingMode === 'tiered_expr') {
-        nextPricingMode = 'tiered_expr'
-      } else if (editData.price) {
-        nextPricingMode = 'per-request'
-      }
-      setPricingMode(nextPricingMode)
-      setBillingExpr(editData.billingExpr || '')
+      setPricingMode(initialPricingMode)
+      setBillingExpr(initialBillingExpr)
       setRequestRuleExpr(editData.requestRuleExpr || '')
     } else {
       form.reset({
@@ -393,7 +405,43 @@ export const ModelPricingEditorPanel = forwardRef<
     setLanePrices(nextLaneState.prices)
     setLaneEnabled(nextLaneState.enabled)
     setEditorReloadToken((token) => token + 1)
-  }, [editData, form, perRequestSubscriptionAllowed])
+    autoSwitchedForRef.current = null
+  }, [editData, form, initialPricingMode, initialBillingExpr])
+
+  useEffect(() => {
+    if (!editData) return
+    if (editData.billingMode === 'tiered_expr') return
+    if (editData.price || editData.ratio) return
+
+    const schema = taskUsageSchema
+    if (!schema || Object.keys(schema).length === 0) return
+    if (autoSwitchedForRef.current === editData.name) return
+
+    setPricingMode('tiered_expr')
+    autoSwitchedForRef.current = editData.name
+  }, [editData, taskUsageSchema])
+
+  useEffect(() => {
+    onDirtyChange?.(
+      form.formState.isDirty ||
+        pricingMode !== initialPricingMode ||
+        billingExpr !== initialBillingExpr ||
+        requestRuleExpr !== (editData?.requestRuleExpr ?? '') ||
+        !pluginExpressionsEqual(pluginExpressions, editData?.pluginBillingExpr)
+    )
+  }, [
+    onDirtyChange,
+    form.formState.isDirty,
+    pricingMode,
+    billingExpr,
+    requestRuleExpr,
+    editData,
+    perRequestSubscriptionAllowed,
+    initialPricingMode,
+    perRequestSubscriptionAllowed,
+    initialBillingExpr,
+    pluginExpressions,
+  ])
 
   const setFormValue = (field: keyof ModelPricingFormValues, value: string) => {
     form.setValue(field, value, {
@@ -677,6 +725,7 @@ export const ModelPricingEditorPanel = forwardRef<
       resolvedBillingExpr,
       pluginExpressions,
       editData,
+      perRequestSubscriptionAllowed,
       pluginVariants,
     ]
   )
@@ -1063,59 +1112,29 @@ export const ModelPricingEditorPanel = forwardRef<
                       </div>
                     </TabsContent>
 
-                  <TabsContent value='per-request' className='pt-0'>
-                    <FieldGroup className='gap-5'>
-                      <FormField
-                        control={form.control}
-                        name='allowSubscriptionDeduction'
-                        render={({ field }) => (
-                          <FormItem className='contents'>
-                            <Field
-                              orientation='horizontal'
-                              className='bg-muted/20 rounded-lg border p-3'
-                            >
-                              <div className='min-w-0 flex-1 space-y-1'>
-                                <FieldLabel>
-                                  {t('Allow subscription deduction')}
-                                </FieldLabel>
-                                <FieldDescription>
-                                  {t(
-                                    'When enabled, subscription quota can pay for this per-request model. Otherwise wallet balance is charged.'
-                                  )}
-                                </FieldDescription>
-                              </div>
-                              <FormControl>
-                                <Switch
-                                  checked={Boolean(field.value)}
-                                  onCheckedChange={field.onChange}
-                                />
-                              </FormControl>
-                            </Field>
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name='price'
-                        render={({ field }) => (
-                          <FormItem className='contents'>
-                            <Field>
-                              <FieldLabel>{t('Fixed price')}</FieldLabel>
-                              <FormControl>
-                                <InputGroup>
-                                  <InputGroupAddon>$</InputGroupAddon>
-                                  <InputGroupInput
-                                    inputMode='decimal'
-                                    placeholder='0.01'
-                                    {...field}
-                                    onChange={(event) => {
-                                      const value = event.target.value
-                                      if (numericDraftRegex.test(value)) {
-                                        field.onChange(value)
-                                      }
-                                    }}
-                                  />
+                    <TabsContent value='per-request' className='pt-0'>
+                      <FieldGroup className='gap-5'>
+                        <FormField
+                          control={form.control}
+                          name='price'
+                          render={({ field }) => (
+                            <FormItem className='contents'>
+                              <Field>
+                                <FormLabel>{t('Fixed price')}</FormLabel>
+                                <InputGroup className='has-[[data-pricing-error]]:h-auto has-[[data-pricing-error]]:flex-wrap'>
+                                  <InputGroupAddon>
+                                    {currency.symbol}
+                                  </InputGroupAddon>
+                                  <FormControl>
+                                    <PricingAmountInput
+                                      {...field}
+                                      value={field.value ?? ''}
+                                      currency={currency}
+                                      grouped
+                                      placeholder='0.01'
+                                      onChange={field.onChange}
+                                    />
+                                  </FormControl>
                                   <InputGroupAddon align='inline-end'>
                                     {t('per request')}
                                   </InputGroupAddon>

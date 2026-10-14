@@ -71,7 +71,7 @@ import {
 } from '../constants'
 import { getUserActionMessage } from '../lib'
 import { getAssignableUserTags } from '../lib/user-tags'
-import type { User, ManageUserAction, UserTag } from '../types'
+import type { User, UserTag } from '../types'
 import { UserBindingDialog } from './dialogs/user-binding-dialog'
 import { useUsers } from './users-provider'
 
@@ -84,13 +84,19 @@ const MANAGE_ACTION_TITLES: Record<AdminUserManageAction, string> = {
 
 interface DataTableRowActionsProps {
   row: Row<User>
-  tags: UserTag[]
+  tags?: UserTag[]
 }
 
 export function DataTableRowActions(props: DataTableRowActionsProps) {
   const { t } = useTranslation()
   const user = props.row.original
-  const { setOpen, setCurrentRow, triggerRefresh } = useUsers()
+  const {
+    setOpen,
+    setCurrentRow,
+    triggerRefresh,
+    requestVerification,
+    verificationActive,
+  } = useUsers()
   const [resetPasskeyOpen, setResetPasskeyOpen] = useState(false)
   const [resetTwoFAOpen, setResetTwoFAOpen] = useState(false)
   const [disableUserOpen, setDisableUserOpen] = useState(false)
@@ -327,7 +333,7 @@ export function DataTableRowActions(props: DataTableRowActionsProps) {
                 </DropdownMenuShortcut>
               )}
             </DropdownMenuItem>
-            {getAssignableUserTags(props.tags).map((tag) => (
+            {getAssignableUserTags(props.tags ?? []).map((tag) => (
               <DropdownMenuItem
                 key={tag.id}
                 disabled={tagUpdating}

@@ -55,6 +55,7 @@ export type DataTableViewProps<TData> = {
   getRowClassName?: (row: Row<TData>) => string | undefined
   getColumnClassName?: DataTableColumnClassName
   pinnedColumns?: DataTablePinnedColumn[]
+  horizontalWheelColumnId?: string
   applyHeaderSize?: boolean
   tableClassName?: string
   tableHeaderClassName?: string

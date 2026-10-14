@@ -54,6 +54,7 @@ import {
   getChannelPluginExtensions,
   LEGACY_TASK_PLUGIN_KEYS,
 } from '../../lib/channel-plugin-extensions'
+import { SUANLIAI_VIDEO_PLUGIN_KEY } from '../../lib/suanliai-video'
 import { ChannelTypeLogo } from '../channel-type-badge'
 
 type ChannelProviderPickerProps = {
@@ -113,6 +114,7 @@ export function ChannelProviderPicker(props: ChannelProviderPickerProps) {
       extensionSummary?: string
       badge?: ChannelProviderPresentation['badge']
       searchText: string
+      unavailable?: boolean
     }> = []
     for (const option of CHANNEL_TYPE_OPTIONS) {
       if (option.value === CHANNEL_TYPE_TASK_PLUGIN) {
@@ -177,6 +179,26 @@ export function ChannelProviderPicker(props: ChannelProviderPickerProps) {
         })
       }
     }
+    if (filter === 'all' || filter === 'gateway') {
+      entries.push({
+        id: 'builtin:60:suanliai',
+        label: t('Suanli AI'),
+        target: {
+          kind: 'builtin',
+          type: CHANNEL_TYPE_NEW_API,
+          preset: 'suanliai',
+        },
+        description: t(
+          'Video gateway with the unified /v1/videos API and per-model capability settings'
+        ),
+        searchText: `${t('Suanli AI')} SuanliAI suanliai.top 算力 AI 视频网关`,
+        unavailable:
+          !props.canBindPlugin ||
+          !availablePlugins.some(
+            (plugin) => plugin.key === SUANLIAI_VIDEO_PLUGIN_KEY
+          ),
+      })
+    }
     return entries.filter((entry) =>
       entry.searchText.toLocaleLowerCase().includes(keyword)
     )
@@ -204,7 +226,7 @@ export function ChannelProviderPicker(props: ChannelProviderPickerProps) {
     props.canBindPlugin && (filter === 'all' || filter === 'plugin')
   let currentProviderId: string | undefined
   if (props.currentProvider?.kind === 'builtin') {
-    currentProviderId = `builtin:${props.currentProvider.type}`
+    currentProviderId = `builtin:${props.currentProvider.type}${props.currentProvider.preset ? `:${props.currentProvider.preset}` : ''}`
   } else if (props.currentProvider?.kind === 'plugin') {
     currentProviderId = `plugin:${props.currentProvider.key}`
   }
@@ -284,7 +306,7 @@ export function ChannelProviderPicker(props: ChannelProviderPickerProps) {
                       .filter(Boolean)
                       .join(' · ') || undefined
                   }
-                  disabled={props.disabled}
+                  disabled={props.disabled || option.unavailable}
                   onSelect={() => props.onSelect(option.target)}
                   className='data-selected:border-primary/50 data-selected:bg-primary/5 min-h-24 flex-col items-stretch justify-between gap-2.5 rounded-lg border p-3 md:min-h-32 [&>svg]:hidden'
                 >

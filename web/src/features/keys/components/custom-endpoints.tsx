@@ -45,7 +45,7 @@ export function CustomEndpoints() {
   }
 
   return (
-    <section className='space-y-3'>
+    <section className='shrink-0 space-y-3'>
       <div>
         <p className='text-muted-foreground text-xs'>
           {t('Click an endpoint to copy its address.')}

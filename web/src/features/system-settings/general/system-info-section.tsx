@@ -66,6 +66,11 @@ function isValidLogoURL(value: string): boolean {
 
 const _systemInfoSchema = z.object({
   SystemName: z.string().min(1),
+  TaskPublicAddress: z
+    .string()
+    .refine((value) => !value || isValidTaskPublicAddress(value), {
+      message: 'Invalid task public address',
+    }),
   ServerAddress: z.string().optional(),
   Logo: z.string().refine(isValidLogoURL),
   Footer: z.string().optional(),
@@ -120,6 +125,11 @@ export function SystemInfoSection({ defaultValues }: SystemInfoSectionProps) {
     SystemName: z.string().min(1, {
       error: () => t('System name is required'),
     }),
+    TaskPublicAddress: z
+      .string()
+      .refine((value) => !value || isValidTaskPublicAddress(value), {
+        message: t('Invalid task public address'),
+      }),
     ServerAddress: z.string().optional(),
     Logo: z.string().refine(isValidLogoURL, {
       error: () => t('Enter a valid URL or upload an image'),

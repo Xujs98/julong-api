@@ -33,6 +33,8 @@ import { cn } from '@/lib/utils'
 import { taskActionMapper, taskStatusMapper } from '../../lib/mappers'
 import type { TaskLog } from '../../types'
 import { TaskDetailsDialog } from '../dialogs/task-details-dialog'
+import { TaskRequestCell } from '../dialogs/task-request-dialog'
+import { TaskResultCell } from '../dialogs/task-result-dialog'
 import { PluginAuthorLink } from '../plugin-author-link'
 import { TaskArtifactsCell } from '../task-artifacts'
 import { useUsageLogsContext } from '../usage-logs-provider'
@@ -203,27 +205,80 @@ export function useTaskLogsColumns(
         accessorKey: 'task_id',
         header: t('Task ID'),
         cell: ({ row }) => {
-          const log = row.original
           const taskId = row.getValue('task_id') as string
           if (!taskId) {
             return <span className='text-muted-foreground/60 text-xs'>-</span>
           }
-          return (
-            <div className='flex max-w-[170px] flex-col gap-0.5'>
-              <StatusBadge
-                label={taskId}
-                copyText={taskId}
-                variant='neutral'
-                size='sm'
-                className='border-border/60 bg-muted/30 !text-foreground max-w-full truncate rounded-md border px-1.5 py-0.5 font-mono'
-              />
-              <span className='text-muted-foreground/60 truncate text-[11px]'>
-                {t(log.platform)} · {t(taskActionMapper.getLabel(log.action))}
-              </span>
-            </div>
-          )
+          return <TaskResultCell taskId={taskId} />
         },
+        size: 180,
+        minSize: 180,
+        maxSize: 180,
         meta: { mobileTitle: true },
+      },
+      {
+        accessorKey: 'platform',
+        header: t('Platform'),
+        cell: ({ row }) => (
+          <span className='truncate text-xs'>
+            {t(row.original.platform || '')}
+          </span>
+        ),
+      },
+      {
+        id: 'model',
+        header: t('Model'),
+        accessorFn: (row) =>
+          row.properties?.origin_model_name ||
+          row.properties?.upstream_model_name ||
+          '',
+        cell: ({ row }) => (
+          <span className='block w-[190px] max-w-[190px] min-w-0 truncate overflow-hidden font-mono text-xs'>
+            {row.original.properties?.origin_model_name ||
+              row.original.properties?.upstream_model_name ||
+              '-'}
+          </span>
+        ),
+      },
+      {
+        accessorKey: 'action',
+        header: t('Type'),
+        cell: ({ row }) => (
+          <StatusBadge
+            label={t(taskActionMapper.getLabel(row.original.action, 'Other'))}
+            variant={taskActionMapper.getVariant(row.original.action)}
+            size='sm'
+            copyable={false}
+            className='-ml-1.5'
+          />
+        ),
+      },
+      {
+        id: 'request_id',
+        header: t('Request ID'),
+        accessorFn: (row) => row.request_id || '',
+        cell: ({ row }) =>
+          row.original.request_id ? (
+            <StatusBadge
+              label={row.original.request_id}
+              copyText={row.original.request_id}
+              variant='neutral'
+              size='sm'
+              className='max-w-[180px] truncate font-mono'
+            />
+          ) : (
+            <span className='text-muted-foreground/60 text-xs'>-</span>
+          ),
+      },
+      {
+        id: 'token_name',
+        header: t('Token'),
+        accessorFn: (row) => row.token_name || '',
+        cell: ({ row }) => (
+          <span className='max-w-[150px] truncate text-xs'>
+            {row.original.token_name || '-'}
+          </span>
+        ),
       },
       createDurationColumn<TaskLog>({
         submitTimeKey: 'submit_time',
@@ -252,13 +307,11 @@ export function useTaskLogsColumns(
       },
       createProgressColumn<TaskLog>({ headerLabel: t('Progress') }),
       {
-        id: 'artifacts',
-        header: t('Artifacts'),
-        cell: ({ row }) => (
-          <TaskArtifactsCell key={row.original.task_id} log={row.original} />
-        ),
-        size: 120,
-        maxSize: 140,
+        id: 'request_body',
+        header: t('Request Body'),
+        cell: ({ row }) => <TaskRequestCell log={row.original} />,
+        size: 130,
+        maxSize: 150,
       },
       {
         accessorKey: 'fail_reason',
@@ -276,6 +329,23 @@ export function useTaskLogsColumns(
       }
     )
 
-    return columns
+    columns.push({
+      id: 'artifacts',
+      header: t('Finished output'),
+      cell: ({ row }) => (
+        <TaskArtifactsCell key={row.original.task_id} log={row.original} />
+      ),
+      size: 140,
+      minSize: 140,
+      maxSize: 140,
+      meta: { pinned: 'right' as const },
+    })
+
+    return isAdmin
+      ? columns
+      : columns.filter(
+          (column) =>
+            !('accessorKey' in column && column.accessorKey === 'platform')
+        )
   }, [t, isAdmin, isRoot])
 }

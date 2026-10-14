@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { FileText, RotateCw } from 'lucide-react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { Button } from '@/components/ui/button'
@@ -49,6 +50,7 @@ export function EligibleCreditsTable(props: {
   minimumAmount: number
   enabled: boolean
   selected: Map<string, InvoiceCredit>
+  allowedSources?: InvoiceCredit['source'][]
   applying: boolean
   onToggle: (credit: InvoiceCredit, checked: boolean) => void
   onTogglePage: (checked: boolean) => void
@@ -58,11 +60,32 @@ export function EligibleCreditsTable(props: {
   onPageChange: (page: number) => void
 }) {
   const { t } = useTranslation()
-  const now = Math.floor(Date.now() / 1000)
+  const [now, setNow] = useState(() => Math.floor(Date.now() / 1000))
+  useEffect(() => {
+    const nextExpiry = Math.min(
+      ...props.credits
+        .map((credit) => credit.frozen_until ?? 0)
+        .filter((expiry) => expiry > now)
+    )
+    if (!Number.isFinite(nextExpiry)) return
+    const timer = window.setTimeout(
+      () => setNow(Math.floor(Date.now() / 1000)),
+      Math.min(
+        2_147_483_647,
+        Math.max(0, (nextExpiry - Math.floor(Date.now() / 1000)) * 1000)
+      )
+    )
+    return () => window.clearTimeout(timer)
+  }, [now, props.credits])
   const selectableCredits = props.credits.filter(
-    (credit) => (credit.frozen_until ?? 0) <= now
+    (credit) =>
+      (credit.frozen_until ?? 0) <= now &&
+      (props.allowedSources?.includes(credit.source) ?? true)
   )
-  const selectedAmount = [...props.selected.values()].reduce(
+  const selectedCredits = [...props.selected.values()].filter(
+    (credit) => props.allowedSources?.includes(credit.source) ?? true
+  )
+  const selectedAmount = selectedCredits.reduce(
     (sum, credit) => sum + credit.amount,
     0
   )
@@ -73,6 +96,18 @@ export function EligibleCreditsTable(props: {
     selectableCredits.length > 0 &&
     currentPageSelected === selectableCredits.length
   const thresholdReached = selectedAmount >= props.minimumAmount
+
+  function getCreditStatus(credit: InvoiceCredit) {
+    if (props.allowedSources && !props.allowedSources.includes(credit.source)) {
+      return t('Not eligible for invoicing')
+    }
+    if ((credit.frozen_until ?? 0) > now) {
+      return t('Frozen until {{time}}', {
+        time: formatTimestamp(credit.frozen_until ?? 0),
+      })
+    }
+    return t('Eligible')
+  }
 
   return (
     <Card className='gap-0 py-0'>
@@ -95,11 +130,11 @@ export function EligibleCreditsTable(props: {
           <RotateCw />
         </Button>
       </CardHeader>
-      {props.selected.size > 0 && (
+      {selectedCredits.length > 0 && (
         <div className='bg-accent/40 flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3'>
           <div className='min-w-0'>
             <p className='font-medium'>
-              {t('{{count}} selected', { count: props.selected.size })}
+              {t('{{count}} selected', { count: selectedCredits.length })}
               <span className='text-muted-foreground mx-2'>|</span>
               {t('Total invoice amount: {{amount}}', {
                 amount: formatInvoiceAmount(selectedAmount, props.unit),
@@ -139,6 +174,7 @@ export function EligibleCreditsTable(props: {
                   <Checkbox
                     aria-label={t('Select current page')}
                     checked={allPageSelected}
+                    disabled={!props.enabled || selectableCredits.length === 0}
                     onCheckedChange={(checked) =>
                       props.onTogglePage(checked === true)
                     }
@@ -167,8 +203,19 @@ export function EligibleCreditsTable(props: {
                         aria-label={t('Select credit from {{time}}', {
                           time: formatTimestamp(credit.created_at),
                         })}
-                        checked={props.selected.has(credit.request_id)}
-                        disabled={(credit.frozen_until ?? 0) > now}
+                        checked={
+                          props.selected.has(credit.request_id) &&
+                          (props.allowedSources?.includes(credit.source) ??
+                            true)
+                        }
+                        disabled={
+                          !props.enabled ||
+                          (credit.frozen_until ?? 0) > now ||
+                          !(
+                            props.allowedSources?.includes(credit.source) ??
+                            true
+                          )
+                        }
                         onCheckedChange={(checked) =>
                           props.onToggle(credit, checked === true)
                         }
@@ -183,11 +230,7 @@ export function EligibleCreditsTable(props: {
                     <TableCell>{formatTimestamp(credit.created_at)}</TableCell>
                     <TableCell className='text-right'>
                       <span className='bg-muted rounded-full px-2 py-1 text-xs font-medium'>
-                        {(credit.frozen_until ?? 0) > now
-                          ? t('Frozen until {{time}}', {
-                              time: formatTimestamp(credit.frozen_until ?? 0),
-                            })
-                          : t('Eligible')}
+                        {getCreditStatus(credit)}
                       </span>
                     </TableCell>
                   </TableRow>

@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { z } from 'zod'
+import * as z from 'zod'
 
 import type { Model } from '../types'
 import { parseModelTags as parseTagsFromUtils } from './model-utils'
@@ -36,6 +36,7 @@ export const modelFormSchema = z.object({
   tags: z.array(z.string()).default([]),
   vendor_id: z.number().optional(),
   endpoints: z.string().default(''),
+  document_template_id: z.number().int().nonnegative().default(0),
   name_rule: z.number().min(0).max(3).default(0),
   status: z.boolean().default(true),
   sync_official: z.boolean().default(true),
@@ -43,7 +44,8 @@ export const modelFormSchema = z.object({
   quota_types: z.array(z.number()).default([]),
 })
 
-export type ModelFormValues = z.infer<typeof modelFormSchema>
+export type ModelFormInput = z.input<typeof modelFormSchema>
+export type ModelFormValues = z.output<typeof modelFormSchema>
 
 // ============================================================================
 // Vendor Form Schema
@@ -78,6 +80,7 @@ export function transformModelToFormDefaults(model: Model): ModelFormValues {
     tags: parseTagsFromUtils(model.tags),
     vendor_id: model.vendor_id,
     endpoints: model.endpoints || '',
+    document_template_id: model.document_template_id ?? 0,
     name_rule: model.name_rule || 0,
     status: model.status === 1,
     sync_official: model.sync_official === 1,
@@ -100,6 +103,7 @@ export function transformFormDataToModelPayload(
     tags: formatTagsArray(formData.tags),
     vendor_id: formData.vendor_id,
     endpoints: formData.endpoints || '',
+    document_template_id: formData.document_template_id,
     name_rule: formData.name_rule,
     status: formData.status ? 1 : 0,
     sync_official: formData.sync_official ? 1 : 0,

@@ -381,9 +381,16 @@ export type BillingSettings = {
   'invoice_setting.unit': string
   'invoice_setting.processing_days': string
   'invoice_setting.rejection_freeze_hours': number
+  'invoice_setting.allowed_sources': (
+    | 'online_recharge'
+    | 'redemption'
+    | 'admin_adjustment'
+  )[]
 }
 
 export type OperationsSettings = {
+  'log_setting.user_export_enabled': boolean
+  'log_setting.max_range_days': number
   DefaultCollapseSidebar: boolean
   DemoSiteEnabled: boolean
   SelfUseModeEnabled: boolean
@@ -408,6 +415,7 @@ export type OperationsSettings = {
   UserLogGroupRatioManualValue: number
   ImageGenerationLogEnabled: boolean
   ImageGenerationLogRetentionDays: number
+  MediaAssetRetentionDays: number
   ImageGenerationLogPollingIntervalSeconds: number
   ImageGenerationLogImageAuthWhitelistEnabled: boolean
   ImageGenerationLogImageAuthWhitelist: string

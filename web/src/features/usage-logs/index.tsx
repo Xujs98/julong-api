@@ -27,6 +27,7 @@ import { CacheStatsDialog } from '@/features/system-settings/general/channel-aff
 import { useSidebarConfig } from '@/hooks/use-sidebar-config'
 
 import { UserInfoDialog } from './components/dialogs/user-info-dialog'
+import { MediaAssetsTable } from './components/media-assets-table'
 import {
   type LogsViewScope,
   UsageLogsProvider,
@@ -41,7 +42,7 @@ import {
 } from './section-registry'
 
 const route = getRouteApi('/_authenticated/usage-logs/$section')
-const TASK_LOG_SECTIONS = ['drawing', 'image', 'task'] as const
+const TASK_LOG_SECTIONS = ['drawing', 'image', 'task', 'assets'] as const
 
 const SECTION_META: Record<UsageLogsSectionId, { titleKey: string }> = {
   common: {
@@ -55,6 +56,9 @@ const SECTION_META: Record<UsageLogsSectionId, { titleKey: string }> = {
   },
   task: {
     titleKey: 'Task Logs',
+  },
+  assets: {
+    titleKey: 'Media assets',
   },
 }
 
@@ -121,7 +125,9 @@ function UsageLogsContent() {
   )
 
   const pageMeta =
-    activeCategory === 'common' ? SECTION_META.common : SECTION_META.task
+    activeCategory === 'common'
+      ? SECTION_META.common
+      : SECTION_META[activeCategory]
   const showTaskSwitcher =
     activeCategory !== 'common' && visibleSections.length > 1
 
@@ -155,7 +161,11 @@ function UsageLogsContent() {
               </Tabs>
             )}
             <div className='min-h-0 flex-1'>
-              <UsageLogsTable logCategory={activeCategory} />
+              {activeCategory === 'assets' ? (
+                <MediaAssetsTable />
+              ) : (
+                <UsageLogsTable logCategory={activeCategory} />
+              )}
             </div>
           </div>
         </SectionPageLayout.Content>

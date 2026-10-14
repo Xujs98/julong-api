@@ -27,7 +27,7 @@ import {
 } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { useQuery } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { Dialog } from '@/components/dialog'
@@ -61,7 +61,11 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
-import { requireServerSuccess } from '@/lib/server-error-message'
+import {
+  getServerErrorMessage,
+  translateServerText,
+  requireServerSuccess,
+} from '@/lib/server-error-message'
 import { cn } from '@/lib/utils'
 
 import { getTaskArtifacts } from '../api'
@@ -206,7 +210,10 @@ function MediaFailure(props: { onRetry: () => void }) {
   )
 }
 
-function TaskArtifactCard(props: { artifact: TaskArtifact }) {
+function TaskArtifactCard(props: {
+  artifact: TaskArtifact
+  onFailure?: (reason: string) => void
+}) {
   const { t } = useTranslation()
   const [mediaFailed, setMediaFailed] = useState(false)
   const [mediaRevision, setMediaRevision] = useState(0)
@@ -239,7 +246,10 @@ function TaskArtifactCard(props: { artifact: TaskArtifact }) {
         key={mediaRevision}
         artifact={props.artifact}
         mediaUrl={props.artifact.content_url}
-        onError={() => setMediaFailed(true)}
+        onError={() => {
+          setMediaFailed(true)
+          props.onFailure?.(t('Media preview failed. Please try again.'))
+        }}
       />
     )
   }
@@ -300,6 +310,7 @@ interface TaskArtifactsProps {
   taskId: string
   enabled: boolean
   emptyContent?: (legacyContentUrl?: string) => React.ReactNode
+  onFailure?: (reason: string) => void
 }
 
 function TaskArtifacts(props: TaskArtifactsProps) {
@@ -312,6 +323,19 @@ function TaskArtifacts(props: TaskArtifactsProps) {
     retry: false,
     staleTime: 30_000,
   })
+
+  const onFailure = props.onFailure
+  const enabled = props.enabled
+  useEffect(() => {
+    if (enabled && artifactsQuery.isError) {
+      onFailure?.(
+        getServerErrorMessage(
+          artifactsQuery.error,
+          t('Failed to load artifacts')
+        )
+      )
+    }
+  }, [enabled, onFailure, artifactsQuery.isError, artifactsQuery.error, t])
 
   if (!props.enabled) return null
 
@@ -369,7 +393,11 @@ function TaskArtifacts(props: TaskArtifactsProps) {
       )}
     >
       {artifactsQuery.data.artifacts.map((artifact) => (
-        <TaskArtifactCard key={artifact.key} artifact={artifact} />
+        <TaskArtifactCard
+          key={artifact.key}
+          artifact={artifact}
+          onFailure={props.onFailure}
+        />
       ))}
     </div>
   )
@@ -383,16 +411,24 @@ function EmptyTaskArtifacts() {
         <EmptyMedia variant='icon'>
           <HugeiconsIcon icon={File01Icon} strokeWidth={2} aria-hidden='true' />
         </EmptyMedia>
-        <EmptyTitle>{t('Artifacts')}</EmptyTitle>
+        <EmptyTitle>{t('Finished output')}</EmptyTitle>
         <EmptyDescription>{t('None')}</EmptyDescription>
       </EmptyHeader>
     </Empty>
   )
 }
 
-function LegacyTaskArtifacts(props: { legacyContentUrl?: string }) {
+function LegacyTaskArtifacts(props: {
+  legacyContentUrl?: string
+  onFailure?: (reason: string) => void
+}) {
   if (props.legacyContentUrl) {
-    return <LegacyVideoMedia contentUrl={props.legacyContentUrl} />
+    return (
+      <LegacyVideoMedia
+        contentUrl={props.legacyContentUrl}
+        onFailure={props.onFailure}
+      />
+    )
   }
   return <EmptyTaskArtifacts />
 }
@@ -400,8 +436,68 @@ function LegacyTaskArtifacts(props: { legacyContentUrl?: string }) {
 export function TaskArtifactsCell(props: { log: TaskLog }) {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
+  const [mediaFailure, setMediaFailure] = useState('')
+  const failureReason =
+    props.log.status === 'FAILURE'
+      ? translateServerText(t, props.log.fail_reason || 'Unknown error')
+      : mediaFailure
+  const isVideo =
+    props.log.legacy_video_available ||
+    /video/i.test(props.log.action) ||
+    [
+      'textGenerate',
+      'generate',
+      'firstTailGenerate',
+      'referenceGenerate',
+      'remixGenerate',
+    ].includes(props.log.action)
   const previewMode = resolveTaskPreviewMode(props.log)
 
+  if (failureReason) {
+    return (
+      <>
+        <Button
+          type='button'
+          variant='destructive'
+          size='xs'
+          onClick={() => setOpen(true)}
+        >
+          <HugeiconsIcon
+            icon={Alert02Icon}
+            strokeWidth={2}
+            aria-hidden='true'
+            data-icon='inline-start'
+          />
+          {t('Failure reason')}
+        </Button>
+        <Dialog
+          open={open}
+          onOpenChange={setOpen}
+          title={t('Failure reason')}
+          description={`${t('Task ID')}: ${props.log.task_id}`}
+          footer={
+            <>
+              {mediaFailure && props.log.status !== 'FAILURE' ? (
+                <Button variant='outline' onClick={() => setMediaFailure('')}>
+                  {t('Retry')}
+                </Button>
+              ) : null}
+              <Button variant='secondary' onClick={() => setOpen(false)}>
+                {t('Close')}
+              </Button>
+            </>
+          }
+        >
+          <Alert variant='destructive'>
+            <HugeiconsIcon icon={Alert02Icon} aria-hidden='true' />
+            <AlertDescription className='break-all whitespace-pre-wrap'>
+              {failureReason}
+            </AlertDescription>
+          </Alert>
+        </Dialog>
+      </>
+    )
+  }
   if (previewMode === 'discarded') {
     return (
       <TooltipProvider>
@@ -423,7 +519,11 @@ export function TaskArtifactsCell(props: { log: TaskLog }) {
     )
   }
   if (!shouldLoadTaskArtifacts(props.log, true)) {
-    return <span className='text-muted-foreground/60 text-xs'>-</span>
+    return (
+      <span className='text-muted-foreground/60 text-xs'>
+        {t('No content')}
+      </span>
+    )
   }
   if (previewMode === 'legacy-suno') {
     return <LegacyAudioPreview taskId={props.log.task_id} />
@@ -431,29 +531,20 @@ export function TaskArtifactsCell(props: { log: TaskLog }) {
 
   return (
     <>
-      {previewMode === 'legacy-video' ? (
-        <button
-          type='button'
-          className='text-foreground text-xs hover:underline'
-          onClick={() => setOpen(true)}
-        >
-          {t('Click to preview video')}
-        </button>
-      ) : (
-        <Button
-          type='button'
-          variant='outline'
-          size='xs'
-          onClick={() => setOpen(true)}
-        >
-          <HugeiconsIcon
-            icon={File01Icon}
-            strokeWidth={2}
-            data-icon='inline-start'
-          />
-          {t('Artifacts')}
-        </Button>
-      )}
+      <Button
+        type='button'
+        variant='outline'
+        size='xs'
+        onClick={() => setOpen(true)}
+      >
+        <HugeiconsIcon
+          icon={isVideo ? Video01Icon : File01Icon}
+          strokeWidth={2}
+          aria-hidden='true'
+          data-icon='inline-start'
+        />
+        {isVideo ? t('View video') : t('Finished output')}
+      </Button>
       <Dialog
         open={open}
         onOpenChange={setOpen}
@@ -468,7 +559,7 @@ export function TaskArtifactsCell(props: { log: TaskLog }) {
                 strokeWidth={2}
                 aria-hidden='true'
               />
-              {t('Artifacts')}
+              {t('Finished output')}
             </span>
           )
         }
@@ -480,9 +571,13 @@ export function TaskArtifactsCell(props: { log: TaskLog }) {
       >
         <TaskArtifacts
           taskId={props.log.task_id}
+          onFailure={setMediaFailure}
           enabled={shouldLoadTaskArtifacts(props.log, open)}
           emptyContent={(legacyContentUrl) => (
-            <LegacyTaskArtifacts legacyContentUrl={legacyContentUrl} />
+            <LegacyTaskArtifacts
+              legacyContentUrl={legacyContentUrl}
+              onFailure={setMediaFailure}
+            />
           )}
         />
       </Dialog>
@@ -491,10 +586,12 @@ export function TaskArtifactsCell(props: { log: TaskLog }) {
 }
 
 interface LegacyVideoMediaProps {
+  onFailure?: (reason: string) => void
   contentUrl: string
 }
 
 function LegacyVideoMedia(props: LegacyVideoMediaProps) {
+  const { t } = useTranslation()
   const [mediaFailed, setMediaFailed] = useState(false)
   const [mediaRevision, setMediaRevision] = useState(0)
 
@@ -512,7 +609,10 @@ function LegacyVideoMedia(props: LegacyVideoMediaProps) {
       controls
       preload='metadata'
       className='max-h-[60vh] w-full rounded-md bg-black'
-      onError={() => setMediaFailed(true)}
+      onError={() => {
+        setMediaFailed(true)
+        props.onFailure?.(t('Media preview failed. Please try again.'))
+      }}
     />
   )
 }

@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { z } from 'zod'
+import * as z from 'zod'
 
 // ============================================================================
 // Channel Schema & Types
@@ -80,6 +80,8 @@ export type Channel = z.infer<typeof channelSchema>
 // ============================================================================
 
 export interface ChannelSettings {
+  gateway_provider?: 'suanliai'
+  video_model_configs?: import('./lib/suanliai-video').VideoModelConfigs
   task_plugin_key?: string
   task_extend_plugin_keys?: string[]
   force_format?: boolean

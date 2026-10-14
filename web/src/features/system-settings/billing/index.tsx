@@ -115,6 +115,11 @@ const defaultBillingSettings: BillingSettings = {
   'invoice_setting.unit': 'USD',
   'invoice_setting.processing_days': '1-3',
   'invoice_setting.rejection_freeze_hours': 72,
+  'invoice_setting.allowed_sources': [
+    'online_recharge',
+    'redemption',
+    'admin_adjustment',
+  ],
 }
 
 export function BillingSettings() {

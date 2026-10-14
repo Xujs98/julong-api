@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useMutation } from '@tanstack/react-query'
 import type { Table } from '@tanstack/react-table'
-import { CopyPlus, Download, Trash2 } from 'lucide-react'
+import { Trash2 } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -32,12 +32,12 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
-import { ROLE } from '@/lib/roles'
-import { useAuthStore } from '@/stores/auth-store'
+import { handleServerError } from '@/lib/handle-server-error'
+import { createServerError } from '@/lib/server-error-message'
 
-import { downloadRedemptionCodes, formatRedemptionCodes } from '../lib/utils'
+import { batchDeleteRedemptions } from '../api'
 import type { Redemption } from '../types'
-import { RedemptionsMultiDeleteDialog } from './redemptions-multi-delete-dialog'
+import { useRedemptions } from './redemptions-provider'
 
 type DataTableBulkActionsProps = {
   table: Table<Redemption>
@@ -45,23 +45,17 @@ type DataTableBulkActionsProps = {
 
 export function DataTableBulkActions(props: DataTableBulkActionsProps) {
   const { t } = useTranslation()
-  const currentUser = useAuthStore((state) => state.auth.user)
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
-  const selectedRows = table.getFilteredSelectedRowModel().rows
-  const selectedRedemptions = useMemo(
-    () => selectedRows.map((row) => row.original as Redemption),
-    [selectedRows]
-  )
+  const { triggerRefresh } = useRedemptions()
+  const [deleteTargets, setDeleteTargets] = useState<Redemption[] | null>(null)
+  const selectedRows = props.table.getFilteredSelectedRowModel().rows
 
-  const codesOnly = useMemo(
-    () => formatRedemptionCodes(selectedRedemptions, false),
-    [selectedRedemptions]
-  )
-  const namesAndCodes = useMemo(
-    () => formatRedemptionCodes(selectedRedemptions, true),
-    [selectedRedemptions]
-  )
-  const isAdmin = (currentUser?.role ?? 0) >= ROLE.ADMIN
+  const contentToCopy = useMemo(() => {
+    const selectedCodes = selectedRows.map((row) => {
+      const redemption = row.original
+      return `${redemption.name}\t${redemption.key}`
+    })
+    return selectedCodes.join('\n')
+  }, [selectedRows])
 
   const deletion = useMutation({
     mutationFn: async (targets: Redemption[]) => {
@@ -95,72 +89,57 @@ export function DataTableBulkActions(props: DataTableBulkActionsProps) {
 
   return (
     <>
-      <BulkActionsToolbar table={table} entityName={t('redemption code')}>
+      <BulkActionsToolbar table={props.table} entityName={t('redemption code')}>
         <CopyButton
-          value={codesOnly}
+          value={contentToCopy}
           variant='outline'
           size='icon'
           className='size-8'
-          tooltip={t('Copy codes only')}
+          tooltip={t('Copy selected codes')}
           successTooltip={t('Codes copied!')}
-          aria-label={t('Copy codes only')}
-        />
-        <CopyButton
-          value={namesAndCodes}
-          icon={<CopyPlus className='size-4' />}
-          variant='outline'
-          size='icon'
-          className='size-8'
-          tooltip={t('Copy names and codes')}
-          successTooltip={t('Codes copied!')}
-          aria-label={t('Copy names and codes')}
+          aria-label={t('Copy selected codes')}
         />
         <Tooltip>
           <TooltipTrigger
             render={
               <Button
-                type='button'
-                variant='outline'
+                variant='destructive'
                 size='icon'
                 className='size-8'
-                onClick={() => downloadRedemptionCodes(selectedRedemptions)}
-                aria-label={t('Download redemption codes')}
+                aria-label={t('Delete selected redemption codes')}
+                disabled={deletion.isPending}
+                onClick={() =>
+                  setDeleteTargets(selectedRows.map((row) => row.original))
+                }
               />
             }
           >
-            <Download className='size-4' />
+            <Trash2 aria-hidden='true' />
           </TooltipTrigger>
-          <TooltipContent>{t('Download redemption codes')}</TooltipContent>
+          <TooltipContent>
+            {t('Delete selected redemption codes')}
+          </TooltipContent>
         </Tooltip>
-        {isAdmin && (
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <Button
-                  type='button'
-                  variant='destructive'
-                  size='icon'
-                  className='size-8'
-                  onClick={() => setShowDeleteConfirm(true)}
-                  aria-label={t('Delete selected redemption codes')}
-                />
-              }
-            >
-              <Trash2 className='size-4' />
-            </TooltipTrigger>
-            <TooltipContent>
-              {t('Delete selected redemption codes')}
-            </TooltipContent>
-          </Tooltip>
-        )}
       </BulkActionsToolbar>
-
-      {showDeleteConfirm && (
-        <RedemptionsMultiDeleteDialog
-          table={table}
-          onOpenChange={setShowDeleteConfirm}
-        />
-      )}
+      <ConfirmDialog
+        destructive
+        open={deleteTargets !== null}
+        onOpenChange={(open) => {
+          if (!open && !deletion.isPending) setDeleteTargets(null)
+        }}
+        title={t('Delete {{count}} redemption codes?', {
+          count: deleteTargets?.length ?? 0,
+        })}
+        desc={t('This action cannot be undone.')}
+        confirmText={deletion.isPending ? t('Deleting...') : t('Delete')}
+        isLoading={deletion.isPending}
+        disabled={!deleteTargets?.length}
+        handleConfirm={() => {
+          if (deleteTargets?.length && !deletion.isPending) {
+            deletion.mutate(deleteTargets)
+          }
+        }}
+      />
     </>
   )
 }

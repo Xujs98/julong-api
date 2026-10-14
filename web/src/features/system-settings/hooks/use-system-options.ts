@@ -25,7 +25,7 @@ import { getSystemOptions } from '../api'
 export function useSystemOptions(section?: string) {
   return useQuery({
     queryKey: ['system-options', section],
-    queryFn: () => getSystemOptions(section),
+    queryFn: async () => requireServerSuccess(await getSystemOptions(section)),
     staleTime: 5 * 60 * 1000,
   })
 }

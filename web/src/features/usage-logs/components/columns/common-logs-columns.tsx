@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import type { ColumnDef } from '@tanstack/react-table'
 import { GitBranch, Sparkles, KeyRound } from 'lucide-react'
-import { useState, type ReactNode } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { GroupBadge } from '@/components/group-badge'
@@ -132,17 +132,16 @@ function buildTypeDetailSegments(
     return text ? [{ text }] : []
   }
 
+  if (log.type === 6 && other?.op?.action === 'agent_redemption_refund') {
+    return [
+      { text: t('Agent redemption refund') },
+      {
+        text: `${t('Refund amount')}: ${formatLogQuota(other.refund_quota ?? 0)}`,
+        muted: true,
+      },
+    ]
+  }
   if (log.type === 6) {
-    if (other?.op?.action === 'agent_redemption_refund') {
-      const segments: DetailSegment[] = [{ text: t('Agent redemption refund') }]
-      if (other.refund_quota != null) {
-        segments.push({
-          text: `${t('Refund amount')}: ${formatLogQuota(other.refund_quota)}`,
-          muted: true,
-        })
-      }
-      return segments
-    }
     return [{ text: t('Async task refund') }]
   }
 
@@ -557,215 +556,171 @@ export function useCommonLogsColumns(
 
             if (!log.username) return null
 
-      const tokenName = log.token_name
-      if (!tokenName) return null
-
-      const other = parseLogOther(log.other)
-      const displayName = sensitiveVisible ? tokenName : '••••'
-      let group = log.group
-      if (!group) group = other?.group || ''
-      const groupRatio = getDisplayedGroupRatio(
-        other,
-        log.user_display_group_ratio
-      )
-      const adminRatioDetails = isAdmin
-        ? getAdminGroupRatioDetails(other, log.user_display_group_ratio)
-        : null
-      const hasRatioDetails = isAdmin
-        ? Boolean(adminRatioDetails?.applicable)
-        : groupRatio != null
-      const userDisplayedRatioText =
-        adminRatioDetails?.displayEnabled && adminRatioDetails.displayed != null
-          ? `${formatRatioCompact(adminRatioDetails.displayed)}x`
-          : t('Not shown')
-      let ratioDetails: ReactNode = null
-      if (isAdmin && adminRatioDetails?.applicable) {
-        const actualRatioText =
-          adminRatioDetails.actual != null
-            ? `${formatRatioCompact(adminRatioDetails.actual)}x`
-            : '-'
-        ratioDetails = (
-          <TooltipProvider delay={200}>
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <span
-                    className='text-muted-foreground/70 cursor-help tabular-nums'
-                    aria-label={t('Actual ratio / user-visible ratio')}
-                  />
-                }
+            return (
+              <button
+                type='button'
+                className='flex items-center gap-1.5 text-left'
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setSelectedUserId(log.user_id)
+                  setUserInfoDialogOpen(true)
+                }}
               >
-                {actualRatioText} / {userDisplayedRatioText}
-              </TooltipTrigger>
-              <TooltipContent side='top' className='w-72 space-y-2 p-3'>
-                <div className='text-foreground text-xs font-semibold'>
-                  {t('Actual ratio / user-visible ratio')}
-                </div>
-                <div className='grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-1 text-xs tabular-nums'>
-                  {other?.group_ratio != null && (
-                    <>
-                      <span className='text-muted-foreground'>
-                        {t('Pricing group ratio')}
-                      </span>
-                      <span>{formatRatioCompact(other.group_ratio)}x</span>
-                    </>
-                  )}
-                  {other?.user_group_ratio != null &&
-                    other.user_group_ratio !== -1 && (
-                      <>
-                        <span className='text-muted-foreground'>
-                          {t('Special ratio')}
-                        </span>
-                        <span>
-                          {formatRatioCompact(other.user_group_ratio)}x
-                        </span>
-                      </>
+                <Avatar className='ring-border/60 size-6 ring-1 max-sm:hidden'>
+                  <AvatarFallback
+                    className={cn(
+                      'text-[11px] font-semibold',
+                      !sensitiveVisible && 'bg-muted text-muted-foreground'
                     )}
-                  <span className='text-muted-foreground'>
-                    {t('Actual ratio (including special rules)')}
-                  </span>
-                  <span>{actualRatioText}</span>
-                  <span className='text-muted-foreground'>
-                    {t('User-visible ratio for this log')}
-                  </span>
-                  <span>{userDisplayedRatioText}</span>
-                </div>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        )
-      } else if (groupRatio != null) {
-        ratioDetails = (
-          <span className='text-muted-foreground/60 relative top-px align-baseline tabular-nums'>
-            {formatRatioCompact(groupRatio)}x
-          </span>
-        )
-      }
-
-      return (
-        <div className='flex max-w-[200px] flex-col gap-0.5'>
-          <TooltipProvider delay={300}>
-            <Tooltip>
-              <TooltipTrigger render={<div className='max-w-full' />}>
-                <StatusBadge
-                  label={displayName}
-                  icon={KeyRound}
-                  copyText={sensitiveVisible ? tokenName : undefined}
-                  size='sm'
-                  showDot={false}
-                  className='border-border/60 bg-muted/30 text-foreground h-6 max-w-full gap-1.5 overflow-hidden rounded-md border px-2 py-0.5 [font-family:var(--font-body)]'
-                />
-              </TooltipTrigger>
-              {sensitiveVisible && tokenName.length > 16 && (
-                <TooltipContent side='top' className='max-w-xs break-all'>
-                  {tokenName}
-                </TooltipContent>
-              )}
-            </Tooltip>
-          </TooltipProvider>
-          {(group || hasRatioDetails) && (
-            <span className='block max-w-full text-xs leading-tight'>
-              {group ? (
-                <GroupBadge
-                  group={group}
-                  label={sensitiveVisible ? undefined : '••••'}
-                  type='text'
-                  size='sm'
-                  className='inline align-baseline text-xs leading-none [&>span]:leading-none'
-                />
-              ) : null}
-              {group && hasRatioDetails ? ' ' : null}
-              {ratioDetails}
-            </span>
-          )}
-        </div>
-      )
-    },
-    size: 160,
-  })
-  columns.push(
-    {
-      accessorKey: 'model_name',
-      header: t('Model'),
-      cell: function ModelCell({ row }) {
-        const log = row.original
-        if (!isDisplayableLogType(log.type)) return null
-
-        const modelInfo = formatModelName(log)
-
-        return (
-          <div className='flex w-fit flex-col gap-0.5'>
-            <ModelBadge
-              modelName={modelInfo.name}
-              actualModel={modelInfo.actualModel}
-            />
-          </div>
-        )
-      },
-      meta: { mobileTitle: true },
-    },
-    {
-      accessorKey: 'is_stream',
-      header: t('Stream'),
-      cell: ({ row }) => {
-        const log = row.original
-        if (!isTimingLogType(log.type)) return null
-
-        const useTime = row.getValue('use_time') as number
-        const other = parseLogOther(log.other)
-        const tokensPerSecond =
-          useTime > 0 && log.completion_tokens > 0
-            ? log.completion_tokens / useTime
-            : null
-
-        return (
-          <StreamTpsCell
-            isStream={log.is_stream}
-            tokensPerSecond={tokensPerSecond}
-            streamStatus={other?.stream_status}
-          />
-        )
-      },
-      meta: { label: t('Stream') },
-    },
-    {
-      accessorKey: 'prompt_tokens',
-      header: t('Tokens'),
-      cell: ({ row }) => {
-        const log = row.original
-        if (!isDisplayableLogType(log.type)) return null
-
-        const other = parseLogOther(log.other)
-
-        const tokenUsage = getTokenUsageDisplay(log, other, isAdmin)
-        const promptTokens = tokenUsage.displayed.input
-        const completionTokens = tokenUsage.displayed.output
-        if (promptTokens === 0 && completionTokens === 0) {
-          return <span className='text-muted-foreground text-xs'>-</span>
+                    style={
+                      sensitiveVisible
+                        ? getUserAvatarStyle(log.username)
+                        : undefined
+                    }
+                  >
+                    {sensitiveVisible
+                      ? getUserAvatarFallback(log.username)
+                      : '•'}
+                  </AvatarFallback>
+                </Avatar>
+                <TooltipProvider delay={300}>
+                  <Tooltip>
+                    <TooltipTrigger
+                      render={
+                        <span className='text-muted-foreground max-w-[100px] truncate text-sm hover:underline' />
+                      }
+                    >
+                      {sensitiveVisible ? log.username : '••••'}
+                    </TooltipTrigger>
+                    {sensitiveVisible && log.username.length > 12 && (
+                      <TooltipContent side='top'>{log.username}</TooltipContent>
+                    )}
+                  </Tooltip>
+                </TooltipProvider>
+              </button>
+            )
+          },
         }
       )
     }
 
-        const cacheReadTokens = tokenUsage.displayed.cache_read || 0
-        const cacheWriteTokens = tokenUsage.displayed.cache_creation || 0
+    columns.push({
+      accessorKey: 'token_name',
+      header: t('Token'),
+      cell: function TokenNameCell({ row }) {
+        const { sensitiveVisible } = useUsageLogsContext()
+        const log = row.original
+        if (!isDisplayableLogType(log.type)) return null
 
-        const tokenContent = (
-          <div className='flex flex-col gap-0.5'>
-            <span className='font-mono text-xs font-medium tabular-nums'>
-              {promptTokens.toLocaleString()} /{' '}
-              {completionTokens.toLocaleString()}
+        const tokenName = logTokenName(log, t)
+        if (!tokenName) return null
+
+        const other = parseLogOther(log.other)
+        const displayName = sensitiveVisible ? tokenName : '••••'
+        let group = log.group
+        if (!group) group = other?.group || ''
+        const groupRatio = getDisplayedGroupRatio(
+          other,
+          log.user_display_group_ratio
+        )
+        const adminRatioDetails = isAdmin
+          ? getAdminGroupRatioDetails(other, log.user_display_group_ratio)
+          : null
+        const hasRatioDetails = isAdmin
+          ? Boolean(adminRatioDetails?.applicable)
+          : groupRatio != null
+        const userDisplayedRatioText =
+          adminRatioDetails?.displayEnabled &&
+          adminRatioDetails.displayed != null
+            ? `${formatRatioCompact(adminRatioDetails.displayed)}x`
+            : t('Not shown')
+        let ratioDetails: ReactNode = null
+        if (isAdmin && adminRatioDetails?.applicable) {
+          const actualRatioText =
+            adminRatioDetails.actual != null
+              ? `${formatRatioCompact(adminRatioDetails.actual)}x`
+              : '-'
+          ratioDetails = (
+            <TooltipProvider delay={200}>
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <span
+                      className='text-muted-foreground/70 cursor-help tabular-nums'
+                      aria-label={t('Actual ratio / user-visible ratio')}
+                    />
+                  }
+                >
+                  {actualRatioText} / {userDisplayedRatioText}
+                </TooltipTrigger>
+                <TooltipContent side='top' className='w-72 space-y-2 p-3'>
+                  <div className='text-foreground text-xs font-semibold'>
+                    {t('Actual ratio / user-visible ratio')}
+                  </div>
+                  <div className='grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-1 text-xs tabular-nums'>
+                    {other?.group_ratio != null && (
+                      <>
+                        <span className='text-muted-foreground'>
+                          {t('Pricing group ratio')}
+                        </span>
+                        <span>{formatRatioCompact(other.group_ratio)}x</span>
+                      </>
+                    )}
+                    {other?.user_group_ratio != null &&
+                      other.user_group_ratio !== -1 && (
+                        <>
+                          <span className='text-muted-foreground'>
+                            {t('Special ratio')}
+                          </span>
+                          <span>
+                            {formatRatioCompact(other.user_group_ratio)}x
+                          </span>
+                        </>
+                      )}
+                    <span className='text-muted-foreground'>
+                      {t('Actual ratio (including special rules)')}
+                    </span>
+                    <span>{actualRatioText}</span>
+                    <span className='text-muted-foreground'>
+                      {t('User-visible ratio for this log')}
+                    </span>
+                    <span>{userDisplayedRatioText}</span>
+                  </div>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )
+        } else if (groupRatio != null) {
+          ratioDetails = (
+            <span className='text-muted-foreground/60 relative top-px align-baseline tabular-nums'>
+              {formatRatioCompact(groupRatio)}x
             </span>
-            {(cacheReadTokens > 0 || cacheWriteTokens > 0) && (
-              <div className='flex items-center gap-1 text-[11px]'>
-                {cacheReadTokens > 0 && (
-                  <span className='text-muted-foreground/60'>
-                    {t('Cache')}↓ {cacheReadTokens.toLocaleString()}
-                  </span>
+          )
+        }
+
+        return (
+          <div className='flex max-w-[200px] flex-col gap-0.5'>
+            <TooltipProvider delay={300}>
+              <Tooltip>
+                <TooltipTrigger render={<div className='max-w-full' />}>
+                  <StatusBadge
+                    label={displayName}
+                    icon={KeyRound}
+                    copyText={sensitiveVisible ? log.token_name : undefined}
+                    size='sm'
+                    showDot={false}
+                    className='border-border/60 bg-muted/30 text-foreground h-6 max-w-full gap-1.5 overflow-hidden rounded-md border px-2 py-0.5 [font-family:var(--font-body)]'
+                  />
+                </TooltipTrigger>
+                {sensitiveVisible && tokenName.length > 16 && (
+                  <TooltipContent side='top' className='max-w-xs break-all'>
+                    {tokenName}
+                  </TooltipContent>
                 )}
               </Tooltip>
             </TooltipProvider>
-            {(group || groupRatio != null) && (
-              <span className='block max-w-full truncate text-xs leading-none'>
+            {(group || hasRatioDetails) && (
+              <span className='block max-w-full text-xs leading-tight'>
                 {group ? (
                   <GroupBadge
                     group={group}
@@ -775,65 +730,11 @@ export function useCommonLogsColumns(
                     className='inline align-baseline text-xs leading-none [&>span]:leading-none'
                   />
                 ) : null}
-                {group && groupRatio != null ? ' ' : null}
-                {groupRatio != null ? (
-                  <span className='text-muted-foreground/60 relative top-px align-baseline tabular-nums'>
-                    {formatRatioCompact(groupRatio)}x
-                  </span>
-                ) : null}
+                {group && hasRatioDetails ? ' ' : null}
+                {ratioDetails}
               </span>
             )}
           </div>
-        )
-
-        if (!tokenUsage.hasAdjustment) return tokenContent
-
-        return (
-          <TooltipProvider delay={200}>
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <div
-                    className='w-fit cursor-help'
-                    aria-label={t('Actual tokens')}
-                  />
-                }
-              >
-                {tokenContent}
-              </TooltipTrigger>
-              <TooltipContent side='top' className='w-60 space-y-2 p-3'>
-                <div className='text-foreground text-xs font-semibold'>
-                  {t('Actual tokens')}
-                </div>
-                <div className='grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-1 text-xs tabular-nums'>
-                  <span className='text-muted-foreground'>{t('Input')}</span>
-                  <span>{tokenUsage.actual.input.toLocaleString()}</span>
-                  <span className='text-muted-foreground'>{t('Output')}</span>
-                  <span>{tokenUsage.actual.output.toLocaleString()}</span>
-                  {(tokenUsage.actual.cache_read || 0) > 0 && (
-                    <>
-                      <span className='text-muted-foreground'>
-                        {t('Cache Read')}
-                      </span>
-                      <span>
-                        {tokenUsage.actual.cache_read?.toLocaleString()}
-                      </span>
-                    </>
-                  )}
-                  {(tokenUsage.actual.cache_creation || 0) > 0 && (
-                    <>
-                      <span className='text-muted-foreground'>
-                        {t('Cache Creation')}
-                      </span>
-                      <span>
-                        {tokenUsage.actual.cache_creation?.toLocaleString()}
-                      </span>
-                    </>
-                  )}
-                </div>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
         )
       },
       size: 160,
@@ -846,22 +747,7 @@ export function useCommonLogsColumns(
           const log = row.original
           if (!isDisplayableLogType(log.type)) return null
 
-        const quota = row.getValue('quota') as number
-        const other = parseLogOther(log.other)
-        const isSubscription = other?.billing_source === 'subscription'
-        const revenueItems = getBillingRevenueItems(other, isAdmin)
-        const costDisplay = <LogCostDisplay quota={quota} other={other} />
-
-        if (revenueItems.length === 0) return costDisplay
-        return (
-          <CostBreakdownTooltip
-            trigger={<div className='w-fit cursor-help'>{costDisplay}</div>}
-            subscriptionQuota={isSubscription ? quota : null}
-            revenueItems={revenueItems}
-          />
-        )
-      },
-    },
+          const modelInfo = formatModelName(log)
 
           return (
             <div className='flex w-fit flex-col gap-0.5'>
@@ -903,28 +789,24 @@ export function useCommonLogsColumns(
       },
       {
         accessorKey: 'prompt_tokens',
-        header: t('Tokens', { context: 'usage' }),
+        header: t('Tokens'),
         cell: ({ row }) => {
           const log = row.original
           if (!isDisplayableLogType(log.type)) return null
 
           const other = parseLogOther(log.other)
 
-          const promptTokens = log.prompt_tokens || 0
-          const completionTokens = log.completion_tokens || 0
+          const tokenUsage = getTokenUsageDisplay(log, other, isAdmin)
+          const promptTokens = tokenUsage.displayed.input
+          const completionTokens = tokenUsage.displayed.output
           if (promptTokens === 0 && completionTokens === 0) {
             return <span className='text-muted-foreground text-xs'>-</span>
           }
 
-          const cacheReadTokens = other?.cache_tokens || 0
-          const cacheWrite5m = other?.cache_creation_tokens_5m || 0
-          const cacheWrite1h = other?.cache_creation_tokens_1h || 0
-          const hasSplitCache = cacheWrite5m > 0 || cacheWrite1h > 0
-          const cacheWriteTokens = hasSplitCache
-            ? cacheWrite5m + cacheWrite1h
-            : other?.cache_creation_tokens || 0
+          const cacheReadTokens = tokenUsage.displayed.cache_read || 0
+          const cacheWriteTokens = tokenUsage.displayed.cache_creation || 0
 
-          return (
+          const tokenContent = (
             <div className='flex flex-col gap-0.5'>
               <span className='font-mono text-xs font-medium tabular-nums'>
                 {promptTokens.toLocaleString()} /{' '}
@@ -946,6 +828,56 @@ export function useCommonLogsColumns(
               )}
             </div>
           )
+
+          if (!tokenUsage.hasAdjustment) return tokenContent
+
+          return (
+            <TooltipProvider delay={200}>
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <div
+                      className='w-fit cursor-help'
+                      aria-label={t('Actual tokens')}
+                    />
+                  }
+                >
+                  {tokenContent}
+                </TooltipTrigger>
+                <TooltipContent side='top' className='w-60 space-y-2 p-3'>
+                  <div className='text-foreground text-xs font-semibold'>
+                    {t('Actual tokens')}
+                  </div>
+                  <div className='grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-1 text-xs tabular-nums'>
+                    <span className='text-muted-foreground'>{t('Input')}</span>
+                    <span>{tokenUsage.actual.input.toLocaleString()}</span>
+                    <span className='text-muted-foreground'>{t('Output')}</span>
+                    <span>{tokenUsage.actual.output.toLocaleString()}</span>
+                    {(tokenUsage.actual.cache_read || 0) > 0 && (
+                      <>
+                        <span className='text-muted-foreground'>
+                          {t('Cache Read')}
+                        </span>
+                        <span>
+                          {tokenUsage.actual.cache_read?.toLocaleString()}
+                        </span>
+                      </>
+                    )}
+                    {(tokenUsage.actual.cache_creation || 0) > 0 && (
+                      <>
+                        <span className='text-muted-foreground'>
+                          {t('Cache Creation')}
+                        </span>
+                        <span>
+                          {tokenUsage.actual.cache_creation?.toLocaleString()}
+                        </span>
+                      </>
+                    )}
+                  </div>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )
         },
       },
       {
@@ -957,11 +889,22 @@ export function useCommonLogsColumns(
 
           const quota = row.getValue('quota') as number
           const other = parseLogOther(log.other)
-          return (
+          const isSubscription = other?.billing_source === 'subscription'
+          const revenueItems = getBillingRevenueItems(other, isAdmin)
+          const costDisplay = (
             <LogCostDisplay
               quota={quota}
               other={other}
               showBillingSource={showBillingSource}
+            />
+          )
+
+          if (revenueItems.length === 0) return costDisplay
+          return (
+            <CostBreakdownTooltip
+              trigger={<div className='w-fit cursor-help'>{costDisplay}</div>}
+              subscriptionQuota={isSubscription ? quota : null}
+              revenueItems={revenueItems}
             />
           )
         },

@@ -27,7 +27,7 @@ import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { sessionDevice } from '@/features/profile/components/login-session-utils'
+import { sessionDevice } from '@/features/security/components/login-session-utils'
 import { formatTimestampToDate } from '@/lib/format'
 
 import {

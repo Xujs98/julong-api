@@ -62,10 +62,9 @@ import {
 } from '@/lib/format'
 import { handleServerError } from '@/lib/handle-server-error'
 import { addTimeToDate } from '@/lib/time'
-import { useAuthStore } from '@/stores/auth-store'
 
 import { createRedemption, updateRedemption, getRedemption } from '../api'
-import { ERROR_MESSAGES, SUCCESS_MESSAGES } from '../constants'
+import { SUCCESS_MESSAGES } from '../constants'
 import {
   getRedemptionFormSchema,
   type RedemptionFormValues,
@@ -74,6 +73,10 @@ import {
   transformRedemptionToFormDefaults,
 } from '../lib'
 import type { Redemption } from '../types'
+import {
+  RedemptionsExportDialog,
+  type RedemptionExportData,
+} from './redemptions-export-dialog'
 import { useRedemptions } from './redemptions-provider'
 
 type RedemptionsMutateDrawerProps = {
@@ -89,8 +92,8 @@ export function RedemptionsMutateDrawer({
 }: RedemptionsMutateDrawerProps) {
   const { t } = useTranslation()
   const isUpdate = !!currentRow
-  const { triggerRefresh, setOpen, setGeneratedRedemptions } = useRedemptions()
-  const currentUser = useAuthStore((s) => s.auth.user)
+  const redemptionId = currentRow?.id
+  const { triggerRefresh } = useRedemptions()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [createdCodes, setCreatedCodes] = useState<RedemptionExportData | null>(
     null
@@ -109,20 +112,59 @@ export function RedemptionsMutateDrawer({
 
   // Load existing data when updating
   useEffect(() => {
-    if (open && isUpdate && currentRow) {
-      // For update, fetch fresh data
-      getRedemption(currentRow.id)
-        .then((result) => {
-          if (result.success && result.data) {
-            form.reset(transformRedemptionToFormDefaults(result.data))
-          }
-        })
-        .catch(() => toast.error(t(ERROR_MESSAGES.LOAD_FAILED)))
-    } else if (open && !isUpdate) {
-      // For create, reset to defaults
-      form.reset(REDEMPTION_FORM_DEFAULT_VALUES)
+    if (!open) {
+      setRedemptionLoadState('idle')
+      setLoadedRedemption(null)
+      return
     }
-  }, [open, isUpdate, currentRow, form, t])
+
+    if (!isUpdate || redemptionId === undefined) {
+      form.reset(REDEMPTION_FORM_DEFAULT_VALUES)
+      setRedemptionLoadState('ready')
+      setLoadedRedemption(null)
+      return
+    }
+
+    let ignoreResult = false
+
+    form.reset(REDEMPTION_FORM_DEFAULT_VALUES)
+    setRedemptionLoadState('loading')
+    setLoadedRedemption(null)
+
+    void getRedemption(redemptionId)
+      .then((result) => {
+        if (ignoreResult) return
+
+        if (
+          !result.success ||
+          !result.data ||
+          result.data.id !== redemptionId
+        ) {
+          setRedemptionLoadState('error')
+          handleServerError(result, t('Failed to load'))
+          return
+        }
+
+        form.reset(transformRedemptionToFormDefaults(result.data))
+        setLoadedRedemption(result.data)
+        setRedemptionLoadState('ready')
+      })
+      .catch((error: unknown) => {
+        if (ignoreResult) return
+
+        setRedemptionLoadState('error')
+        handleServerError(error)
+      })
+
+    return () => {
+      ignoreResult = true
+    }
+  }, [open, isUpdate, redemptionId, form, t])
+
+  const isUpdateReady =
+    !isUpdate ||
+    (redemptionLoadState === 'ready' && loadedRedemption?.id === redemptionId)
+  const isLoadingRedemption = redemptionLoadState === 'loading'
 
   const onSubmit = async (data: RedemptionFormValues) => {
     if (isUpdate && (!currentRow || !loadedRedemption || !isUpdateReady)) {
@@ -132,9 +174,6 @@ export function RedemptionsMutateDrawer({
     setIsSubmitting(true)
     try {
       const basePayload = transformFormDataToPayload(data)
-      if (!isUpdate && currentUser?.is_agent === true) {
-        basePayload.expired_time = 0
-      }
 
       if (isUpdate && currentRow && loadedRedemption) {
         const quota = form.getFieldState('quota_dollars').isDirty
@@ -165,8 +204,16 @@ export function RedemptionsMutateDrawer({
                 })
               : t(SUCCESS_MESSAGES.REDEMPTION_CREATED)
           )
-          setGeneratedRedemptions({ name: data.name, codes })
-          setOpen('generated')
+          if (result.data?.length) {
+            setCreatedCodes({
+              keys: result.data,
+              name: basePayload.name,
+              quota: formatQuotaWithCurrency(basePayload.quota, {
+                abbreviate: false,
+              }),
+            })
+          }
+          onOpenChange(false)
           triggerRefresh()
         } else {
           handleServerError(result)
@@ -204,13 +251,12 @@ export function RedemptionsMutateDrawer({
   const quotaPlaceholder = tokensOnly
     ? t('Enter quota in tokens')
     : t('Enter quota in {{currency}}', { currency: currencyLabel })
-  const quotaValue = parseQuotaFromDollars(form.watch('quota_dollars') || 0)
-  const countValue = form.watch('count') || 1
-  const agentDiscount = currentUser?.agent_discount ?? 100
-  const agentCharge = Math.ceil((quotaValue * countValue * agentDiscount) / 100)
-  const agentBalance = currentUser?.quota ?? 0
-  const isAgentCreate = !isUpdate && currentUser?.is_agent === true
-  const agentBalanceInsufficient = isAgentCreate && agentCharge > agentBalance
+  let submitButtonLabel = t('Save changes')
+  if (isLoadingRedemption) {
+    submitButtonLabel = t('Loading...')
+  } else if (isSubmitting) {
+    submitButtonLabel = t('Saving...')
+  }
 
   return (
     <>
@@ -270,158 +316,149 @@ export function RedemptionsMutateDrawer({
                     )}
                   />
 
-              <FormField
-                control={form.control}
-                name='quota_dollars'
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>{quotaLabel}</FormLabel>
-                    <FormControl>
-                      <Input
-                        {...field}
-                        type='number'
-                        step={tokensOnly ? 1 : 0.01}
-                        placeholder={quotaPlaceholder}
-                        onChange={(e) =>
-                          field.onChange(Number.parseFloat(e.target.value) || 0)
-                        }
-                      />
-                    </FormControl>
-                    <FormDescription>
-                      {tokensOnly
-                        ? t('Enter the quota amount in tokens')
-                        : t('Enter the quota amount in {{currency}}', {
-                            currency: currencyLabel,
-                          })}
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              {!isAgentCreate && (
-                <FormField
-                  control={form.control}
-                  name='expired_time'
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>{t('Expiration Time')}</FormLabel>
-                      <div className='flex flex-col gap-2'>
+                  <FormField
+                    control={form.control}
+                    name='quota_dollars'
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>{quotaLabel}</FormLabel>
                         <FormControl>
-                          <DateTimePicker
-                            value={field.value}
-                            onChange={field.onChange}
-                            placeholder={t('Never expires')}
+                          <Input
+                            {...field}
+                            type='number'
+                            step={quotaStep}
+                            placeholder={quotaPlaceholder}
+                            onChange={(e) =>
+                              field.onChange(
+                                Number.parseFloat(e.target.value) || 0
+                              )
+                            }
                           />
                         </FormControl>
-                        <div className='grid grid-cols-4 gap-1.5 sm:flex sm:gap-2'>
-                          <Button
-                            type='button'
-                            variant='outline'
-                            size='sm'
-                            onClick={() => handleSetExpiry(0, 0, 0)}
-                          >
-                            {t('Never')}
-                          </Button>
-                          <Button
-                            type='button'
-                            variant='outline'
-                            size='sm'
-                            onClick={() => handleSetExpiry(1, 0, 0)}
-                          >
-                            {t('1M')}
-                          </Button>
-                          <Button
-                            type='button'
-                            variant='outline'
-                            size='sm'
-                            onClick={() => handleSetExpiry(0, 7, 0)}
-                          >
-                            {t('1W')}
-                          </Button>
-                          <Button
-                            type='button'
-                            variant='outline'
-                            size='sm'
-                            onClick={() => handleSetExpiry(0, 1, 0)}
-                          >
-                            {t('1 Day')}
-                          </Button>
+                        <FormDescription>
+                          {tokensOnly
+                            ? t('Enter the quota amount in tokens')
+                            : t('Enter the quota amount in {{currency}}', {
+                                currency: currencyLabel,
+                              })}
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name='expired_time'
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>{t('Expiration Time')}</FormLabel>
+                        <div className='flex flex-col gap-2'>
+                          <FormControl>
+                            <DateTimePicker
+                              value={field.value}
+                              onChange={field.onChange}
+                              placeholder={t('Never expires')}
+                            />
+                          </FormControl>
+                          <div className='grid grid-cols-4 gap-1.5 sm:flex sm:gap-2'>
+                            <Button
+                              type='button'
+                              variant='outline'
+                              size='sm'
+                              onClick={() => handleSetExpiry(0, 0, 0)}
+                            >
+                              {t('Never')}
+                            </Button>
+                            <Button
+                              type='button'
+                              variant='outline'
+                              size='sm'
+                              onClick={() => handleSetExpiry(1, 0, 0)}
+                            >
+                              {t('1M')}
+                            </Button>
+                            <Button
+                              type='button'
+                              variant='outline'
+                              size='sm'
+                              onClick={() => handleSetExpiry(0, 7, 0)}
+                            >
+                              {t('1W')}
+                            </Button>
+                            <Button
+                              type='button'
+                              variant='outline'
+                              size='sm'
+                              onClick={() => handleSetExpiry(0, 1, 0)}
+                            >
+                              {t('1 Day')}
+                            </Button>
+                          </div>
                         </div>
-                      </div>
-                      <FormDescription>
-                        {t('Leave empty for never expires')}
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              )}
+                        <FormDescription>
+                          {t('Leave empty for never expires')}
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
 
-              {!isUpdate && (
-                <FormField
-                  control={form.control}
-                  name='count'
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>{t('Quantity')}</FormLabel>
-                      <FormControl>
-                        <Input
-                          {...field}
-                          type='number'
-                          min='1'
-                          max='100'
-                          placeholder={t('Number of codes to create')}
-                          onChange={(e) =>
-                            field.onChange(
-                              Number.parseInt(e.target.value, 10) || 1
-                            )
-                          }
-                        />
-                      </FormControl>
-                      <FormDescription>
-                        {t('Create multiple redemption codes at once (1-100)')}
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
+                  {!isUpdate && (
+                    <FormField
+                      control={form.control}
+                      name='count'
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>{t('Quantity')}</FormLabel>
+                          <FormControl>
+                            <Input
+                              {...field}
+                              type='number'
+                              min='1'
+                              max='100'
+                              placeholder={t('Number of codes to create')}
+                              onChange={(e) =>
+                                field.onChange(
+                                  Number.parseInt(e.target.value, 10) || 1
+                                )
+                              }
+                            />
+                          </FormControl>
+                          <FormDescription>
+                            {t(
+                              'Create multiple redemption codes at once (1-100)'
+                            )}
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
                   )}
-                />
-              )}
-
-              {isAgentCreate && (
-                <div className='rounded-md border p-3 text-sm'>
-                  <div className='font-medium'>{t('Agent payment')}</div>
-                  <div className='text-muted-foreground mt-1 space-y-1'>
-                    <div>
-                      {t('Required balance')}: {formatQuota(agentCharge)}
-                    </div>
-                    <div>
-                      {t('Wallet balance')}: {formatQuota(agentBalance)}
-                    </div>
-                  </div>
-                  {agentBalanceInsufficient && (
-                    <div className='text-destructive mt-2 text-xs'>
-                      {t('Insufficient wallet balance')}
-                    </div>
-                  )}
-                </div>
-              )}
-            </SideDrawerSection>
-          </form>
-        </Form>
-        <SheetFooter className={sideDrawerFooterClassName()}>
-          <SheetClose render={<Button variant='outline' />}>
-            {t('Close')}
-          </SheetClose>
-          <Button
-            form='redemption-form'
-            type='submit'
-            disabled={isSubmitting || agentBalanceInsufficient}
-          >
-            {isSubmitting ? t('Saving...') : t('Save changes')}
-          </Button>
-        </SheetFooter>
-      </SheetContent>
-    </Sheet>
+                </SideDrawerSection>
+              </fieldset>
+            </form>
+          </Form>
+          <SheetFooter className={sideDrawerFooterClassName()}>
+            <SheetClose render={<Button variant='outline' />}>
+              {t('Close')}
+            </SheetClose>
+            <Button
+              form='redemption-form'
+              type='submit'
+              disabled={isSubmitting || !isUpdateReady}
+            >
+              {submitButtonLabel}
+            </Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
+      {createdCodes && (
+        <RedemptionsExportDialog
+          data={createdCodes}
+          onClose={() => setCreatedCodes(null)}
+        />
+      )}
+    </>
   )
 }

@@ -30,7 +30,7 @@ import type { UsageLog } from './data/schema'
 /**
  * Log category for different log types
  */
-export type LogCategory = 'common' | 'drawing' | 'image' | 'task'
+export type LogCategory = 'common' | 'drawing' | 'image' | 'task' | 'assets'
 
 // ============================================================================
 // Filter Types
@@ -143,7 +143,10 @@ export interface ModelTokenAdjustmentAudit {
 }
 
 export interface LogOtherData {
+  content_parts?: Array<{ key: string; params?: Record<string, unknown> }>
   admin_info?: {
+    reject_reason?: string
+    task_plugin?: TaskPluginInfo
     request_policy?: PolicyEvent[]
     is_multi_key?: boolean
     multi_key_index?: number
@@ -352,7 +355,7 @@ export interface TaskLog {
   id: number
   user_id: number
   username?: string
-  platform: string // suno, kling, runway, etc.
+  platform?: string // suno, kling, runway, etc.
   task_id: string
   action: string // MUSIC, LYRICS, GENERATE, TEXT_GENERATE, etc.
   channel_id: number
@@ -363,6 +366,9 @@ export interface TaskLog {
   finish_time?: number // seconds
   progress?: string
   progress_message_en?: string
+  request_id?: string
+  token_name?: string
+  request_available?: boolean
   data?: unknown
   properties?: {
     input?: string
@@ -370,6 +376,7 @@ export interface TaskLog {
     origin_model_name?: string
   }
   legacy_video_available?: boolean
+  legacy_audio_available?: boolean
   // A synchronous result returned inline and never persisted; artifact
   // retrieval is not offered for it.
   result_discarded?: boolean
@@ -383,10 +390,17 @@ export interface TaskLog {
   root_info?: {
     task_plugin?: TaskPluginRuntimeInfo
     upstream_task_id?: string
+    origin_task_id?: string
     node_name?: string
   }
   created_at?: number
   updated_at?: number
+}
+
+export interface TaskRequestPreview {
+  task_id: string
+  request_body: unknown
+  truncated: boolean
 }
 
 export interface ImageGenerationLog {
@@ -435,6 +449,66 @@ export interface ImageGenerationTaskPayload {
 // ============================================================================
 // Common Log Types
 // ============================================================================
+
+export interface TaskPluginInfo {
+  key: string
+  name: string
+  version?: string
+  author?: TaskPluginAuthor
+}
+
+export interface TaskPluginAuthor {
+  name: string
+  url?: string
+}
+
+export interface TaskPluginRuntimeInfo {
+  key: string
+  version: string
+  api_version: number
+  generation: number
+}
+
+export type TaskArtifactType = 'image' | 'video' | 'audio' | 'file'
+
+export interface TaskArtifact {
+  key: string
+  type: TaskArtifactType
+  mime_type?: string
+  content_url: string
+}
+
+export interface AudioClip {
+  clip_id?: string
+  id?: string
+  title?: string
+  tags?: string
+  duration?: number
+  audio_url?: string
+  image_url?: string
+  image_large_url?: string
+  metadata?: {
+    tags?: string
+    duration?: number
+  }
+}
+
+export interface TaskArtifactProjection {
+  artifacts: TaskArtifact[]
+  legacyContentUrl?: string
+  legacyAudioClips?: AudioClip[]
+}
+
+export interface TaskArtifactsResponse {
+  success: boolean
+  message?: string
+  code?: string
+  data?: {
+    artifacts?: unknown
+    legacy_content_url?: unknown
+    legacy_audio_clips?: unknown
+  }
+}
 
 export interface GetLogsParams {
   p?: number

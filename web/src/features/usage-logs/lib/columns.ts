@@ -34,13 +34,15 @@ import type { ImageGenerationLog, LogCategory } from '../types'
 export function useColumnsByCategory(
   logCategory: LogCategory,
   isAdmin: boolean,
+  isRoot: boolean,
+  showBillingSource: boolean,
   onOpenImageTask: (log: ImageGenerationLog) => void
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
 ): ColumnDef<any>[] {
   const commonColumns = useCommonLogsColumns(isAdmin, isRoot, showBillingSource)
   const drawingColumns = useDrawingLogsColumns(isAdmin)
   const imageColumns = useImageGenerationLogsColumns(isAdmin, onOpenImageTask)
-  const taskColumns = useTaskLogsColumns(isAdmin)
+  const taskColumns = useTaskLogsColumns(isAdmin, isRoot)
 
   switch (logCategory) {
     case 'common':

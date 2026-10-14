@@ -22,6 +22,15 @@ import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { z } from 'zod'
 
+import { Checkbox } from '@/components/ui/checkbox'
+import {
+  Field,
+  FieldDescription,
+  FieldGroup,
+  FieldLabel,
+  FieldLegend,
+  FieldSet,
+} from '@/components/ui/field'
 import {
   Form,
   FormControl,
@@ -49,6 +58,9 @@ const schema = z.object({
   unit: z.string().trim().min(1).max(16),
   processingDays: z.string().trim().min(1).max(32),
   rejectionFreezeHours: z.coerce.number().int().min(0).max(8760),
+  allowedSources: z.array(
+    z.enum(['online_recharge', 'redemption', 'admin_adjustment'])
+  ),
 })
 
 type Values = z.infer<typeof schema>
@@ -80,6 +92,11 @@ export function InvoiceSettingsSection(props: { defaultValues: Values }) {
         'invoice_setting.rejection_freeze_hours',
         values.rejectionFreezeHours,
         props.defaultValues.rejectionFreezeHours,
+      ],
+      [
+        'invoice_setting.allowed_sources',
+        JSON.stringify([...values.allowedSources].sort()),
+        JSON.stringify([...props.defaultValues.allowedSources].sort()),
       ],
     ].filter(([, value, previous]) => value !== previous)
 
@@ -124,6 +141,61 @@ export function InvoiceSettingsSection(props: { defaultValues: Values }) {
                   />
                 </FormControl>
               </SettingsSwitchItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name='allowedSources'
+            render={({ field }) => (
+              <FieldSet disabled={updateOption.isPending || isSubmitting}>
+                <FieldLegend variant='label'>
+                  {t('Eligible invoice sources')}
+                </FieldLegend>
+                <FieldDescription>
+                  {t(
+                    'Users can apply for invoices only for selected sources. Uncheck all sources to stop new applications.'
+                  )}
+                </FieldDescription>
+                <FieldGroup className='gap-3'>
+                  {[
+                    { value: 'redemption', label: t('Redemption cards') },
+                    {
+                      value: 'online_recharge',
+                      label: t('Online payments (Alipay, WeChat, etc.)'),
+                    },
+                    {
+                      value: 'admin_adjustment',
+                      label: t('Administrator credits'),
+                    },
+                  ].map((source) => (
+                    <Field key={source.value} orientation='horizontal'>
+                      <Checkbox
+                        id={`invoice-source-${source.value}`}
+                        disabled={updateOption.isPending || isSubmitting}
+                        checked={field.value.includes(
+                          source.value as Values['allowedSources'][number]
+                        )}
+                        onCheckedChange={(checked) => {
+                          const sourceValue =
+                            source.value as Values['allowedSources'][number]
+                          field.onChange(
+                            checked
+                              ? [...field.value, sourceValue]
+                              : field.value.filter(
+                                  (value) => value !== sourceValue
+                                )
+                          )
+                        }}
+                        onBlur={field.onBlur}
+                      />
+                      <FieldLabel htmlFor={`invoice-source-${source.value}`}>
+                        {source.label}
+                      </FieldLabel>
+                    </Field>
+                  ))}
+                </FieldGroup>
+                <FormMessage />
+              </FieldSet>
             )}
           />
           <FormField

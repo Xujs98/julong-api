@@ -63,6 +63,7 @@ type ModelFormValues = {
   BillingMode: string
   BillingExpr: string
   PerRequestSubscriptionAllowed: string
+  PluginBillingExpr: string
 }
 
 type ModelRatioFormProps = {
@@ -320,6 +321,7 @@ export const ModelRatioForm = memo(function ModelRatioForm({
               savedPerRequestSubscriptionAllowed={
                 savedValues.PerRequestSubscriptionAllowed
               }
+              savedPluginBillingExpr={savedValues.PluginBillingExpr}
               modelPrice={form.watch('ModelPrice')}
               modelRatio={form.watch('ModelRatio')}
               cacheRatio={form.watch('CacheRatio')}
@@ -330,9 +332,10 @@ export const ModelRatioForm = memo(function ModelRatioForm({
               audioCompletionRatio={form.watch('AudioCompletionRatio')}
               billingMode={form.watch('BillingMode')}
               billingExpr={form.watch('BillingExpr')}
-              perRequestSubscriptionAllowed={form.watch(
-                'PerRequestSubscriptionAllowed'
-              )}
+              perRequestSubscriptionAllowed={
+                form.watch('PerRequestSubscriptionAllowed') ?? '{}'
+              }
+              pluginBillingExpr={form.watch('PluginBillingExpr')}
               candidateModelNames={
                 isUnsetVariant ? enabledModelsQuery.data?.data : undefined
               }

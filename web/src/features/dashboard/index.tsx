@@ -38,7 +38,6 @@ import { useAuthStore } from '@/stores/auth-store'
 import { ModelsChartPreferences } from './components/models/models-chart-preferences'
 import { ModelsFilter } from './components/models/models-filter-dialog'
 import { OverviewDashboard } from './components/overview/overview-dashboard'
-import { SupportContactButton } from './components/overview/support-contact-button'
 import { DEFAULT_TIME_GRANULARITY } from './constants'
 import {
   buildDefaultDashboardFilters,
@@ -360,11 +359,7 @@ export function Dashboard() {
   return (
     <SectionPageLayout>
       <SectionPageLayout.Title>{t(meta.titleKey)}</SectionPageLayout.Title>
-      {activeSection === 'overview' && (
-        <SectionPageLayout.Actions>
-          <SupportContactButton />
-        </SectionPageLayout.Actions>
-      )}
+
       <SectionPageLayout.Content>
         <div className='space-y-3 sm:space-y-4'>
           <div className='flex flex-wrap items-center justify-between gap-1.5 sm:gap-2'>

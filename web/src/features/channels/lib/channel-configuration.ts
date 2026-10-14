@@ -29,7 +29,7 @@ import { channelFormSchema, type ChannelFormValues } from './channel-form'
 import { supportsResponsesWebSocket } from './responses-websocket'
 
 export type ChannelProviderTarget =
-  | { kind: 'builtin'; type: number }
+  | { kind: 'builtin'; type: number; preset?: 'suanliai' }
   | { kind: 'plugin'; key: string }
 
 export type ChannelConfigurationSection =
@@ -46,6 +46,7 @@ export type ChannelConfigurationStatus =
 
 const CONFIGURATION_BLOCKS = {
   modelMapping: { section: 'routing', fields: ['model_mapping'] },
+  videoModels: { section: 'routing', fields: ['video_model_configs'] },
   routingStrategy: {
     section: 'routing',
     fields: ['priority', 'weight', 'test_model', 'auto_ban'],
@@ -140,6 +141,7 @@ export function getChannelConfigurationState(
   const claudePassthrough = CLAUDE_FIELD_PASSTHROUGH_TYPES.has(values.type)
   const configured: Record<ChannelConfigurationBlock, boolean> = {
     modelMapping: hasConfiguredJson(values.model_mapping),
+    videoModels: Object.keys(values.video_model_configs || {}).length > 0,
     routingStrategy: Boolean(
       values.priority ||
       values.weight ||

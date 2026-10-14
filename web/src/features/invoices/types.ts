@@ -24,6 +24,25 @@ export type InvoiceStatus =
   | 'non_reusable'
   | 'cancelled'
 
+export type InvoiceType = 'ordinary' | 'special'
+
+export type InvoicePaymentProof = {
+  id: string | number
+  filename: string
+  content_type: string
+  size: number
+}
+
+export type InvoiceApplicationRequest = {
+  request_ids: string[]
+  invoice_type: InvoiceType
+  company_name: string
+  tax_number: string
+  email: string
+  notes: string
+  payment_proofs: File[]
+}
+
 export type InvoiceCredit = {
   request_id: string
   created_at: number
@@ -52,6 +71,11 @@ export type InvoiceApplication = {
   id: number
   user_id: number
   username?: string
+  invoice_type?: InvoiceType | ''
+  company_name?: string
+  tax_number?: string
+  notes?: string
+  payment_proofs?: InvoicePaymentProof[]
   email: string
   amount_quota: number
   amount: number
@@ -67,6 +91,8 @@ export type InvoiceApplication = {
 
 export type InvoiceInfo = {
   enabled: boolean
+  email?: string
+  allowed_sources?: InvoiceCredit['source'][]
   minimum_amount: number
   unit: string
   processing_days: string

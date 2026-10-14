@@ -41,6 +41,7 @@ const getModelDefaults = (settings: BillingSettings) => ({
   BillingExpr: settings['billing_setting.billing_expr'],
   PerRequestSubscriptionAllowed:
     settings['billing_setting.per_request_subscription_allowed'],
+  PluginBillingExpr: '{}',
 })
 
 const getGroupDefaults = (settings: BillingSettings) => ({
@@ -219,6 +220,7 @@ const BILLING_SECTIONS = [
           processingDays: settings['invoice_setting.processing_days'],
           rejectionFreezeHours:
             settings['invoice_setting.rejection_freeze_hours'],
+          allowedSources: settings['invoice_setting.allowed_sources'],
         }}
       />
     ),

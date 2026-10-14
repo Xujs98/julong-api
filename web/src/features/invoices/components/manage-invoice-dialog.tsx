@@ -14,7 +14,7 @@ import {
   RotateCcw,
   Upload,
 } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { CopyButton } from '@/components/copy-button'
@@ -37,6 +37,7 @@ import { formatTimestamp } from '@/lib/format'
 import { getInvoiceSourceLabel, getInvoiceStatusLabel } from '../labels'
 import type { InvoiceApplication, InvoiceStatus } from '../types'
 import { CompleteInvoiceDialog } from './complete-invoice-dialog'
+import { InvoicePaymentProofs } from './invoice-payment-proofs'
 import { WithdrawInvoiceDialog } from './withdraw-invoice-dialog'
 
 const statuses: InvoiceStatus[] = [
@@ -52,7 +53,7 @@ function isTerminalStatus(status: InvoiceStatus) {
   return ['completed', 'rejected', 'non_reusable', 'cancelled'].includes(status)
 }
 
-export function ManageInvoiceDialog(props: {
+type ManageInvoiceDialogProps = {
   application: InvoiceApplication | null
   saving: boolean
   withdrawing?: boolean
@@ -61,28 +62,34 @@ export function ManageInvoiceDialog(props: {
   onComplete: (locale: 'zh' | 'en', adminNote: string, attachment: File) => void
   onDownload?: (application: InvoiceApplication) => void
   onWithdraw?: (application: InvoiceApplication) => void
-}) {
+}
+
+export function ManageInvoiceDialog(props: ManageInvoiceDialogProps) {
+  if (!props.application) return null
+  return (
+    <ManageInvoiceDialogContent
+      key={props.application.id}
+      {...props}
+      application={props.application}
+    />
+  )
+}
+
+function ManageInvoiceDialogContent(
+  props: Omit<ManageInvoiceDialogProps, 'application'> & {
+    application: InvoiceApplication
+  }
+) {
   const { t, i18n } = useTranslation()
-  const [status, setStatus] = useState<InvoiceStatus>('pending')
-  const [adminNote, setAdminNote] = useState('')
+  const [status, setStatus] = useState<InvoiceStatus>(props.application.status)
+  const [adminNote, setAdminNote] = useState(props.application.admin_note || '')
   const [attachment, setAttachment] = useState<File | null>(null)
   const [sendEmail, setSendEmail] = useState(true)
-  const [emailLocale, setEmailLocale] = useState<'zh' | 'en'>('zh')
+  const [emailLocale, setEmailLocale] = useState<'zh' | 'en'>(
+    i18n.language.startsWith('en') ? 'en' : 'zh'
+  )
   const [emailSettingsOpen, setEmailSettingsOpen] = useState(false)
   const [withdrawOpen, setWithdrawOpen] = useState(false)
-
-  useEffect(() => {
-    if (!props.application) return
-    setStatus(props.application.status)
-    setAdminNote(props.application.admin_note || '')
-    setAttachment(null)
-    setSendEmail(true)
-    setEmailLocale(i18n.language.startsWith('en') ? 'en' : 'zh')
-    setEmailSettingsOpen(false)
-    setWithdrawOpen(false)
-  }, [i18n.language, props.application])
-
-  if (!props.application) return null
 
   const application = props.application
   const items = application.items ?? []
@@ -142,6 +149,43 @@ export function ManageInvoiceDialog(props: {
               </p>
             </div>
           </div>
+
+          <div className='grid gap-3 rounded-lg border p-4 text-sm sm:grid-cols-2'>
+            <div>
+              <span className='text-muted-foreground'>{t('Invoice type')}</span>
+              <p className='font-medium'>
+                {application.invoice_type === 'ordinary'
+                  ? t('VAT ordinary invoice')
+                  : null}
+                {application.invoice_type === 'special'
+                  ? t('VAT special invoice')
+                  : null}
+                {!application.invoice_type ? '-' : null}
+              </p>
+            </div>
+            <div>
+              <span className='text-muted-foreground'>{t('Company name')}</span>
+              <p className='font-medium break-words'>
+                {application.company_name || '-'}
+              </p>
+            </div>
+            <div>
+              <span className='text-muted-foreground'>{t('Tax number')}</span>
+              <p className='font-medium break-all'>
+                {application.tax_number || '-'}
+              </p>
+            </div>
+            <div>
+              <span className='text-muted-foreground'>{t('Notes')}</span>
+              <p className='font-medium [overflow-wrap:anywhere] whitespace-pre-wrap'>
+                {application.notes || '-'}
+              </p>
+            </div>
+          </div>
+          <InvoicePaymentProofs
+            applicationId={application.id}
+            proofs={application.payment_proofs ?? []}
+          />
 
           <section className='space-y-3'>
             <h3 className='font-medium'>{t('Billing details')}</h3>
