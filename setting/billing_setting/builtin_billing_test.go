@@ -64,6 +64,8 @@ func TestGPT6AstraBuiltinBilling(t *testing.T) {
 	t.Run("admin options expose defaults without persisting them", func(t *testing.T) {
 		recorder := httptest.NewRecorder()
 		ctx, _ := gin.CreateTestContext(recorder)
+		ctx.Set("role", common.RoleRootUser)
+		ctx.Set("id", 1)
 		controller.GetOptions(ctx)
 		var response struct {
 			Success bool

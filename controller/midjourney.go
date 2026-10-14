@@ -220,14 +220,15 @@ func runMidjourneyTaskUpdateOnce(ctx context.Context, report func(processed, tot
 				model.RecordTaskBillingLog(model.RecordTaskBillingLogParams{
 					UserId:    task.UserId,
 					LogType:   model.LogTypeRefund,
-					Content:   "",
+					Content:   nil,
 					ChannelId: task.ChannelId,
 					ModelName: service.CovertMjpActionToModelName(task.Action),
 					Quota:     task.Quota,
-					Other: map[string]interface{}{
-						"task_id": task.MjId,
-						"reason":  "构图失败",
-					},
+					Other: func() *model.LogOther {
+						o := model.NewLogOther()
+						o.MergePublic(map[string]any{"task_id": task.MjId, "reason": "构图失败"})
+						return o
+					}(),
 				})
 				model.RecordQuotaIncreaseLog(task.UserId, task.Quota, model.QuotaIncreaseSourceRefund, fmt.Sprintf("构图失败，返还额度 %s", logger.LogQuota(task.Quota)))
 			}

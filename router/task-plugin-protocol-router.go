@@ -39,6 +39,10 @@ func taskPluginProtocolHandlers(protocol, operation string) ([]gin.HandlerFunc, 
 			middleware.RouteTag("relay"), middleware.SystemPerformanceCheck(), middleware.TokenAuth(),
 			middleware.ModelRequestRateLimit(), middleware.PinTaskPluginEndpoint(), middleware.PrepareTaskPluginEndpoint(), middleware.Distribute(),
 			func(c *gin.Context) {
+				if operation == "generate" {
+					controller.RelayImageGeneration(c)
+					return
+				}
 				controller.RelayTaskPluginEndpoint(c, func(c *gin.Context) { controller.Relay(c, types.RelayFormatOpenAIImage) })
 			},
 		}, nil
@@ -53,7 +57,7 @@ func taskPluginProtocolHandlers(protocol, operation string) ([]gin.HandlerFunc, 
 	case "openai_video.retrieve":
 		return []gin.HandlerFunc{middleware.RouteTag("relay"), middleware.TokenAuth(), middleware.Distribute(), controller.RelayTaskFetch}, nil
 	case "openai_video.content":
-		return []gin.HandlerFunc{middleware.RouteTag("relay"), middleware.TokenAuth(), controller.VideoProxy}, nil
+		return []gin.HandlerFunc{middleware.RouteTag("relay"), middleware.TokenOrUserAuth(), controller.VideoProxy}, nil
 	default:
 		return nil, fmt.Errorf("host protocol registry operation %s.%s has no handler", protocol, operation)
 	}

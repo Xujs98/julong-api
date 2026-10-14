@@ -94,13 +94,13 @@ func GetUserLogs(c *gin.Context) {
 	return
 }
 
-// ExportAllLogs streams every user's logs matching the search.
-func ExportAllLogs(c *gin.Context) {
+// ExportAllLogsStream streams every user's logs matching the search.
+func ExportAllLogsStream(c *gin.Context) {
 	exportLogs(c, true)
 }
 
-// ExportUserLogs streams the caller's own logs matching the search.
-func ExportUserLogs(c *gin.Context) {
+// ExportUserLogsStream streams the caller's own logs matching the search.
+func ExportUserLogsStream(c *gin.Context) {
 	if c.GetInt("role") < common.RoleAdminUser && !operation_setting.GetLogSetting().UserExportEnabled {
 		common.ApiErrorT(c, "Log export is disabled")
 		return

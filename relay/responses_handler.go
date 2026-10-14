@@ -98,7 +98,7 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 	}
 
 	if strings.HasPrefix(info.OriginModelName, "gpt-4o-audio") {
-		service.PostAudioConsumeQuota(c, info, usageDto, "")
+		service.PostAudioConsumeQuota(c, info, usageDto, nil)
 	} else {
 		actualQuota := service.PostTextConsumeQuota(c, info, usageDto, nil)
 		service.RecordCapturedImageGenerationLog(c, info, string(responsesReq.Input), c.GetString("image_generation_call_size"), c.GetString("image_generation_call_quality"), actualQuota)

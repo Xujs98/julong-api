@@ -65,6 +65,7 @@ type textQuotaSummary struct {
 	ToolSurchargeItems        []ToolSurchargeItem
 	ToolCallSurchargeQuota    decimal.Decimal
 	ToolCallSurchargeBase     decimal.Decimal
+	FixedPriceBilling         bool
 	ModelTokenAdjustmentAudit *hosttypes.ModelTokenAdjustmentAudit
 	BillingCounterfactuals    billingRevenueCounterfactuals
 }
@@ -164,6 +165,15 @@ func calculateTextToolCallSurchargeBase(ctx *gin.Context, relayInfo *relaycommon
 		strings.HasSuffix(summary.ModelName, "search-preview") {
 		items = collectToolSurchargeItem(items, dto.BuildInToolWebSearchPreview, 1, summary.ModelName)
 	}
+	webSearchCount := ctx.GetInt("claude_web_search_requests")
+	if webSearchCount > relaycommon.MaxBillableToolCallCount {
+		logger.LogWarn(ctx, common.LogText("tool surcharge call count clamped: tool=%s count=%d", dto.BuildInToolWebSearch, webSearchCount))
+		webSearchCount = relaycommon.MaxBillableToolCallCount
+	}
+	items = collectToolSurchargeItem(items, dto.BuildInToolWebSearch, webSearchCount, summary.ModelName)
+	if ctx.GetBool("gemini_google_search_call") {
+		items = collectToolSurchargeItem(items, dto.BuildInToolGoogleSearch, 1, summary.ModelName)
+	}
 
 	summary.ToolSurchargeItems = mergeToolSurchargeItems(items)
 	var surcharge decimal.Decimal
@@ -175,6 +185,14 @@ func calculateTextToolCallSurchargeBase(ctx *gin.Context, relayInfo *relaycommon
 	}
 
 	return surcharge
+}
+
+// calculateTextToolCallSurcharge retains the historical group-adjusted helper
+// for callers and tests; the summary path uses the ungrouped base so special
+// group pricing and tiered settlement can apply their adjustments correctly.
+func calculateTextToolCallSurcharge(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, summary *textQuotaSummary) decimal.Decimal {
+	base := calculateTextToolCallSurchargeBase(ctx, relayInfo, summary)
+	return base.Mul(decimal.NewFromFloat(summary.GroupRatio))
 }
 
 func finalizeTextQuota(quota decimal.Decimal, ratio decimal.Decimal, billable bool) (int, *common.QuotaClamp) {
@@ -465,7 +483,7 @@ func usageSemanticFromUsage(relayInfo *relaycommon.RelayInfo, usage *dto.Usage) 
 	return "openai"
 }
 
-func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usage *dto.Usage, extraContent []string) int {
+func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usage *dto.Usage, extraContent []*common.Message) int {
 	originUsage := usage
 	billingUsage := effectiveBillingUsage(usage)
 	if usage == nil {
@@ -479,7 +497,6 @@ func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 	summary := calculateTextQuotaSummary(ctx, relayInfo, billingUsage)
 
 	var tieredResult *billingexpr.TieredResult
-	var tieredTokens billingexpr.TokenParams
 	tieredBillingApplied := false
 	snap := relayInfo.TieredBillingSnapshot
 	// Providers normally estimate missing usage before settlement. Preserve the
@@ -499,6 +516,10 @@ func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 			tieredBillingApplied = true
 			tieredResult = tieredRes
 			summary.Quota = composeTieredTextQuota(relayInfo, summary, tieredQuota, tieredRes)
+			summary.FixedPriceBilling = isFixedPriceSettlement(relayInfo, tieredRes)
+			if summary.FixedPriceBilling {
+				summary.AudioInputPrice = 0
+			}
 			summary.BillingCounterfactuals = calculateTieredBillingRevenueCounterfactuals(
 				relayInfo,
 				tieredParams,
@@ -657,9 +678,6 @@ func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 		IsStream:         relayInfo.IsStream,
 		Group:            relayInfo.UsingGroup,
 		Other:            other,
-	})
-	gopool.Go(func() {
-		perfmetrics.RecordRelaySample(relayInfo, true, int64(summary.CompletionTokens))
 	})
 	return summary.Quota
 }

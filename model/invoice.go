@@ -7,10 +7,13 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"gorm.io/gorm"
 )
 
 const (
+	InvoiceTypeOrdinary      = "ordinary"
+	InvoiceTypeSpecial       = "special"
 	InvoiceStatusPending     = "pending"
 	InvoiceStatusProcessing  = "processing"
 	InvoiceStatusCompleted   = "completed"
@@ -33,22 +36,27 @@ var (
 )
 
 type InvoiceApplication struct {
-	Id             int            `json:"id"`
-	UserId         int            `json:"user_id" gorm:"index"`
-	Username       string         `json:"username" gorm:"-:all"`
-	Email          string         `json:"email" gorm:"type:varchar(255)"`
-	AmountQuota    int64          `json:"amount_quota"`
-	Amount         float64        `json:"amount" gorm:"-:all"`
-	AmountValue    string         `json:"-" gorm:"type:varchar(64)"`
-	Unit           string         `json:"unit" gorm:"type:varchar(32)"`
-	Status         string         `json:"status" gorm:"type:varchar(32);index"`
-	AdminNote      string         `json:"admin_note" gorm:"type:varchar(500)"`
-	CreatedAt      int64          `json:"created_at" gorm:"autoCreateTime"`
-	UpdatedAt      int64          `json:"updated_at" gorm:"autoUpdateTime"`
-	CompletedAt    int64          `json:"completed_at"`
-	EmailSendingAt int64          `json:"-" gorm:"index"`
-	HasAttachment  bool           `json:"has_attachment" gorm:"-:all"`
-	Items          []*InvoiceItem `json:"items" gorm:"foreignKey:ApplicationId"`
+	Id             int                   `json:"id"`
+	UserId         int                   `json:"user_id" gorm:"index"`
+	Username       string                `json:"username" gorm:"-:all"`
+	Email          string                `json:"email" gorm:"type:varchar(255)"`
+	InvoiceType    string                `json:"invoice_type" gorm:"type:varchar(32)"`
+	CompanyName    string                `json:"company_name" gorm:"type:varchar(200)"`
+	TaxNumber      string                `json:"tax_number" gorm:"type:varchar(50)"`
+	Notes          string                `json:"notes" gorm:"type:varchar(1000)"`
+	PaymentProofs  []InvoicePaymentProof `json:"payment_proofs" gorm:"foreignKey:ApplicationId"`
+	AmountQuota    int64                 `json:"amount_quota"`
+	Amount         float64               `json:"amount" gorm:"-:all"`
+	AmountValue    string                `json:"-" gorm:"type:varchar(64)"`
+	Unit           string                `json:"unit" gorm:"type:varchar(32)"`
+	Status         string                `json:"status" gorm:"type:varchar(32);index"`
+	AdminNote      string                `json:"admin_note" gorm:"type:varchar(500)"`
+	CreatedAt      int64                 `json:"created_at" gorm:"autoCreateTime"`
+	UpdatedAt      int64                 `json:"updated_at" gorm:"autoUpdateTime"`
+	CompletedAt    int64                 `json:"completed_at"`
+	EmailSendingAt int64                 `json:"-" gorm:"index"`
+	HasAttachment  bool                  `json:"has_attachment" gorm:"-:all"`
+	Items          []*InvoiceItem        `json:"items" gorm:"foreignKey:ApplicationId"`
 }
 
 func (application *InvoiceApplication) AfterFind(*gorm.DB) error {
@@ -84,6 +92,30 @@ type InvoiceAttachment struct {
 	CreatedAt     int64  `json:"created_at" gorm:"autoCreateTime"`
 }
 
+// InvoicePaymentProof stores invoice evidence privately in the primary database.
+// Only the owner and invoice administrators can retrieve its content.
+type InvoicePaymentProof struct {
+	Id            int    `json:"id"`
+	ApplicationId int    `json:"application_id" gorm:"index"`
+	Filename      string `json:"filename" gorm:"type:varchar(255)"`
+	ContentType   string `json:"content_type" gorm:"type:varchar(128)"`
+	Data          []byte `json:"-"`
+	Size          int64  `json:"size"`
+	CreatedAt     int64  `json:"created_at" gorm:"autoCreateTime"`
+}
+
+type InvoiceApplicationDetails struct {
+	InvoiceType   string
+	CompanyName   string
+	TaxNumber     string
+	Notes         string
+	PaymentProofs []InvoicePaymentProof
+}
+
+func invoicePaymentProofMetadata(tx *gorm.DB) *gorm.DB {
+	return tx.Omit("data")
+}
+
 type InvoiceCredit struct {
 	RequestId   string  `json:"request_id"`
 	CreatedAt   int64   `json:"created_at"`
@@ -108,6 +140,10 @@ func invoiceAmountFromQuota(quota int64) float64 {
 }
 
 func loadInvoiceCredits(userId int) ([]InvoiceCredit, error) {
+	setting := operation_setting.GetInvoiceSetting()
+	if len(setting.AllowedSources) == 0 {
+		return []InvoiceCredit{}, nil
+	}
 	var logs []Log
 	query := LOG_DB.Model(&Log{}).
 		Where("user_id = ? AND type = ? AND quota > 0", userId, LogTypeQuotaIncrease)
@@ -124,7 +160,7 @@ func loadInvoiceCredits(userId int) ([]InvoiceCredit, error) {
 		metadata := struct {
 			Source string `json:"source"`
 		}{}
-		if logs[i].RequestId == "" || common.UnmarshalJsonStr(logs[i].Other, &metadata) != nil || !isInvoiceSource(metadata.Source) {
+		if logs[i].RequestId == "" || common.UnmarshalJsonStr(logs[i].Other, &metadata) != nil || (!isInvoiceSource(metadata.Source) || !setting.AllowsSource(metadata.Source)) {
 			continue
 		}
 		credits = append(credits, InvoiceCredit{
@@ -178,7 +214,7 @@ func GetInvoiceCredits(userId, startIdx, num int) ([]InvoiceCredit, int, error) 
 	return eligible[startIdx:end], total, nil
 }
 
-func CreateInvoiceApplication(userId int, email, unit string, minimumQuota int64, requestIds []string) (*InvoiceApplication, error) {
+func CreateInvoiceApplication(userId int, email, unit string, minimumQuota int64, requestIds []string, details ...InvoiceApplicationDetails) (*InvoiceApplication, error) {
 	if userId <= 0 || len(requestIds) == 0 || len(requestIds) > maxInvoiceItems {
 		return nil, ErrInvoiceSourcesInvalid
 	}
@@ -221,6 +257,15 @@ func CreateInvoiceApplication(userId int, email, unit string, minimumQuota int64
 		Unit:        unit,
 		Status:      InvoiceStatusPending,
 	}
+	if len(details) > 1 {
+		return nil, ErrInvoiceSourcesInvalid
+	}
+	if len(details) == 1 {
+		application.InvoiceType = details[0].InvoiceType
+		application.CompanyName = details[0].CompanyName
+		application.TaxNumber = details[0].TaxNumber
+		application.Notes = details[0].Notes
+	}
 	err = DB.Transaction(func(tx *gorm.DB) error {
 		ids := make([]string, 0, len(requestSet))
 		for requestId := range requestSet {
@@ -257,6 +302,21 @@ func CreateInvoiceApplication(userId int, email, unit string, minimumQuota int64
 		if err := tx.Create(&items).Error; err != nil {
 			return ErrInvoiceSourcesClaimed
 		}
+		if len(details) == 1 && len(details[0].PaymentProofs) > 0 {
+			proofs := append([]InvoicePaymentProof{}, details[0].PaymentProofs...)
+			for i := range proofs {
+				proofs[i].Id = 0
+				proofs[i].ApplicationId = application.Id
+				proofs[i].Size = int64(len(proofs[i].Data))
+			}
+			if err := tx.Create(&proofs).Error; err != nil {
+				return err
+			}
+			for i := range proofs {
+				proofs[i].Data = nil
+			}
+			application.PaymentProofs = proofs
+		}
 		return nil
 	})
 	if err != nil {
@@ -275,7 +335,7 @@ func GetInvoiceApplications(userId, startIdx, num int) ([]*InvoiceApplication, i
 		return nil, 0, err
 	}
 	var applications []*InvoiceApplication
-	if err := query.Preload("Items").Order("id desc").Offset(startIdx).Limit(num).Find(&applications).Error; err != nil {
+	if err := query.Preload("PaymentProofs", invoicePaymentProofMetadata).Preload("Items").Order("id desc").Offset(startIdx).Limit(num).Find(&applications).Error; err != nil {
 		return nil, 0, err
 	}
 	applicationIds := make([]int, 0, len(applications))
@@ -351,7 +411,7 @@ func GetInvoiceApplications(userId, startIdx, num int) ([]*InvoiceApplication, i
 
 func GetInvoiceApplicationById(id int) (*InvoiceApplication, error) {
 	application := &InvoiceApplication{}
-	if err := DB.Preload("Items").First(application, "id = ?", id).Error; err != nil {
+	if err := DB.Preload("PaymentProofs", invoicePaymentProofMetadata).Preload("Items").First(application, "id = ?", id).Error; err != nil {
 		return nil, err
 	}
 	return application, nil
@@ -376,7 +436,7 @@ func CancelInvoiceApplication(id, userId int) (*InvoiceApplication, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := DB.Preload("Items").First(application, "id = ?", id).Error; err != nil {
+	if err := DB.Preload("PaymentProofs", invoicePaymentProofMetadata).Preload("Items").First(application, "id = ?", id).Error; err != nil {
 		return nil, err
 	}
 	return application, nil
@@ -399,6 +459,22 @@ func GetInvoiceAttachment(id, userId int, allowAdmin bool) (*InvoiceApplication,
 		return nil, nil, err
 	}
 	return application, attachment, nil
+}
+
+func GetInvoicePaymentProof(applicationId, proofId, userId int, allowAdmin bool) (*InvoicePaymentProof, error) {
+	var application InvoiceApplication
+	query := DB.Where("id = ?", applicationId)
+	if !allowAdmin {
+		query = query.Where("user_id = ?", userId)
+	}
+	if err := query.First(&application).Error; err != nil {
+		return nil, err
+	}
+	var proof InvoicePaymentProof
+	if err := DB.Where("id = ? AND application_id = ?", proofId, application.Id).First(&proof).Error; err != nil {
+		return nil, err
+	}
+	return &proof, nil
 }
 
 func UpdateInvoiceApplication(id int, status, adminNote string, rejectionFreezeHours int) (*InvoiceApplication, error) {
@@ -440,7 +516,7 @@ func UpdateInvoiceApplication(id int, status, adminNote string, rejectionFreezeH
 	if err != nil {
 		return nil, err
 	}
-	if err := DB.Preload("Items").First(application, "id = ?", id).Error; err != nil {
+	if err := DB.Preload("PaymentProofs", invoicePaymentProofMetadata).Preload("Items").First(application, "id = ?", id).Error; err != nil {
 		return nil, err
 	}
 	return application, nil
@@ -455,7 +531,7 @@ func BeginInvoiceEmailDelivery(id int) (*InvoiceApplication, error) {
 		return nil, result.Error
 	}
 	application := &InvoiceApplication{}
-	if err := DB.Preload("Items").First(application, "id = ?", id).Error; err != nil {
+	if err := DB.Preload("PaymentProofs", invoicePaymentProofMetadata).Preload("Items").First(application, "id = ?", id).Error; err != nil {
 		return nil, err
 	}
 	if result.RowsAffected == 0 {
@@ -500,7 +576,7 @@ func CompleteInvoiceEmailDelivery(id int, emailSendingAt int64, adminNote string
 	if err != nil {
 		return nil, err
 	}
-	if err := DB.Preload("Items").First(application, "id = ?", id).Error; err != nil {
+	if err := DB.Preload("PaymentProofs", invoicePaymentProofMetadata).Preload("Items").First(application, "id = ?", id).Error; err != nil {
 		return nil, err
 	}
 	application.HasAttachment = true
@@ -528,7 +604,7 @@ func WithdrawCompletedInvoiceApplication(id int) (*InvoiceApplication, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := DB.Preload("Items").First(application, "id = ?", id).Error; err != nil {
+	if err := DB.Preload("PaymentProofs", invoicePaymentProofMetadata).Preload("Items").First(application, "id = ?", id).Error; err != nil {
 		return nil, err
 	}
 	application.HasAttachment = false

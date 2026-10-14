@@ -141,7 +141,7 @@ func BatchAdjustUserQuota(operatorRole int, allUsers bool, userIds []int, mode s
 		return nil, err
 	}
 	for _, adjustment := range adjustments {
-		if err := updateUserQuotaCache(adjustment.UserId, adjustment.CurrentQuota); err != nil {
+		if err := cacheIncrUserQuota(adjustment.UserId, int64(adjustment.CurrentQuota)-int64(adjustment.PreviousQuota)); err != nil {
 			common.SysLog("failed to update user quota cache: " + err.Error())
 		}
 	}

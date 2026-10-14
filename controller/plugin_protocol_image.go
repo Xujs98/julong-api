@@ -16,6 +16,7 @@ import (
 	pluginruntime "github.com/QuantumNous/new-api/pkg/jsplugin"
 	"github.com/QuantumNous/new-api/relay"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	kitdto "github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/gin-gonic/gin"
@@ -161,6 +162,39 @@ func serveTaskPluginImageProtocol(c *gin.Context, pinned pluginruntime.PinnedEnd
 			}
 			item["b64_json"] = encoded
 		}
+	}
+	if common.ImageGenerationLogEnabled || c.GetString(service.ImageGenerationTaskContextKey) != "" {
+		images := make([]kitdto.ImageData, 0, len(data))
+		for _, entry := range data {
+			item, isObject := entry.(map[string]any)
+			if !isObject {
+				continue
+			}
+			imageURL, _ := item["url"].(string)
+			encoded, _ := item["b64_json"].(string)
+			revisedPrompt, _ := item["revised_prompt"].(string)
+			images = append(images, kitdto.ImageData{Url: imageURL, B64Json: encoded, RevisedPrompt: revisedPrompt})
+		}
+		service.CaptureImageGenerationResult(c, images)
+		request := &kitdto.ImageRequest{}
+		if body, ok := protocolRequest.Body.(map[string]any); ok {
+			if value, ok := body["value"].(map[string]any); ok {
+				request.Prompt, _ = value["prompt"].(string)
+				request.Size, _ = value["size"].(string)
+				request.Quality, _ = value["quality"].(string)
+			} else if fields, ok := body["fields"].(map[string][]string); ok {
+				if values := fields["prompt"]; len(values) > 0 {
+					request.Prompt = values[0]
+				}
+				if values := fields["size"]; len(values) > 0 {
+					request.Size = values[0]
+				}
+				if values := fields["quality"]; len(values) > 0 {
+					request.Quality = values[0]
+				}
+			}
+		}
+		service.RecordImageGenerationLog(c, outcome.RelayInfo, request, task.Quota)
 	}
 	c.JSON(http.StatusOK, response)
 }

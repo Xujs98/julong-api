@@ -159,6 +159,12 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 	}
 	request, hasRequest := c.Get("task_request")
 	hasUsageProfiles := len(a.plugin.Meta.UsageProfiles) > 0
+	if hasRequest {
+		if err := a.applyVideoModelProfile(c, info); err != nil {
+			return service.TaskErrorWrapperLocal(err, "plugin_usage_invalid", http.StatusBadRequest)
+		}
+		request, _ = c.Get("task_request")
+	}
 	if hasRequest && !hasUsageProfiles {
 		if err := a.validateResolvedUsageRequest(request); err != nil {
 			return service.TaskErrorWrapperLocal(err, "plugin_usage_invalid", http.StatusBadRequest)
@@ -175,6 +181,118 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 			return service.TaskErrorWrapperLocal(err, "plugin_usage_invalid", http.StatusBadRequest)
 		}
 	}
+	return nil
+}
+
+func (a *TaskAdaptor) applyVideoModelProfile(c *gin.Context, info *relaycommon.RelayInfo) error {
+	if a.plugin == nil || a.plugin.Meta.Key != kitdto.SuanliVideoPluginKey || info == nil {
+		return nil
+	}
+	requestValue, exists := c.Get("task_request")
+	if !exists {
+		return nil
+	}
+	request, ok := requestValue.(map[string]any)
+	if !ok {
+		return fmt.Errorf("video request must be an object")
+	}
+	modelName := info.OriginModelName
+	if modelName == "" {
+		if value, ok := request["model"].(string); ok {
+			modelName = value
+		}
+	}
+	profile, configured := info.ChannelSetting.VideoModelConfigs[modelName]
+	if configured && profile.Enabled != nil && !*profile.Enabled {
+		return fmt.Errorf("video model %q is disabled on this channel", modelName)
+	}
+	minSeconds, maxSeconds := 1.0, float64(relaycommon.MaxTaskDurationSeconds)
+	defaultSeconds := 0.0
+	if configured {
+		if profile.MinSeconds != nil {
+			minSeconds = float64(*profile.MinSeconds)
+		}
+		if profile.MaxSeconds != nil {
+			maxSeconds = float64(*profile.MaxSeconds)
+		}
+		if profile.DefaultSeconds != nil {
+			defaultSeconds = float64(*profile.DefaultSeconds)
+		}
+	}
+	if defaultSeconds == 0 {
+		defaultSeconds = minSeconds
+	}
+	if value, present := request["seconds"]; present {
+		seconds, valid := usageNumber(value, true)
+		if !valid {
+			return fmt.Errorf("seconds must be a finite number")
+		}
+		if seconds == 0 {
+			seconds = defaultSeconds
+			request["seconds"] = seconds
+		}
+		if seconds < minSeconds || seconds > maxSeconds || seconds != math.Trunc(seconds) {
+			return fmt.Errorf("seconds must be an integer between %d and %d for model %q", int(minSeconds), int(maxSeconds), modelName)
+		}
+	} else {
+		request["seconds"] = defaultSeconds
+	}
+	if configured && len(profile.SupportedSeconds) > 0 {
+		seconds := int(request["seconds"].(float64))
+		if !slices.Contains(profile.SupportedSeconds, seconds) {
+			return fmt.Errorf("seconds value is not supported by model %q", modelName)
+		}
+	}
+	for key, values := range map[string][]string{"aspect_ratio": profile.AspectRatios, "resolution": profile.Resolutions} {
+		if len(values) == 0 {
+			continue
+		}
+		value, present := request[key].(string)
+		if !present || value == "" {
+			if key == "aspect_ratio" && profile.DefaultAspectRatio != "" {
+				request[key] = profile.DefaultAspectRatio
+				continue
+			}
+			if key == "resolution" && profile.DefaultResolution != "" {
+				request[key] = profile.DefaultResolution
+				continue
+			}
+			return fmt.Errorf("%s is required for model %q", key, modelName)
+		}
+		if !slices.Contains(values, value) {
+			return fmt.Errorf("%s value is not supported by model %q", key, modelName)
+		}
+	}
+	if configured {
+		if profile.FaceDefault != nil {
+			if _, exists := request["face"]; !exists {
+				request["face"] = *profile.FaceDefault
+			}
+		}
+		for key, max := range map[string]*int{"images": profile.MaxImages, "videos": profile.MaxVideos, "audios": profile.MaxAudios} {
+			if max == nil {
+				continue
+			}
+			if raw, exists := request[key]; exists {
+				values, ok := raw.([]any)
+				if !ok {
+					return fmt.Errorf("%s must be an array", key)
+				}
+				if len(values) > *max {
+					return fmt.Errorf("%s supports at most %d references for model %q", key, *max, modelName)
+				}
+			}
+		}
+		for key, support := range map[string]*bool{"images": profile.SupportsImages, "videos": profile.SupportsVideos, "audios": profile.SupportsAudios, "face": profile.SupportsFace, "generate_audio": profile.SupportsGenerateAudio} {
+			if support == nil || *support {
+				continue
+			}
+			if _, exists := request[key]; exists {
+				return fmt.Errorf("%s is not supported by model %q", key, modelName)
+			}
+		}
+	}
+	c.Set("task_request", request)
 	return nil
 }
 

@@ -42,6 +42,7 @@ func TestMain(m *testing.M) {
 		&BlockedIP{},
 		&BlockedDevice{},
 		&UserSession{},
+		&UserAccessToken{},
 		&AuthFlow{},
 		&ExternalIdentityClaim{},
 		&Token{},

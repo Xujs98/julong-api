@@ -185,7 +185,7 @@ func AddRedemption(c *gin.Context) {
 	}
 
 	if charge > 0 {
-		model.RecordLog(creatorId, model.LogTypeSystem, "代理生成兑换码扣除余额 "+logger.LogQuota(charge))
+		model.RecordLog(creatorId, model.LogTypeSystem, common.NewMessage("代理生成兑换码扣除余额 "+logger.LogQuota(charge)))
 		_ = model.InvalidateUserCache(creatorId)
 	}
 	recordManageAudit(c, "redemption.create", map[string]interface{}{
@@ -219,42 +219,6 @@ func DeleteRedemption(c *gin.Context) {
 
 type RedemptionBatch struct {
 	Ids []int `json:"ids"`
-}
-
-func DeleteRedemptionBatch(c *gin.Context) {
-	if !ensureAdminRedemptionAccess(c) {
-		return
-	}
-
-	redemptionBatch := RedemptionBatch{}
-	if err := c.ShouldBindJSON(&redemptionBatch); err != nil || len(redemptionBatch.Ids) == 0 || len(redemptionBatch.Ids) > 100 {
-		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
-		return
-	}
-
-	seen := make(map[int]bool, len(redemptionBatch.Ids))
-	ids := make([]int, 0, len(redemptionBatch.Ids))
-	for _, id := range redemptionBatch.Ids {
-		if id <= 0 {
-			common.ApiErrorI18n(c, i18n.MsgInvalidParams)
-			return
-		}
-		if !seen[id] {
-			seen[id] = true
-			ids = append(ids, id)
-		}
-	}
-
-	rows, err := model.DeleteRedemptionsByIds(ids)
-	if err != nil {
-		common.ApiError(c, err)
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": "",
-		"data":    rows,
-	})
 }
 
 func UpdateRedemption(c *gin.Context) {

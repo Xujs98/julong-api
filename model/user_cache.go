@@ -73,6 +73,13 @@ func invalidateUserCache(userId int) error {
 	return common.RedisDelKey(getUserCacheKey(userId))
 }
 
+// InvalidateUserCache clears the cached user snapshot after an administrative
+// balance or account change. Keep the cache operation available to controllers
+// without exposing the cache key format.
+func InvalidateUserCache(userId int) error {
+	return invalidateUserCache(userId)
+}
+
 func populateUserCache(user User) error {
 	if !common.RedisEnabled {
 		return nil

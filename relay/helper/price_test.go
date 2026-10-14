@@ -98,7 +98,7 @@ func TestModelPriceHelperPreConsumeUsesModelTokenAdjustment(t *testing.T) {
 
 	priceData, err := ModelPriceHelper(ctx, info, 100, &types.TokenCountMeta{MaxTokens: 100})
 	require.NoError(t, err)
-	require.Equal(t, 210, priceData.QuotaToPreConsume)
+	require.Equal(t, 110, priceData.QuotaToPreConsume)
 	require.Equal(t, "auto-billing", info.UsingGroup)
 	require.NotNil(t, priceData.ModelTokenAdjustment.Input)
 	require.InDelta(t, 1.1, priceData.ModelTokenAdjustment.InputMultiplier(), 1e-12)

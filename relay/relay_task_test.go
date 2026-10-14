@@ -15,6 +15,7 @@ import (
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	pluginruntime "github.com/QuantumNous/new-api/pkg/jsplugin"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	kitdto "github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/billing_setting"
 	"github.com/QuantumNous/new-api/setting/config"
@@ -24,6 +25,29 @@ import (
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 )
+
+func TestSuanliChannelBillingExpression(t *testing.T) {
+	price := 0.42
+	info := &relaycommon.RelayInfo{
+		ChannelMeta: &relaycommon.ChannelMeta{ChannelSetting: kitdto.ChannelSettings{
+			GatewayProvider: kitdto.SuanliGatewayProvider,
+			VideoModelConfigs: map[string]kitdto.VideoModelConfig{
+				"video": {BillingMode: "per_second", UnitPrice: &price},
+			},
+		}},
+	}
+	expr, ok := suanliChannelBillingExpression(info, kitdto.SuanliVideoPluginKey, "video")
+	require.True(t, ok)
+	assert.Equal(t, `tier("suanli_video", u("seconds") * 0.42)`, expr)
+
+	info.ChannelMeta.ChannelSetting.VideoModelConfigs["video"] = kitdto.VideoModelConfig{BillingMode: "per_task", UnitPrice: &price}
+	expr, ok = suanliChannelBillingExpression(info, kitdto.SuanliVideoPluginKey, "video")
+	require.True(t, ok)
+	assert.Equal(t, `tier("suanli_video", u("tasks") * 0.42)`, expr)
+
+	_, ok = suanliChannelBillingExpression(info, "other-plugin", "video")
+	assert.False(t, ok)
+}
 
 func setupRelayChannelDB(t *testing.T) *gorm.DB {
 	t.Helper()

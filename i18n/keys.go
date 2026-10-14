@@ -6,6 +6,18 @@ package i18n
 
 // Errors returned to AI clients
 const (
+	// Compatibility keys retained for the Julong administration API. These
+	// messages are rendered by the console or fall back to the key when the
+	// backend locale does not define a translation.
+	MsgInvalidParams               = "common.invalid_params"
+	MsgGenerateFailed              = "common.generate_failed"
+	MsgUuidDuplicate               = "common.uuid_duplicate"
+	MsgUserInputInvalid            = "user.input_invalid"
+	MsgUserNoPermissionSameLevel   = "user.no_permission_same_level"
+	MsgUserNoPermissionHigherLevel = "user.no_permission_higher_level"
+	MsgUserTransferSuccess         = "user.transfer_success"
+	MsgUserQuotaChangeZero         = "user.quota_change_zero"
+
 	MsgDatabaseError          = "common.database_error"
 	MsgAuthUserBanned         = "auth.user_banned"
 	MsgTokenGetInfoFailed     = "token.get_info_failed"

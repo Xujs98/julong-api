@@ -13,16 +13,16 @@ var (
 	ErrUserQuotaPermission        = errors.New("cannot adjust quota for this user role")
 )
 
-// UserQuotaAdjustment is the immutable database snapshot of a committed manual
+// ManualUserQuotaAdjustment is the immutable database snapshot of a committed manual
 // adjustment. Pending relay deductions in the quota cache are not part of it.
-type UserQuotaAdjustment struct {
+type ManualUserQuotaAdjustment struct {
 	UserID   int
 	Username string
 	Before   int
 	After    int
 }
 
-func AdjustUserQuota(userID, operatorRole int, mode string, value int) (*UserQuotaAdjustment, error) {
+func AdjustUserQuota(userID, operatorRole int, mode string, value int) (*ManualUserQuotaAdjustment, error) {
 	if userID <= 0 || (mode != "add" && mode != "subtract" && mode != "override") {
 		return nil, ErrInvalidUserQuotaAdjustment
 	}
@@ -33,7 +33,7 @@ func AdjustUserQuota(userID, operatorRole int, mode string, value int) (*UserQuo
 		return nil, ErrWalletQuotaLimitExceeded
 	}
 
-	var adjustment UserQuotaAdjustment
+	var adjustment ManualUserQuotaAdjustment
 	err := DB.Transaction(func(tx *gorm.DB) error {
 		var user User
 		if err := lockForUpdate(tx).First(&user, userID).Error; err != nil {
@@ -67,7 +67,7 @@ func AdjustUserQuota(userID, operatorRole int, mode string, value int) (*UserQuo
 				return gorm.ErrRecordNotFound
 			}
 		}
-		adjustment = UserQuotaAdjustment{UserID: user.Id, Username: user.Username, Before: user.Quota, After: after}
+		adjustment = ManualUserQuotaAdjustment{UserID: user.Id, Username: user.Username, Before: user.Quota, After: after}
 		return nil
 	})
 	if err != nil {

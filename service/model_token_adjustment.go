@@ -2,6 +2,7 @@ package service
 
 import (
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/types"
 )
@@ -73,14 +74,9 @@ func modelTokenMultiplierForVariable(multiplier float64, used bool) float64 {
 	return multiplier
 }
 
-func attachModelTokenAdjustmentToOther(other map[string]interface{}, audit *types.ModelTokenAdjustmentAudit) {
+func attachModelTokenAdjustmentToOther(other *model.LogOther, audit *types.ModelTokenAdjustmentAudit) {
 	if other == nil || audit == nil {
 		return
 	}
-	adminInfo, ok := other["admin_info"].(map[string]interface{})
-	if !ok || adminInfo == nil {
-		adminInfo = map[string]interface{}{}
-		other["admin_info"] = adminInfo
-	}
-	adminInfo["model_token_adjustment"] = audit
+	other.SetAdmin("model_token_adjustment", audit)
 }

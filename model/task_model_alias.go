@@ -7,6 +7,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/pkg/jsplugin"
+	"github.com/QuantumNous/new-api/relaykit/dto"
 )
 
 // TaskAliasTarget is one mapping-derived alias after cross-channel aggregation.
@@ -16,6 +17,7 @@ type TaskAliasTarget struct {
 	Alias     string
 	Declared  string
 	PluginKey string
+	Dynamic   bool
 }
 
 type taskAliasView struct {
@@ -92,7 +94,7 @@ func buildTaskAliasView(generation *jsplugin.RoutingGeneration) *taskAliasView {
 	}
 
 	var channels []Channel
-	err := DB.Select("id", "type", "models", "model_mapping").
+	err := DB.Select("id", "type", "models", "model_mapping", "setting").
 		Where("status = ?", common.ChannelStatusEnabled).
 		Find(&channels).Error
 	if err != nil {
@@ -103,6 +105,17 @@ func buildTaskAliasView(generation *jsplugin.RoutingGeneration) *taskAliasView {
 	drafts := make(map[string]*taskAliasDraft)
 	for i := range channels {
 		channel := &channels[i]
+		setting := channel.GetSetting()
+		if setting.GatewayProvider == dto.SuanliGatewayProvider && setting.BindsTaskPlugin(dto.SuanliVideoPluginKey) {
+			if _, available := generation.Get(dto.SuanliVideoPluginKey); available {
+				for _, name := range channel.GetModels() {
+					if profile, configured := setting.VideoModelConfigs[name]; configured && profile.Enabled != nil && !*profile.Enabled {
+						continue
+					}
+					view.byFold[jsplugin.ASCIIFold(name)] = TaskAliasTarget{Alias: name, Declared: name, PluginKey: dto.SuanliVideoPluginKey, Dynamic: true}
+				}
+			}
+		}
 		mappingJSON := channel.GetModelMapping()
 		if mappingJSON == "" || mappingJSON == "{}" {
 			continue
@@ -178,6 +191,9 @@ func buildTaskAliasView(generation *jsplugin.RoutingGeneration) *taskAliasView {
 					declared = name
 				}
 			}
+		}
+		if existing, ok := view.byFold[jsplugin.ASCIIFold(alias)]; ok && existing.Dynamic {
+			continue
 		}
 		view.byFold[jsplugin.ASCIIFold(alias)] = TaskAliasTarget{
 			Alias:     alias,

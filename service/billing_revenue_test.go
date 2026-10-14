@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
@@ -133,4 +134,26 @@ func TestBuildBillingRevenueAuditPreservesDiscountsAsNegativeRevenue(t *testing.
 	require.NotNil(t, audit)
 	require.NotNil(t, audit.GroupSpecialRatio)
 	assert.Equal(t, int64(-20), *audit.GroupSpecialRatio)
+}
+
+func TestJulongBillingAuditsKeepAdminVisibility(t *testing.T) {
+	other := model.NewLogOther()
+	other.SetPublic("group_ratio", 0.18)
+	other.SetAdmin("use_channel", []string{"7"})
+	revenue := int64(55)
+	revenueAudit := &types.BillingRevenueAudit{GroupSpecialRatio: &revenue}
+	adjustmentAudit := &types.ModelTokenAdjustmentAudit{Actual: types.ModelTokenUsage{Input: 100}, Billed: types.ModelTokenUsage{Input: 110}}
+
+	attachBillingRevenueToOther(other, revenueAudit)
+	attachModelTokenAdjustmentToOther(other, adjustmentAudit)
+
+	snapshot := other.Snapshot()
+	assert.NotContains(t, snapshot, "billing_revenue")
+	assert.NotContains(t, snapshot, "model_token_adjustment")
+	assert.Equal(t, 0.18, snapshot["group_ratio"])
+	admin, ok := snapshot["admin_info"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, []string{"7"}, admin["use_channel"])
+	assert.Same(t, revenueAudit, admin["billing_revenue"])
+	assert.Same(t, adjustmentAudit, admin["model_token_adjustment"])
 }

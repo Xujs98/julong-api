@@ -111,12 +111,23 @@ func createLoginSession(userID int, expectedAuthVersion int64, loginMethod, ip, 
 	if issuanceCount >= int64(common.UserSessionIssuanceLimit) {
 		return nil, model.ErrUserSessionIssuanceLimit
 	}
-	session, refreshSecret, err := newLoginSession(userID, user.AuthVersion, loginMethod, ip, userAgent)
+	session, refreshSecret, err := newLoginSession(userID, user.AuthVersion, loginMethod, ip, userAgent, deviceID)
 	if err != nil {
 		return nil, err
 	}
 	if err := model.CreateUserSession(session); err != nil {
 		return nil, err
+	}
+	if deviceID != "" {
+		blocked, err := model.IsUserDeviceBlocked(userID, deviceID)
+		if err != nil {
+			_, _ = model.RevokeUserSession(userID, session.SID, "device_check_failed")
+			return nil, err
+		}
+		if blocked {
+			_, _ = model.RevokeUserSession(userID, session.SID, "device_blocked")
+			return nil, model.ErrUserDeviceBlocked
+		}
 	}
 	bundle, err := issueAuthBundle(session, session.SID+"."+refreshSecret, true)
 	if err != nil {
@@ -126,7 +137,11 @@ func createLoginSession(userID int, expectedAuthVersion int64, loginMethod, ip, 
 	return bundle, nil
 }
 
-func newLoginSession(userID int, authVersion int64, loginMethod, ip, userAgent string) (*model.UserSession, string, error) {
+func newLoginSession(userID int, authVersion int64, loginMethod, ip, userAgent string, deviceIDs ...string) (*model.UserSession, string, error) {
+	deviceID := ""
+	if len(deviceIDs) > 0 {
+		deviceID = deviceIDs[0]
+	}
 	refreshSecret, err := common.GenerateRandomCharsKey(64)
 	if err != nil {
 		return nil, "", err
@@ -150,26 +165,7 @@ func newLoginSession(userID int, authVersion int64, loginMethod, ip, userAgent s
 	if session.LoginMethod == "" {
 		session.LoginMethod = "unknown"
 	}
-	if err := model.CreateUserSession(session); err != nil {
-		return nil, err
-	}
-	if deviceID != "" {
-		blocked, blockedErr := model.IsUserDeviceBlocked(userID, deviceID)
-		if blockedErr != nil {
-			_, _ = model.RevokeUserSession(userID, session.SID, "device_check_failed")
-			return nil, blockedErr
-		}
-		if blocked {
-			_, _ = model.RevokeUserSession(userID, session.SID, "device_blocked")
-			return nil, model.ErrUserDeviceBlocked
-		}
-	}
-	bundle, err := issueAuthBundle(session, session.SID+"."+refreshSecret, true)
-	if err != nil {
-		_, _ = model.RevokeUserSession(userID, session.SID, "token_issue_failed")
-		return nil, err
-	}
-	return bundle, nil
+	return session, refreshSecret, nil
 }
 
 func ValidateLoginSession(identity AuthIdentity) (*model.UserSession, *model.UserBase, error) {

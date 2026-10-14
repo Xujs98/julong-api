@@ -304,7 +304,11 @@ func (s *responsesWSSession) runCall(c *gin.Context, state *responsesWSCallState
 				}
 				billingPrepared = true
 			} else {
-				info.PriceData.GroupRatioInfo = helper.HandleGroupRatio(c, info)
+				groupRatioInfo, groupErr := helper.HandleGroupRatio(c, info)
+				if groupErr != nil {
+					return types.NewError(groupErr, types.ErrorCodeModelPriceError, types.ErrOptionWithSkipRetry())
+				}
+				info.PriceData.GroupRatioInfo = groupRatioInfo
 				if apiErr = service.PrepareTieredBillingForSelectedGroup(c, info); apiErr != nil {
 					return apiErr
 				}

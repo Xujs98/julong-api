@@ -224,8 +224,10 @@ func InitDB() (err error) {
 			//_, _ = sqlDB.Exec("ALTER TABLE channels MODIFY model_mapping TEXT;") // TODO: delete this line when most users have upgraded
 		}
 		common.SysLog(common.LogText("database migration started"))
-		err = migrateDB()
-		return err
+		if err := migrateDB(); err != nil {
+			return err
+		}
+		return EnsureLegacyAccessTokenRetireAt(common.GetTimestamp())
 	} else {
 		common.FatalLog(err)
 	}
@@ -352,6 +354,7 @@ func migrateDB() error {
 		&PasskeyCredential{},
 		&Option{},
 		&LoginEncryptionKey{},
+		&UserAccessToken{},
 		&Redemption{},
 		&Ability{},
 		&Log{},
@@ -361,6 +364,7 @@ func migrateDB() error {
 		&Task{},
 		&TaskPlugin{},
 		&Model{},
+		&ModelDocumentTemplate{},
 		&Vendor{},
 		&PrefillGroup{},
 		&Setup{},
@@ -381,6 +385,7 @@ func migrateDB() error {
 		&LedgerEntry{},
 		&ErrorReport{},
 		&ImageGenerationLog{},
+		&MediaAsset{},
 		&UserRequestContentLog{},
 		&EmailCampaign{},
 		&EmailDelivery{},
@@ -388,6 +393,7 @@ func migrateDB() error {
 		&InvoiceApplication{},
 		&InvoiceItem{},
 		&InvoiceAttachment{},
+		&InvoicePaymentProof{},
 	)
 	if err != nil {
 		return err
@@ -417,6 +423,12 @@ func migrateDB() error {
 }
 
 func migrateDBFast() error {
+	if err := migrateTokenKeyUniqueness(DB); err != nil {
+		return err
+	}
+	if err := migratePrefillGroupUniqueness(DB); err != nil {
+		return err
+	}
 	if err := prepareInvoiceItemMigration(); err != nil {
 		return err
 	}
@@ -437,6 +449,11 @@ func migrateDBFast() error {
 		{&ExternalIdentityClaim{}, "ExternalIdentityClaim"},
 		{&PasskeyCredential{}, "PasskeyCredential"},
 		{&Option{}, "Option"},
+		{&LoginEncryptionKey{}, "LoginEncryptionKey"},
+		{&UserAccessToken{}, "UserAccessToken"},
+		{&TaskPlugin{}, "TaskPlugin"},
+		{&CasbinRule{}, "CasbinRule"},
+		{&AuthzRole{}, "AuthzRole"},
 		{&Redemption{}, "Redemption"},
 		{&Ability{}, "Ability"},
 		{&Log{}, "Log"},
@@ -445,6 +462,7 @@ func migrateDBFast() error {
 		{&QuotaData{}, "QuotaData"},
 		{&Task{}, "Task"},
 		{&Model{}, "Model"},
+		{&ModelDocumentTemplate{}, "ModelDocumentTemplate"},
 		{&Vendor{}, "Vendor"},
 		{&PrefillGroup{}, "PrefillGroup"},
 		{&Setup{}, "Setup"},
@@ -464,6 +482,7 @@ func migrateDBFast() error {
 		{&LedgerEntry{}, "LedgerEntry"},
 		{&BlockedDevice{}, "BlockedDevice"},
 		{&ImageGenerationLog{}, "ImageGenerationLog"},
+		{&MediaAsset{}, "MediaAsset"},
 		{&UserRequestContentLog{}, "UserRequestContentLog"},
 		{&EmailCampaign{}, "EmailCampaign"},
 		{&EmailDelivery{}, "EmailDelivery"},
@@ -471,6 +490,7 @@ func migrateDBFast() error {
 		{&InvoiceApplication{}, "InvoiceApplication"},
 		{&InvoiceItem{}, "InvoiceItem"},
 		{&InvoiceAttachment{}, "InvoiceAttachment"},
+		{&InvoicePaymentProof{}, "InvoicePaymentProof"},
 	}
 	// 动态计算migration数量，确保errChan缓冲区足够大
 	errChan := make(chan error, len(migrations))

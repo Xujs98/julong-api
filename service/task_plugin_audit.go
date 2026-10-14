@@ -8,16 +8,21 @@ import (
 )
 
 // TaskExecutionSnapshotFromContext captures immutable request and plugin
-// provenance at submission time. It never copies plugin source or payloads.
+// provenance at submission time. Request previews are bounded and sanitized;
+// plugin source and channel credentials are never copied.
 func TaskExecutionSnapshotFromContext(ctx *gin.Context) *model.TaskExecutionSnapshot {
 	if ctx == nil {
 		return nil
 	}
 	snapshot := &model.TaskExecutionSnapshot{
 		RequestID: ctx.GetString(common.RequestIdKey),
+		TokenName: ctx.GetString("token_name"),
 	}
 	if ctx.Request != nil && ctx.Request.URL != nil {
 		snapshot.RequestPath = ctx.Request.URL.Path
+	}
+	if request, exists := ctx.Get("task_request"); exists {
+		snapshot.RequestBody, snapshot.RequestBodyTruncated = TaskRequestSnapshot(request)
 	}
 
 	pinnedValue, exists := ctx.Get(pluginruntime.ContextKeyPinnedPlugin)
@@ -43,7 +48,7 @@ func TaskExecutionSnapshotFromContext(ctx *gin.Context) *model.TaskExecutionSnap
 		}
 	}
 
-	if snapshot.RequestID == "" && snapshot.RequestPath == "" && snapshot.TaskPlugin == nil {
+	if snapshot.RequestID == "" && snapshot.RequestPath == "" && snapshot.TokenName == "" && len(snapshot.RequestBody) == 0 && snapshot.TaskPlugin == nil {
 		return nil
 	}
 	return snapshot

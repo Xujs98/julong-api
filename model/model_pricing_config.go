@@ -66,7 +66,7 @@ var ErrModelPricingConflict = errors.New("model pricing changed; reload before s
 var modelPricingOptionKeys = []string{
 	"AudioCompletionRatio", "AudioRatio", "CacheRatio", "CompletionRatio",
 	"CreateCacheRatio", "ImageRatio", "ModelPrice", "ModelRatio",
-	"billing_setting.billing_expr", "billing_setting.billing_mode", billing_setting.PluginBillingExprOption,
+	"billing_setting.billing_expr", "billing_setting.billing_mode", "billing_setting.per_request_subscription_allowed", billing_setting.PluginBillingExprOption,
 }
 
 var modelPricingMutationMu sync.Mutex
@@ -402,6 +402,12 @@ func validateModelPricing(name string, values, previous PricingValues) error {
 		}
 		if !IsModelPricingOption(key) {
 			return fmt.Errorf("unsupported pricing field: %s", key)
+		}
+		if key == "billing_setting.per_request_subscription_allowed" {
+			if _, ok := value.(bool); !ok {
+				return fmt.Errorf("%s must be a boolean", key)
+			}
+			continue
 		}
 		if key == "billing_setting.billing_mode" {
 			if value != "ratio" && value != "tiered_expr" {

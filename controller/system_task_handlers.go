@@ -22,6 +22,7 @@ func RegisterScheduledSystemTasks() {
 	service.RegisterSystemTaskHandler(midjourneyPollHandler{})
 	service.RegisterSystemTaskHandler(asyncTaskPollHandler{})
 	service.RegisterSystemTaskHandler(imageStorageCleanupHandler{})
+	service.RegisterSystemTaskHandler(mediaAssetCleanupHandler{})
 	service.RegisterSystemTaskHandler(emailCampaignDispatchHandler{})
 	service.RegisterSystemTaskHandler(subscriptionExpiryEmailHandler{})
 	service.RegisterSystemTaskHandler(dashboardReportEmailHandler{})
@@ -306,6 +307,23 @@ func (imageStorageCleanupHandler) Run(ctx context.Context, task *model.SystemTas
 		return
 	}
 	finishSystemTaskHandler(task, runnerID, model.SystemTaskStatusSucceeded, result, nil)
+}
+
+type mediaAssetCleanupHandler struct{}
+
+func (mediaAssetCleanupHandler) Type() string { return model.SystemTaskTypeMediaAssetCleanup }
+func (mediaAssetCleanupHandler) Enabled() bool {
+	return model.HasExpiredMediaAssets(common.GetTimestamp())
+}
+func (mediaAssetCleanupHandler) Interval() time.Duration { return time.Hour }
+func (mediaAssetCleanupHandler) NewPayload() any         { return nil }
+func (mediaAssetCleanupHandler) Run(ctx context.Context, task *model.SystemTask, runnerID string) {
+	deleted, err := service.CleanupExpiredMediaAssets(ctx)
+	if err != nil {
+		finishSystemTaskHandler(task, runnerID, model.SystemTaskStatusFailed, nil, err)
+		return
+	}
+	finishSystemTaskHandler(task, runnerID, model.SystemTaskStatusSucceeded, map[string]any{"deleted_count": deleted}, nil)
 }
 
 func finishSystemTaskHandler(task *model.SystemTask, runnerID string, status model.SystemTaskStatus, result any, runErr error) {

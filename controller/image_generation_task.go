@@ -26,7 +26,7 @@ const maxConcurrentImageGenerationTasks = 16
 
 var imageGenerationTaskSlots = make(chan struct{}, maxConcurrentImageGenerationTasks)
 var imageGenerationRelayRunner = func(c *gin.Context) {
-	Relay(c, types.RelayFormatOpenAIImage)
+	RelayTaskPluginEndpoint(c, func(c *gin.Context) { Relay(c, types.RelayFormatOpenAIImage) })
 }
 
 func RelayImageGeneration(c *gin.Context) {

@@ -6,7 +6,6 @@ import (
 	"math"
 	"net/http"
 	"slices"
-	"sort"
 	"strconv"
 	"strings"
 
@@ -121,6 +120,9 @@ func GetOptions(c *gin.Context) {
 		"billing_setting.billing_mode": billing_setting.GetBillingModeCopy(),
 		"billing_setting.billing_expr": billing_setting.GetBillingExprCopy(),
 	} {
+		if c.GetInt("role") < common.RoleRootUser && !optionAllowedForSystemSettingsAction(key, action) {
+			continue
+		}
 		encoded, err := common.Marshal(values)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": err.Error()})
@@ -142,6 +144,22 @@ func GetOptions(c *gin.Context) {
 type OptionUpdateRequest struct {
 	Key   string `json:"key"`
 	Value any    `json:"value"`
+}
+
+func recordPasskeyDomainAudit(c *gin.Context, change *model.PasskeyDomainChange, confirmed bool, err error) {
+	params := map[string]any{"confirmed": confirmed}
+	if change != nil {
+		params["removed_rp_ids"] = change.RemovedRPIDs
+		params["affected_credentials"] = change.AffectedCredentials
+		params["unknown_credentials"] = change.UnknownCredentials
+	}
+	if err != nil {
+		params["success"] = false
+		params["error"] = err.Error()
+	} else {
+		params["success"] = true
+	}
+	recordManageAudit(c, "passkey.domain_update", params)
 }
 
 func UpdatePasskeyDomains(c *gin.Context) {
@@ -222,6 +240,12 @@ func UpdateOption(c *gin.Context) {
 	case "QuotaForInviter", "QuotaForInvitee":
 		if isPositiveOptionValue(option.Value.(string)) && !operation_setting.IsPaymentComplianceConfirmed() {
 			common.ApiErrorT(c, "Payment, redemption, subscription, and invitation reward features are disabled. The administrator must confirm compliance terms before enabling them.")
+			return
+		}
+	case "MediaAssetRetentionDays":
+		retentionDays, parseErr := strconv.Atoi(option.Value.(string))
+		if parseErr != nil || retentionDays < 1 || retentionDays > 365 {
+			common.ApiErrorStatus(c, http.StatusBadRequest, common.NewMessage("Media asset retention must be between 1 and 365 days"))
 			return
 		}
 	default:
@@ -436,6 +460,11 @@ func UpdateOption(c *gin.Context) {
 	case "invoice_setting.enabled":
 		if option.Value != "true" && option.Value != "false" {
 			common.ApiErrorMsg(c, "自助发票开关值无效")
+			return
+		}
+	case "invoice_setting.allowed_sources":
+		if err := operation_setting.ValidateInvoiceAllowedSources(option.Value.(string)); err != nil {
+			common.ApiErrorStatus(c, http.StatusBadRequest, common.NewMessage(err.Error()))
 			return
 		}
 	case "invoice_setting.minimum_amount":

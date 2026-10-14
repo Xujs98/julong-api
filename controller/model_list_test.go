@@ -546,7 +546,7 @@ func TestSetupLoginRejectsBlockedIPForCommonUser(t *testing.T) {
 
 	router := gin.New()
 	router.GET("/", func(c *gin.Context) {
-		setupLogin(user, c)
+		setupLogin(user, nil, c)
 	})
 
 	recorder := httptest.NewRecorder()

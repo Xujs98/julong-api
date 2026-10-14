@@ -40,6 +40,7 @@ type Model struct {
 	Tags               string         `json:"tags,omitempty" gorm:"type:varchar(255)"`
 	VendorID           int            `json:"vendor_id,omitempty" gorm:"index"`
 	Endpoints          string         `json:"endpoints,omitempty" gorm:"type:text"`
+	DocumentTemplateID int            `json:"document_template_id" gorm:"index"`
 	SupportedEndpoints []string       `json:"supported_endpoints,omitempty" gorm:"-"`
 	Status             int            `json:"status" gorm:"default:1"`
 	SyncOfficial       int            `json:"sync_official" gorm:"default:1"`
@@ -235,6 +236,9 @@ func SearchModelsWithChannels(keyword, vendor, status, syncOfficial string, offs
 
 func (mi *Model) Insert() error {
 	return metadataTransaction(func(tx *gorm.DB) error {
+		if err := validateModelDocumentTemplate(tx, mi.DocumentTemplateID); err != nil {
+			return err
+		}
 		if err := validateModelVendor(tx, mi.VendorID); err != nil {
 			return err
 		}
@@ -260,12 +264,15 @@ func IsModelNameDuplicated(id int, name string) (bool, error) {
 
 func (mi *Model) Update() error {
 	return metadataTransaction(func(tx *gorm.DB) error {
+		if err := validateModelDocumentTemplate(tx, mi.DocumentTemplateID); err != nil {
+			return err
+		}
 		if err := validateModelVendor(tx, mi.VendorID); err != nil {
 			return err
 		}
 		mi.UpdatedTime = common.GetTimestamp()
 		return tx.Model(&Model{}).Where("id = ?", mi.Id).
-			Select("model_name", "description", "icon", "tags", "vendor_id", "endpoints", "status", "sync_official", "name_rule", "updated_time").Updates(mi).Error
+			Select("model_name", "description", "icon", "tags", "vendor_id", "endpoints", "document_template_id", "status", "sync_official", "name_rule", "updated_time").Updates(mi).Error
 	})
 }
 

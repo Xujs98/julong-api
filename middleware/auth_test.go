@@ -33,7 +33,7 @@ func setupDashboardAuthMiddlewareTest(t *testing.T) {
 	previousSecret := common.SessionSecret
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&model.User{}, &model.UserSession{}, &model.BlockedIP{}))
+	require.NoError(t, db.AutoMigrate(&model.User{}, &model.UserSession{}, &model.BlockedIP{}, &model.Option{}, &model.UserAccessToken{}, &model.UserPresence{}, &model.AuditLog{}))
 	model.DB = db
 	model.LOG_DB = db
 	common.SetMainDatabaseType(common.DatabaseTypeSQLite)
@@ -404,7 +404,8 @@ func TestAccessTokenIdentityAndSingleLookup(t *testing.T) {
 	router.GET("/api/user/self", UserAuth(), func(c *gin.Context) {
 		_, session := GetSessionAuthIdentity(c)
 		identity, stepUp := GetStepUpIdentity(c)
-		c.JSON(http.StatusOK, gin.H{"session": session, "step_up": stepUp, "identity": identity})
+		scopes, _ := c.Get("access_token_scopes")
+		c.JSON(http.StatusOK, gin.H{"session": session, "step_up": stepUp, "identity": identity, "scopes": scopes, "legacy": c.GetBool("access_token_legacy"), "token_id": c.GetInt("access_token_id")})
 	})
 
 	var queries []string
@@ -440,12 +441,22 @@ func TestAccessTokenIdentityAndSingleLookup(t *testing.T) {
 				Session  bool                 `json:"session"`
 				StepUp   bool                 `json:"step_up"`
 				Identity service.AuthIdentity `json:"identity"`
+				Scopes   []string             `json:"scopes"`
+				Legacy   bool                 `json:"legacy"`
+				TokenID  int                  `json:"token_id"`
 			}
 			require.NoError(t, common.Unmarshal(response.Body.Bytes(), &body))
 			assert.False(t, body.Session, "an access token is never a browser session")
 			assert.Equal(t, test.stepUp, body.StepUp)
 			if test.stepUp {
 				assert.Equal(t, service.AuthIdentity{UserID: user.Id, SessionID: model.AccessTokenSessionID(token.Id), UserAuthVersion: user.AuthVersion, SessionVersion: model.AccessTokenSessionVersion}, body.Identity)
+				assert.Equal(t, []string{"profile:read"}, body.Scopes)
+				assert.False(t, body.Legacy)
+				assert.Equal(t, token.Id, body.TokenID)
+			} else {
+				assert.Empty(t, body.Scopes)
+				assert.True(t, body.Legacy)
+				assert.Zero(t, body.TokenID)
 			}
 			// The access audit and authentication share one lookup: the
 			// credential query plus the owner's user row.

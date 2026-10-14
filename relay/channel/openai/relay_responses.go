@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
@@ -35,6 +36,8 @@ func OaiResponsesHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http
 	if oaiError := responsesResponse.GetOpenAIError(); oaiError != nil && oaiError.Type != "" {
 		return nil, types.WithOpenAIError(*oaiError, resp.StatusCode)
 	}
+	info.ObserveResponseModel(responsesResponse.Model)
+	responseBody = rewriteSGLangResponsesCreatedAt(info, responseBody, "created_at", responsesResponse.CreatedAt)
 
 	service.CaptureResponsesImageGenerationResult(c, &responsesResponse)
 
@@ -74,6 +77,11 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 
 	defer service.CloseResponseBodyGracefully(resp)
 
+	var usage = &dto.Usage{}
+	var responseTextBuilder strings.Builder
+	imageCounter := &relaycommon.ImageGenerationCallCounter{}
+	imageCommitted := false
+
 	accumulator := service.NewResponsesUsageAccumulator(info)
 
 	helper.StreamScannerHandler(c, resp, info, func(data string, sr *helper.StreamResult) {
@@ -84,6 +92,9 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 			logger.LogError(c, common.LogText("failed to unmarshal stream response: %s", err.Error()))
 			sr.Error(err)
 			return
+		}
+		if streamResponse.Response != nil {
+			data = string(rewriteSGLangResponsesCreatedAt(info, []byte(data), "response.created_at", streamResponse.Response.CreatedAt))
 		}
 		sendResponsesStreamData(c, streamResponse, data)
 		switch streamResponse.Type {
@@ -106,8 +117,10 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 					}
 				}
 				if !imageCommitted {
-					if relaycommon.IsNonBillableResponsesStatus(streamResponse.Response.Status) {
-						imageCounter.Reset()
+					var responseStatus string
+					_ = common.Unmarshal(streamResponse.Response.Status, &responseStatus)
+					if isNonBillableResponsesStatus(responseStatus) {
+						imageCounter = &relaycommon.ImageGenerationCallCounter{}
 						imageCounter.Commit(info)
 						imageCommitted = true
 					} else {
@@ -125,7 +138,7 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 			}
 		case "response.failed", "response.incomplete", "response.cancelled", "response.canceled":
 			if !imageCommitted {
-				imageCounter.Reset()
+				imageCounter = &relaycommon.ImageGenerationCallCounter{}
 				imageCounter.Commit(info)
 				imageCommitted = true
 			}
@@ -155,7 +168,23 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 
 	common.SetContextKey(c, constant.ContextKeyResponseStreamStatus, info.StreamStatus)
 	info.StreamStatus.RequireTerminal()
-	return accumulator.Finish(), nil
+	if usage.CompletionTokens == 0 && responseTextBuilder.Len() > 0 {
+		usage.CompletionTokens = service.CountTokenInput(responseTextBuilder.String(), info.UpstreamModelName)
+	}
+	if usage.PromptTokens == 0 && usage.CompletionTokens != 0 {
+		usage.PromptTokens = info.GetEstimatePromptTokens()
+	}
+	usage.TotalTokens = usage.PromptTokens + usage.CompletionTokens
+	return usage, nil
+}
+
+func isNonBillableResponsesStatus(status string) bool {
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case "failed", "incomplete", "cancelled", "canceled":
+		return true
+	default:
+		return false
+	}
 }
 
 func rewriteSGLangResponsesCreatedAt(info *relaycommon.RelayInfo, payload []byte, path string, createdAt dto.IntValue) []byte {

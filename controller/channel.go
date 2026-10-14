@@ -560,6 +560,19 @@ func validateChannel(channel *model.Channel, isAdd bool) error {
 	}
 
 	setting := channel.GetSetting()
+	if err := setting.ValidateVideoModelConfigs(relaycommon.MaxTaskDurationSeconds); err != nil {
+		return err
+	}
+	if setting.GatewayProvider == dto.SuanliGatewayProvider {
+		if channel.Type != constant.ChannelTypeNewAPI || !setting.BindsTaskPlugin(dto.SuanliVideoPluginKey) {
+			return fmt.Errorf("Suanli AI requires a New API channel bound to the Suanli video plugin")
+		}
+		for name := range setting.VideoModelConfigs {
+			if !slices.Contains(channel.GetModels(), name) {
+				return fmt.Errorf("video model configuration %q must belong to the channel model list", name)
+			}
+		}
+	}
 	if channel.Type != constant.ChannelTypeNewAPI && len(setting.TaskExtendPluginKeys) > 0 {
 		return fmt.Errorf("task_extend_plugin_keys is only supported on New API channels")
 	}

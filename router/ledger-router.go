@@ -11,14 +11,14 @@ func registerLedgerRoutes(apiRouter *gin.RouterGroup) {
 	ledgerRoute := apiRouter.Group("/ledger")
 	ledgerRoute.Use(middleware.DisableCache(), middleware.AdminAuth())
 	{
-		ledgerRoute.GET("", middleware.RequirePermission(authz.LedgerRead), controller.GetLedgerEntries)
-		ledgerRoute.GET("/summary", middleware.RequirePermission(authz.LedgerRead), controller.GetLedgerSummary)
-		ledgerRoute.GET("/settings", middleware.RequirePermission(authz.LedgerRead), controller.GetLedgerSettings)
-		ledgerRoute.GET("/export", middleware.RequirePermission(authz.LedgerRead), controller.ExportLedgerEntries)
-		ledgerRoute.POST("", middleware.RequirePermission(authz.LedgerWrite), controller.CreateLedgerEntry)
-		ledgerRoute.PUT("/settings", middleware.RequirePermission(authz.LedgerWrite), controller.UpdateLedgerSettings)
-		ledgerRoute.PUT("/:id", middleware.RequirePermission(authz.LedgerWrite), controller.UpdateLedgerEntry)
-		ledgerRoute.POST("/batch-delete", middleware.RequirePermission(authz.LedgerDelete), controller.DeleteLedgerEntries)
-		ledgerRoute.DELETE("/:id", middleware.RequirePermission(authz.LedgerDelete), controller.DeleteLedgerEntry)
+		handlePermissionRoute(ledgerRoute, "GET", "", authz.LedgerRead, controller.GetLedgerEntries)
+		handlePermissionRoute(ledgerRoute, "GET", "/summary", authz.LedgerRead, controller.GetLedgerSummary)
+		handlePermissionRoute(ledgerRoute, "GET", "/settings", authz.LedgerRead, controller.GetLedgerSettings)
+		handlePermissionRoute(ledgerRoute, "GET", "/export", authz.LedgerRead, controller.ExportLedgerEntries)
+		handlePermissionRoute(ledgerRoute, "POST", "", authz.LedgerWrite, controller.CreateLedgerEntry)
+		handlePermissionRoute(ledgerRoute, "PUT", "/settings", authz.LedgerWrite, controller.UpdateLedgerSettings)
+		handlePermissionRoute(ledgerRoute, "PUT", "/:id", authz.LedgerWrite, controller.UpdateLedgerEntry)
+		handlePermissionRoute(ledgerRoute, "POST", "/batch-delete", authz.LedgerDelete, controller.DeleteLedgerEntries)
+		handlePermissionRoute(ledgerRoute, "DELETE", "/:id", authz.LedgerDelete, controller.DeleteLedgerEntry)
 	}
 }

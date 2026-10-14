@@ -39,7 +39,7 @@ func setupAccessTokenAudit(t *testing.T) (*model.User, string) {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, i18n.Init())
-	require.NoError(t, db.AutoMigrate(&model.User{}, &model.UserSession{}, &model.Log{}, &model.AuditLog{}, &model.CasbinRule{}, &model.AuthzRole{}, &model.UserAccessToken{}, &model.Option{},
+	require.NoError(t, db.AutoMigrate(&model.User{}, &model.UserSession{}, &model.Log{}, &model.AuditLog{}, &model.CasbinRule{}, &model.AuthzRole{}, &model.UserAccessToken{}, &model.Option{}, &model.BlockedIP{}, &model.BlockedDevice{},
 		&model.AuthFlow{}, &model.TwoFA{}, &model.TwoFABackupCode{}, &model.PasskeyCredential{}, &model.UserOAuthBinding{}))
 	model.DB, model.LOG_DB = db, db
 	common.SetDatabaseTypes(common.DatabaseTypeSQLite, common.DatabaseTypeSQLite)
@@ -703,7 +703,7 @@ func TestAuditRoleSnapshotSurvivesActorChanges(t *testing.T) {
 	router := gin.New()
 	router.Use(middleware.RequestId(), middleware.AccessTokenAudit())
 	router.POST("/change-role", middleware.UserAuth(), func(c *gin.Context) {
-		recordLoginAudit(user, c)
+		recordLoginAudit(user, c, "")
 		recordUserSecurityAudit(c, user.Id, "user.security_verify", nil)
 		recordSubscriptionResetUserLogs(c, &model.SubscriptionResetResult{ResetCount: 1, PlanId: 1, PlanTitle: "Plan", AffectedUserIds: []int{999}}, auditOperatorInfo(c))
 		require.NoError(t, model.DB.Model(user).Update("role", common.RoleAdminUser).Error)
@@ -734,7 +734,7 @@ func TestSecurityAndOperationEventsUseAuditTable(t *testing.T) {
 	c.Set("username", user.Username)
 	c.Set("role", user.Role)
 	c.Set(common.RequestIdKey, "correlated-request")
-	recordLoginAudit(user, c)
+	recordLoginAudit(user, c, "")
 	for _, action := range []string{"user.passkey_register", "user.passkey_delete", "user.2fa_setup", "user.2fa_enable", "user.2fa_disable_self", "user.2fa_backup_codes", "user.security_verify"} {
 		recordUserSecurityAudit(c, user.Id, action, nil)
 	}
@@ -752,7 +752,7 @@ func TestSecurityAndOperationEventsUseAuditTable(t *testing.T) {
 	}
 	var logs []model.Log
 	require.NoError(t, model.LOG_DB.Find(&logs).Error)
-	assert.Len(t, logs, 4)
+	assert.Len(t, logs, 5)
 	_, err := model.DeleteOldLogBatch(context.Background(), time.Now().Unix()+1, 100)
 	require.NoError(t, err)
 	var count int64

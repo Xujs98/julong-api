@@ -1,27 +1,22 @@
 package controller
 
 import (
-	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"sort"
-	"strconv"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/i18n"
-	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/service/authz"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
 
 	"github.com/gin-gonic/gin"
+	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
@@ -33,21 +28,6 @@ func setupManageUserTestDB(t *testing.T) *gorm.DB {
 	previousDB, previousLogDB := model.DB, model.LOG_DB
 	previousRedisEnabled, previousSecret := common.RedisEnabled, common.SessionSecret
 	previousMainDatabaseType, previousLogDatabaseType := common.MainDatabaseType(), common.LogDatabaseType()
-	dialect := os.Getenv("TEST_MANAGE_USER_DIALECT")
-	if dialect == "" {
-		dialect = "sqlite"
-	}
-	databaseTypes := map[string]common.DatabaseType{
-		"sqlite": common.DatabaseTypeSQLite, "mysql": common.DatabaseTypeMySQL, "postgres": common.DatabaseTypePostgreSQL,
-	}
-	require.Contains(t, databaseTypes, dialect)
-	dsn := os.Getenv("TEST_" + strings.ToUpper(dialect) + "_DSN")
-	db, _ := newAuditTestDatabase(t, dialect, dsn)
-	logDB := db
-	if os.Getenv("TEST_MANAGE_USER_SEPARATE_LOG_DB") == "1" {
-		logDB, _ = newAuditTestDatabase(t, dialect, dsn)
-	}
-	model.DB, model.LOG_DB = db, logDB
 	common.RedisEnabled = false
 	common.SetDatabaseTypes(common.DatabaseTypeSQLite, common.DatabaseTypeSQLite)
 
@@ -56,7 +36,7 @@ func setupManageUserTestDB(t *testing.T) *gorm.DB {
 	require.NoError(t, err)
 	model.DB, model.LOG_DB = db, db
 	require.NoError(t, db.AutoMigrate(
-		&model.UserTag{}, &model.User{}, &model.UserSession{}, &model.BlockedDevice{}, &model.Token{}, &model.Log{}, &model.Option{}, &model.CasbinRule{}, &model.AuthzRole{},
+		&model.UserTag{}, &model.User{}, &model.UserSession{}, &model.BlockedIP{}, &model.BlockedDevice{}, &model.Token{}, &model.Log{}, &model.Option{}, &model.CasbinRule{}, &model.AuthzRole{},
 	))
 
 	t.Cleanup(func() {
@@ -67,23 +47,15 @@ func setupManageUserTestDB(t *testing.T) *gorm.DB {
 		if err == nil {
 			_ = sqlDB.Close()
 		}
-		if logDB != db {
-			sqlLogDB, err := logDB.DB()
-			if err == nil {
-				_ = sqlLogDB.Close()
-			}
-		}
 	})
-	require.NoError(t, db.AutoMigrate(&model.User{}, &model.UserSession{}, &model.CasbinRule{}, &model.AuthzRole{}, &model.AuthFlow{}, &model.TwoFA{}, &model.PasskeyCredential{}, &model.UserAccessToken{}))
-	require.NoError(t, logDB.AutoMigrate(&model.Log{}, &model.AuditLog{}))
-	versionQuery := "SELECT version()"
-	if dialect == "sqlite" {
-		versionQuery = "SELECT sqlite_version()"
-	}
-	var version string
-	require.NoError(t, db.Raw(versionQuery).Scan(&version).Error)
-	t.Logf("database: %s %s, separate log database: %v", dialect, version, logDB != db)
 	return db
+}
+
+func createQuotaTestOperator(t *testing.T, db *gorm.DB, role int) *model.User {
+	t.Helper()
+	operator := &model.User{Username: "test-operator", Password: "password", Role: role, Status: common.UserStatusEnabled, Group: "default", AuthVersion: 1}
+	require.NoError(t, db.Create(operator).Error)
+	return operator
 }
 
 func performManageUserRequest(t *testing.T, body string) *httptest.ResponseRecorder {

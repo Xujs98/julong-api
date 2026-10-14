@@ -411,7 +411,7 @@ func RecalculateTaskQuotaByTokens(ctx context.Context, task *model.Task, totalTo
 			}
 		}
 		if group == "" {
-			return
+			return false
 		}
 		finalGroupRatio = ratio_setting.GetGroupRatio(group)
 		if userGroupRatio, ok := ratio_setting.GetGroupGroupRatio(group, group); ok {

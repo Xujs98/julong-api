@@ -14,8 +14,8 @@ var StartTime = time.Now().Unix() // unit: second
 var Version = "v1.0.0-julong.1"   // release builds replace this value from VERSION via ldflags
 
 const (
-	UpstreamVersion = "v1.0.0-rc.22"
-	UpstreamCommit  = "afe16c64c"
+	UpstreamVersion = "v1.0.0-rc.44"
+	UpstreamCommit  = "ef60ef27f"
 )
 
 var SystemName = "矩龙-API"
@@ -122,6 +122,7 @@ var TokenGroupRatioDisplayMode = TokenGroupRatioDisplayModeActual
 var ImageGenerationLogEnabled = false
 var ImageGenerationLogRetentionDays = 30
 var ImageGenerationLogPollingIntervalSeconds = 15
+var MediaAssetRetentionDays = 1
 var ImageGenerationLogImageAuthWhitelistEnabled = false
 var ImageGenerationLogImageAuthWhitelist = ""
 var SupportContacts = "[]"

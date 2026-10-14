@@ -1,6 +1,7 @@
 package model
 
 import (
+	"maps"
 	"math"
 	"strconv"
 	"strings"
@@ -123,6 +124,7 @@ func InitOptionMap() {
 	common.OptionMap["Logo"] = common.Logo
 	common.OptionMap["ServerAddress"] = ""
 	common.OptionMap["TaskPublicAddress"] = system_setting.TaskPublicAddress
+	common.OptionMap["MediaAssetRetentionDays"] = strconv.Itoa(common.MediaAssetRetentionDays)
 	common.OptionMap["WorkerUrl"] = system_setting.WorkerUrl
 	common.OptionMap["WorkerValidKey"] = system_setting.WorkerValidKey
 	common.OptionMap["WorkerAllowHttpImageRequestEnabled"] = strconv.FormatBool(system_setting.WorkerAllowHttpImageRequestEnabled)
@@ -283,6 +285,9 @@ func validateOptionValue(key string, value string) error {
 	}
 	if key == operation_setting.LogMaxRangeDaysOptionKey {
 		return operation_setting.ValidateLogMaxRangeDays(value)
+	}
+	if key == "invoice_setting.allowed_sources" {
+		return operation_setting.ValidateInvoiceAllowedSources(value)
 	}
 	if key == "MaxTokenAutoGroups" {
 		return setting.ValidateMaxTokenAutoGroups(value)
@@ -540,6 +545,11 @@ func updateOptionMap(key string, value string) (err error) {
 		intValue, parseErr := strconv.Atoi(value)
 		if parseErr == nil && intValue >= 5 && intValue <= 3600 {
 			common.ImageGenerationLogPollingIntervalSeconds = intValue
+		}
+	case "MediaAssetRetentionDays":
+		intValue, parseErr := strconv.Atoi(value)
+		if parseErr == nil && intValue >= 1 && intValue <= 365 {
+			common.MediaAssetRetentionDays = intValue
 		}
 	case "ImageGenerationLogImageAuthWhitelist":
 		common.ImageGenerationLogImageAuthWhitelist = value

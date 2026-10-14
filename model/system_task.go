@@ -22,6 +22,7 @@ const (
 	SystemTaskTypeMidjourneyPoll          = "midjourney_poll"
 	SystemTaskTypeAsyncTaskPoll           = "async_task_poll"
 	SystemTaskTypeImageStorageCleanup     = "image_storage_cleanup"
+	SystemTaskTypeMediaAssetCleanup       = "media_asset_cleanup"
 	SystemTaskTypeEmailCampaignDispatch   = "email_campaign_dispatch"
 	SystemTaskTypeSubscriptionExpiryEmail = "subscription_expiry_email"
 	SystemTaskTypeDashboardReportEmail    = "dashboard_report_email"

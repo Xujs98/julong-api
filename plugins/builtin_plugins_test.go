@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var expectedKeys = []string{"alibaba", "doubao", "google", "hailuo", "jimeng", "kling", "sora", "sunoapi", "vertex-ai", "vidu", "xai"}
+var expectedKeys = []string{"alibaba", "doubao", "google", "hailuo", "jimeng", "kling", "sora", "suanliai-video", "sunoapi", "vertex-ai", "vidu", "xai"}
 
 func TestBuiltInVendorPluginsDeclareNativeRoutesAndLegacyChannelTypes(t *testing.T) {
 	generation := jsplugin.DefaultRegistry.Generation()
@@ -384,4 +384,38 @@ func TestBuiltInPluginsAddressNewAPIUpstreamOnNativeRoutes(t *testing.T) {
 			})
 		}
 	})
+}
+
+func TestSuanliVideoContentUsesSignedResultWithoutChannelCredentials(t *testing.T) {
+	source, err := Source("suanliai-video")
+	require.NoError(t, err)
+	plugin, err := jsplugin.NewRegistry().RegisterFactory(source, jsplugin.Options{Key: "suanliai-video"})
+	require.NoError(t, err)
+	for _, tc := range []struct {
+		name, resultURL, want string
+		public                bool
+	}{
+		{"signed absolute", "https://suanliai.top/v1/videos/upstream/content?video_signature=signed", "https://suanliai.top/v1/videos/upstream/content?video_signature=signed", true},
+		{"relative signed", "/v1/videos/upstream/content?video_signature=signed", "https://suanliai.top/v1/videos/upstream/content?video_signature=signed", true},
+		{"legacy fallback", "", "https://suanliai.top/v1/videos/upstream/content", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			value, err := plugin.Engine.Call(t.Context(), "buildContentRequest", map[string]any{
+				"baseUrl": "https://suanliai.top/v1", "apiKey": "private-channel-secret", "upstreamTaskId": "upstream",
+				"clientRequest": map[string]any{"method": "GET"}, "data": map[string]any{"result_url": tc.resultURL},
+			})
+			require.NoError(t, err)
+			raw, err := common.Marshal(value)
+			require.NoError(t, err)
+			var descriptor map[string]any
+			require.NoError(t, common.Unmarshal(raw, &descriptor))
+			assert.Equal(t, tc.want, descriptor["url"])
+			assert.Equal(t, "GET", descriptor["method"])
+			if tc.public {
+				assert.Equal(t, true, descriptor["credentialless"])
+				assert.NotContains(t, string(raw), "private-channel-secret")
+				assert.NotContains(t, descriptor, "headers")
+			}
+		})
+	}
 }

@@ -2241,6 +2241,42 @@ func TestAlibabaSubmitDeltaDoesNotMutateControlState(t *testing.T) {
 	assert.JSONEq(t, `{"choices":[{"count":2,"lastText":false,"finishReason":"stop"}],"hasUsage":true}`, string(encoded))
 }
 
+func TestAlibabaImagePluginPreservesJulongBillingBounds(t *testing.T) {
+	source, err := plugins.Source("alibaba")
+	require.NoError(t, err)
+	plugin, err := pluginruntime.CompilePlugin(source, pluginruntime.Options{})
+	require.NoError(t, err)
+
+	for _, tc := range []struct {
+		name    string
+		n       int
+		wantErr bool
+	}{
+		{name: "requested image count", n: 2},
+		{name: "negative nested count", n: -1, wantErr: true},
+		{name: "oversized nested count", n: dto.MaxImageN + 1, wantErr: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := map[string]any{
+				"model": "z-image-turbo", "upstreamModel": "z-image-turbo", "usagePurpose": "billing_ratios",
+				"requestBody": map[string]any{"model": "z-image-turbo", "prompt": "a cat", "metadata": map[string]any{
+					"parameters": map[string]any{"n": tc.n, "prompt_extend": true},
+				}},
+			}
+			value, err := plugin.Engine.Call(t.Context(), "extractUsage", ctx)
+			if tc.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			ratios, ok := value.(map[string]any)
+			require.True(t, ok)
+			assert.Equal(t, float64(tc.n), ratios["image_count"])
+			assert.Equal(t, float64(2), ratios["prompt_extend_ratio"], "Z-Image prompt rewriting keeps its existing surcharge")
+		})
+	}
+}
+
 // newAPIGateway emulates the upstream New API instance a type-60 channel
 // points at: it answers only on the plugin's prefixed native routes, requires
 // the gateway token as a Bearer header, and renders what its own presenters

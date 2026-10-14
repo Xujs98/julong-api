@@ -2,6 +2,7 @@ package service
 
 import (
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/types"
@@ -113,14 +114,9 @@ func buildBillingRevenueAudit(finalQuota int, counterfactuals billingRevenueCoun
 	return audit
 }
 
-func attachBillingRevenueToOther(other map[string]interface{}, audit *types.BillingRevenueAudit) {
+func attachBillingRevenueToOther(other *model.LogOther, audit *types.BillingRevenueAudit) {
 	if other == nil || !audit.HasAny() {
 		return
 	}
-	adminInfo, ok := other["admin_info"].(map[string]interface{})
-	if !ok || adminInfo == nil {
-		adminInfo = map[string]interface{}{}
-		other["admin_info"] = adminInfo
-	}
-	adminInfo["billing_revenue"] = audit
+	other.SetAdmin("billing_revenue", audit)
 }

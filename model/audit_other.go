@@ -16,6 +16,7 @@ type AuditOther struct {
 	AuditInfo   *AuditRequestInfo `json:"audit_info,omitempty"`
 	RootInfo    AuditFields       `json:"root_info,omitempty"`
 	LoginMethod string            `json:"login_method,omitempty"`
+	DeviceID    string            `json:"device_id,omitempty"`
 	UserAgent   string            `json:"user_agent,omitempty"`
 }
 

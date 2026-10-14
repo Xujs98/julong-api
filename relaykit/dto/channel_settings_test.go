@@ -736,3 +736,17 @@ func TestChannelOtherSettingsValidateToolLossPolicy(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "tool_loss_policy")
 }
+
+func TestVideoModelConfigsValidateDurationBounds(t *testing.T) {
+	zero := 0
+	tooLong := 3601
+	settings := ChannelSettings{
+		GatewayProvider: SuanliGatewayProvider,
+		VideoModelConfigs: map[string]VideoModelConfig{
+			"video": {MinSeconds: &zero},
+		},
+	}
+	require.ErrorContains(t, settings.ValidateVideoModelConfigs(3600), "invalid duration limits")
+	settings.VideoModelConfigs["video"] = VideoModelConfig{MaxSeconds: &tooLong}
+	require.ErrorContains(t, settings.ValidateVideoModelConfigs(3600), "invalid duration limits")
+}

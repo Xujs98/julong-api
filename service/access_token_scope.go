@@ -135,7 +135,7 @@ func AccessTokenCatalog(userID, role int) []AccessTokenCatalogGroup {
 		for _, definition := range authz.Catalog() {
 			resource := AccessTokenResource{Resource: definition.Resource, LabelKey: definition.LabelKey}
 			for _, action := range definition.Actions {
-				if authz.Can(userID, role, authz.Permission{Resource: definition.Resource, Action: action.Action}) {
+				if (definition.Resource == authz.ResourceSystemSettings && authz.CanSystemSettings(userID, role, action.Action)) || authz.Can(userID, role, authz.Permission{Resource: definition.Resource, Action: action.Action}) {
 					resource.Actions = append(resource.Actions, action)
 				}
 			}

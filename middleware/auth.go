@@ -81,6 +81,9 @@ func authHelper(c *gin.Context, minRole int) {
 		return
 	}
 	setDashboardAuthContext(c, user, identity, useAccessToken)
+	if useAccessToken {
+		setAccessTokenContext(c, lookup)
+	}
 	service.RecordUserPresenceActivity(user.Id, service.UserPresenceActivitySourceDashboard, c.ClientIP(), c.Request.UserAgent())
 
 	// 管理/root 写操作审计兜底：内聚在鉴权链路里，保证任何经过 AdminAuth/RootAuth
@@ -322,6 +325,22 @@ func enforceAccessTokenRoute(c *gin.Context, lookup *accessTokenLookup, abort bo
 	case !declared:
 		common.SysError(common.LogText("access token route is not declared: %s", key))
 		code, reason, message = "ACCESS_TOKEN_ROUTE_UNDECLARED", "route_undeclared", common.NewMessage("Unauthorized, insufficient privileges")
+	case declared && rule.kind == accessTokenRuleSettings:
+		scopes := lookup.token.GetScopes()
+		globalScope := "option:read"
+		if c.Request.Method != http.MethodGet {
+			globalScope = "option:write"
+		}
+		if lookup.user.Role >= common.RoleRootUser && service.AccessTokenScopeGranted(scopes, globalScope) {
+			return true
+		}
+		action := strings.TrimSpace(c.Query("section"))
+		for _, candidate := range authz.SystemSettingsPermissionActions(action) {
+			if service.AccessTokenScopeGranted(scopes, service.AccessTokenScopeOf(authz.SystemSettingsPermission(candidate))) && authz.CanSystemSettings(lookup.user.Id, lookup.user.Role, action) {
+				return true
+			}
+		}
+		code, reason, message = "ACCESS_TOKEN_SCOPE_DENIED", "scope_denied", common.NewMessage("Unauthorized, insufficient privileges")
 	case rule.kind == accessTokenRuleAny, service.AccessTokenScopeGranted(lookup.token.GetScopes(), rule.scope):
 		return true
 	default:

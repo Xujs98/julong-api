@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"fmt"
 	"net/http"
 	"time"
 
@@ -55,7 +56,7 @@ func DoCheckin(c *gin.Context) {
 		return
 	}
 	content := fmt.Sprintf("用户签到，获得额度 %s", logger.LogQuota(checkin.QuotaAwarded))
-	model.RecordLog(userId, model.LogTypeSystem, content)
+	model.RecordLog(userId, model.LogTypeSystem, common.NewMessage(content))
 	model.RecordQuotaIncreaseLog(userId, checkin.QuotaAwarded, model.QuotaIncreaseSourceCheckin, content)
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,

@@ -8,7 +8,6 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
-	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
@@ -247,7 +246,7 @@ func PostWssConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, mod
 		// we cannot just return, because we may have to return the pre-consumed quota
 		quota = 0
 		billingCounterfactuals = billingRevenueCounterfactuals{}
-		logContent += "（可能是上游超时）"
+		logContent = append(logContent, common.NewMessage("Upstream returned no usage (possibly an upstream timeout)"))
 		logger.LogError(ctx, fmt.Sprintf("total tokens is 0, cannot consume quota, userId %d, channelId %d, "+
 			"tokenId %d, model %s， pre-consumed quota %d", relayInfo.UserId, relayInfo.ChannelId, relayInfo.TokenId, modelName, relayInfo.FinalPreConsumedQuota))
 	} else {
@@ -420,7 +419,7 @@ func PostAudioConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, u
 		// we cannot just return, because we may have to return the pre-consumed quota
 		quota = 0
 		billingCounterfactuals = billingRevenueCounterfactuals{}
-		logContent += "（可能是上游超时）"
+		logContent = append(logContent, common.NewMessage("Upstream returned no usage (possibly an upstream timeout)"))
 		logger.LogError(ctx, fmt.Sprintf("total tokens is 0, cannot consume quota, userId %d, channelId %d, "+
 			"tokenId %d, model %s， pre-consumed quota %d", relayInfo.UserId, relayInfo.ChannelId, relayInfo.TokenId, relayInfo.OriginModelName, relayInfo.FinalPreConsumedQuota))
 	} else {

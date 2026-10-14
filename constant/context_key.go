@@ -71,6 +71,7 @@ const (
 	// ContextKeyLanguage stores the user's language preference for i18n
 	ContextKeyLanguage                         ContextKey = "language"
 	ContextKeyIsStream                         ContextKey = "is_stream"
+	ContextKeyResponseStreamStatus             ContextKey = "response_stream_status"
 	ContextKeyImageGenerationImageAuthBypassed ContextKey = "image_generation_image_auth_bypassed"
 
 	// ContextKeyAuditLogged marks that the current request has already recorded

@@ -25,7 +25,7 @@ build-all-web: build-web
 
 start-api: check-version
 	@echo "Starting api dev server..."
-	@cd $(API_DIR) && go run -ldflags "-X github.com/QuantumNous/new-api/common.Version=$(JULONG_VERSION)" main.go &
+	@cd $(API_DIR) && go run -ldflags "-X github.com/QuantumNous/new-api/common.Version=$(JULONG_VERSION)" . &
 
 dev-api:
 	@echo "Starting api services (docker)..."

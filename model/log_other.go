@@ -43,6 +43,37 @@ type LogOther struct {
 	auditInfo map[string]any
 }
 
+// LogOtherFromMap preserves Julong metadata written before scoped log fields.
+// Privileged namespaces retain their visibility; legacy diagnostic fields are
+// moved into admin_info instead of being exposed to a log owner.
+func LogOtherFromMap(values map[string]any) *LogOther {
+	o := NewLogOther()
+	for key, value := range values {
+		switch key {
+		case logOtherAdminInfoKey, logOtherRootInfoKey, logOtherAuditInfoKey:
+			fields, ok := value.(map[string]any)
+			if !ok {
+				continue
+			}
+			switch key {
+			case logOtherAdminInfoKey:
+				o.MergeAdmin(fields)
+			case logOtherRootInfoKey:
+				o.MergeRoot(fields)
+			case logOtherAuditInfoKey:
+				o.MergeAudit(fields)
+			}
+		default:
+			if slices.Contains(legacySensitiveLogOtherKeys, key) {
+				o.SetAdmin(key, value)
+			} else {
+				o.SetPublic(key, value)
+			}
+		}
+	}
+	return o
+}
+
 func NewLogOther() *LogOther {
 	return &LogOther{}
 }

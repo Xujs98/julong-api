@@ -328,7 +328,7 @@ func formatUserLogs(logs []*Log, startIdx int) {
 			// delete(otherMap, "reject_reason")
 			delete(otherMap, "stream_status")
 		}
-		logs[i].Other = common.MapToJsonStr(otherMap)
+		logs[i].Other = formatLogOtherJSON(common.MapToJsonStr(otherMap), logOtherVisibilityUser)
 	}
 	assignDisplayLogIds(logs, startIdx)
 }
@@ -421,12 +421,12 @@ func RecordAgentRedemptionRefundLog(userId int, redemption *Redemption, refund i
 	}
 	username, _ := GetUsernameById(userId, false)
 	other := map[string]interface{}{
-		"op": buildOpField("agent_redemption_refund", map[string]interface{}{
+		"op": &AuditOperation{Action: "agent_redemption_refund", Params: map[string]any{
 			"redemption_id":    redemption.Id,
 			"redemption_name":  redemption.Name,
 			"redemption_quota": redemption.Quota,
 			"refund_quota":     refund,
-		}),
+		}},
 		"redemption_id":    redemption.Id,
 		"redemption_name":  redemption.Name,
 		"redemption_quota": redemption.Quota,
@@ -448,7 +448,7 @@ func RecordAgentRedemptionRefundLog(userId int, redemption *Redemption, refund i
 }
 
 // RecordLogWithAdminInfo 记录操作日志，并将管理员相关信息存入 Other.admin_info，
-func RecordLogWithAdminInfo(userId int, logType int, content string, adminInfo map[string]interface{}) {
+func RecordLogWithAdminInfo(userId int, logType int, content string, adminInfo *AuditAdminInfo, operation *AuditOperation, request ...*gin.Context) {
 	if logType == LogTypeConsume && !common.LogConsumeEnabled {
 		return
 	}
@@ -492,26 +492,28 @@ func RecordLogWithAdminInfo(userId int, logType int, content string, adminInfo m
 // username 由调用方传入（登录流程已持有用户对象），避免额外的数据库查询。
 // content 为英文兜底文本（用于导出）；action+params 供前端本地化渲染。
 // extra 可携带 login_method、user_agent 等附加信息（普通用户可见）。
-func RecordLoginLog(userId int, username string, content string, ip string, action string, params map[string]interface{}, extra map[string]interface{}) {
+func RecordLoginLog(userId, actorRole int, username string, content string, ip string, action string, params map[string]any, other AuditOther, request ...*gin.Context) {
 	if normalized, err := NormalizeIPAddress(ip); err == nil {
 		ip = normalized
 	}
-	other := map[string]interface{}{}
-	for k, v := range extra {
-		other[k] = v
+	other.Op = &AuditOperation{Action: action, Params: params}
+	var c *gin.Context
+	if len(request) > 0 {
+		c = request[0]
 	}
-	other["op"] = buildOpField(action, params)
-	log := &Log{
-		UserId:    userId,
-		Username:  username,
-		CreatedAt: common.GetTimestamp(),
-		Type:      LogTypeLogin,
-		Content:   content,
-		Ip:        ip,
-		Other:     common.MapToJsonStr(other),
+	// Keep the Julong login history used by IP statistics and risk reports,
+	// alongside the separately retained upstream security audit.
+	encoded, err := common.Marshal(other)
+	if err != nil {
+		common.SysError(common.LogText("failed to encode login log: %s", err.Error()))
+		return
 	}
-	if err := createLog(log); err != nil {
-		common.SysLog("failed to record login log: " + err.Error())
+	entry := &Log{UserId: userId, Username: username, CreatedAt: common.GetTimestamp(), Type: LogTypeLogin, Content: content, Ip: ip, Other: string(encoded)}
+	if c != nil {
+		entry.RequestId = c.GetString(common.RequestIdKey)
+	}
+	if err := createLog(entry); err != nil {
+		common.SysLog(common.LogText("failed to record login log: %s", err.Error()))
 	}
 	RecordAuditLog(c, AuditLog{UserId: userId, Username: username, ActorRole: actorRole, Category: AuditCategoryLogin, Action: action, Content: content, Ip: ip, Other: other, Success: true})
 }
@@ -617,7 +619,7 @@ func RecordTopupLog(userId int, quota int, content string, callerIp string, paym
 		Username:  username,
 		CreatedAt: common.GetTimestamp(),
 		Type:      LogTypeTopup,
-		Content:   other.setContent([]*common.Message{content}),
+		Content:   other.setContent([]*common.Message{common.NewMessage(content)}),
 		Ip:        callerIp,
 		Other:     other.JSONString(),
 	}

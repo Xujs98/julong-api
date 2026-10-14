@@ -77,9 +77,8 @@ func ImageHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *type
 				return types.NewError(marshalErr, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
 			}
 			requestBody = bytes.NewReader(sanitized)
-			info.UpstreamRequestBodySize = int64(len(sanitized))
 		} else {
-			requestBody = common.ReaderOnly(storage)
+			requestBody = common.NewReplayableBodyReader(storage)
 		}
 	} else {
 		convertedRequest, err := adaptor.ConvertImageRequest(c, info, *request)

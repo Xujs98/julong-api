@@ -22,6 +22,7 @@ func init() {
 		{"billing.quota", "Quota Settings"}, {"billing.currency", "Currency & Display"},
 		{"billing.model-pricing", "Model Pricing"}, {"billing.group-pricing", "Group Pricing"},
 		{"billing.payment", "Payment Gateway"}, {"billing.checkin", "Check-in Rewards"}, {"billing.invoice", "Self-service Invoices"},
+		{"request-policies.filtering", "Content Filtering"}, {"request-policies.routing", "Routing & Retry"}, {"request-policies.health", "Channel Health"},
 		{"models.global", "Global Model Configuration"}, {"models.routing-reliability", "Routing Reliability"},
 		{"models.gemini", "Gemini"}, {"models.claude", "Claude"}, {"models.grok", "Grok"},
 		{"models.channel-affinity", "Channel Affinity"}, {"models.model-deployment", "Model Deployment"},
@@ -48,4 +49,43 @@ func init() {
 		})
 	}
 	RegisterResource(ResourceDefinition{Resource: ResourceSystemSettings, LabelKey: "System Settings", Actions: actions})
+}
+
+// SystemSettingsPermissionActions maps reorganized policy pages to their
+// existing Julong grants so an upstream navigation change does not revoke them.
+func SystemSettingsPermissionActions(action string) []string {
+	switch action {
+	case "request-policies.filtering":
+		return []string{action, "security.sensitive-words"}
+	case "request-policies.routing":
+		return []string{action, "models.channel-affinity", "models.routing-reliability"}
+	case "request-policies.health":
+		return []string{action, "models.routing-reliability", "operations.monitoring"}
+	default:
+		return []string{action}
+	}
+}
+
+func CanSystemSettings(userID, role int, action string) bool {
+	permission := SystemSettingsPermission(action)
+	if Can(userID, role, permission) {
+		return true
+	}
+	// An explicit new-page denial takes precedence over legacy grants.
+	if e := currentEnforcer(); e != nil {
+		if effect, ok := explicitSubjectEffect(e, UserSubject(userID), permission); ok && effect == EffectDeny {
+			return false
+		}
+		for _, roleKey := range resolveSubjectRoles(userID, role) {
+			if effect, ok := explicitSubjectEffect(e, RoleSubject(roleKey), permission); ok && effect == EffectDeny {
+				return false
+			}
+		}
+	}
+	for _, oldAction := range SystemSettingsPermissionActions(action)[1:] {
+		if Can(userID, role, SystemSettingsPermission(oldAction)) {
+			return true
+		}
+	}
+	return false
 }

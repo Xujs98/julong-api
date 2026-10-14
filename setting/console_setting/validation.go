@@ -1,6 +1,10 @@
 package console_setting
 
 import (
+	"fmt"
+	"unicode/utf16"
+
+	"github.com/QuantumNous/new-api/common"
 	"net/url"
 	"regexp"
 	"strings"
@@ -48,6 +52,11 @@ var (
 		invalidURL:    "Group #{{index}} has an invalid URL format",
 		unparsableURL: "Group #{{index}} has a URL that cannot be parsed: {{error}}",
 		unsafeContent: "Group #{{index}} contains disallowed content",
+	}
+	customEndpointMessages = itemMessages{
+		invalidURL:    "第{{index}}个自定义端点地址无效",
+		unparsableURL: "第{{index}}个自定义端点地址无法解析：{{error}}",
+		unsafeContent: "第{{index}}个自定义端点包含不安全内容",
 	}
 )
 
@@ -119,16 +128,16 @@ func validateCustomEndpoints(raw string) error {
 		if !urlOK || len(urlValue) > 500 {
 			return fmt.Errorf("第%d个自定义端点地址无效", index+1)
 		}
-		if err := validateURL(urlValue, index+1, "自定义端点"); err != nil {
+		if err := validateURL(urlValue, index+1, customEndpointMessages); err != nil {
 			return err
 		}
 		if !descriptionOK || strings.TrimSpace(description) == "" || len([]rune(description)) > 200 {
 			return fmt.Errorf("第%d个自定义端点介绍无效", index+1)
 		}
-		if err := checkDangerousContent(name, index+1, "自定义端点"); err != nil {
+		if err := checkDangerousContent(name, index+1, customEndpointMessages); err != nil {
 			return err
 		}
-		if err := checkDangerousContent(description, index+1, "自定义端点"); err != nil {
+		if err := checkDangerousContent(description, index+1, customEndpointMessages); err != nil {
 			return err
 		}
 	}

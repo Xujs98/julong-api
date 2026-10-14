@@ -10,6 +10,8 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
 
 	"github.com/gin-gonic/gin"
 )
@@ -31,49 +33,40 @@ func ExportUserLogs(c *gin.Context) {
 }
 
 func exportUsageLogs(c *gin.Context, isAdmin bool) {
-	logType, _ := strconv.Atoi(c.Query("type"))
-	startTimestamp, _ := strconv.ParseInt(c.Query("start_timestamp"), 10, 64)
-	endTimestamp, _ := strconv.ParseInt(c.Query("end_timestamp"), 10, 64)
-	modelName := c.Query("model_name")
-	tokenName := c.Query("token_name")
-	group := c.Query("group")
-	requestId := c.Query("request_id")
-	upstreamRequestId := c.Query("upstream_request_id")
+	if !isAdmin && c.GetInt("role") < common.RoleAdminUser && !operation_setting.GetLogSetting().UserExportEnabled {
+		common.ApiErrorT(c, "Log export is disabled")
+		return
+	}
+	filter := logFilterFromQuery(c, isAdmin)
+	startTimestamp, err := limitLogTimeRange(filter.StartTimestamp, filter.EndTimestamp)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	filter.StartTimestamp = startTimestamp
+	release, ok, err := service.AcquireLogExportLock(c.GetInt("id"))
+	if err != nil {
+		common.ApiErrorT(c, "Failed to export logs")
+		return
+	}
+	if !ok {
+		common.ApiErrorT(c, "Another log export is running. Try again after it finishes.")
+		return
+	}
+	defer release()
 	exportWindow := getUsageLogExportWindow(c)
 
 	var logs []*model.Log
 	var total int64
-	var err error
 	if isAdmin {
-		channel, _ := strconv.Atoi(c.Query("channel"))
-		logs, total, err = model.GetAllLogs(
-			logType,
-			startTimestamp,
-			endTimestamp,
-			modelName,
-			c.Query("username"),
-			tokenName,
-			exportWindow.startIdx,
-			exportWindow.pageSize,
-			channel,
-			group,
-			requestId,
-			upstreamRequestId,
-		)
+		logs, total, err = model.GetAllLogs(filter, exportWindow.startIdx, exportWindow.pageSize)
+		if c.GetInt("role") < common.RoleRootUser {
+			model.FormatAdminLogs(logs)
+		} else {
+			model.FormatRootLogs(logs)
+		}
 	} else {
-		logs, total, err = model.GetUserLogs(
-			c.GetInt("id"),
-			logType,
-			startTimestamp,
-			endTimestamp,
-			modelName,
-			tokenName,
-			exportWindow.startIdx,
-			exportWindow.pageSize,
-			group,
-			requestId,
-			upstreamRequestId,
-		)
+		logs, total, err = model.GetUserLogs(c.GetInt("id"), filter, exportWindow.startIdx, exportWindow.pageSize)
 	}
 	if err != nil {
 		common.ApiError(c, err)

@@ -241,9 +241,21 @@ func PrepareTaskPluginRoute() gin.HandlerFunc {
 				requestContext.RequestBody = replacementBody
 				c.Set(pluginruntime.ContextKeyRouteRequest, requestContext)
 			}
+			persistedBody, persistErr := service.PersistTaskMedia(c.Request.Context(), c.GetInt("id"), requestContext.RequestBody)
+			if persistErr != nil {
+				abortTaskPluginRouteErrorDetail(c, http.StatusBadRequest, persistErr.Error())
+				return
+			}
+			requestContext.RequestBody = persistedBody
+			c.Set(pluginruntime.ContextKeyRouteRequest, requestContext)
 			c.Set("task_request", requestContext.RequestBody)
 			if requestBodyText != nil {
-				c.Set(pluginruntime.ContextKeyRequestBodyText, requestBodyText)
+				encoded, encodeErr := common.Marshal(persistedBody)
+				if encodeErr != nil {
+					abortTaskPluginRouteErrorDetail(c, http.StatusBadRequest, encodeErr.Error())
+					return
+				}
+				c.Set(pluginruntime.ContextKeyRequestBodyText, json.RawMessage(encoded))
 			}
 			c.Set("resolved_task_model", modelName)
 			c.Set("expected_task_plugin_key", pinned.Plugin.Meta.Key)
@@ -351,6 +363,7 @@ func PinTaskPluginEndpoint() gin.HandlerFunc {
 		pinModel := claimedModel
 		mappedModel := ""
 		rewriteTo := ""
+		var dynamicPluginKey string
 		if declared, ok := generation.CanonicalModel(claimedModel); ok {
 			lookupModel = declared
 			pinModel = declared
@@ -363,6 +376,9 @@ func PinTaskPluginEndpoint() gin.HandlerFunc {
 				c.Next()
 				return
 			}
+			if target.Dynamic {
+				dynamicPluginKey = target.PluginKey
+			}
 			lookupModel = target.Declared
 			pinModel = target.Alias
 			mappedModel = target.Declared
@@ -371,6 +387,13 @@ func PinTaskPluginEndpoint() gin.HandlerFunc {
 			}
 		}
 		binding, found := generation.LookupEndpoint(c.Request.Method, c.Request.URL.Path, lookupModel)
+		if dynamicPluginKey != "" {
+			protocol, operation, compatible := pluginruntime.LookupHostProtocolOperation(c.Request.Method, c.Request.URL.Path)
+			if plugin, available := generation.Get(dynamicPluginKey); available && compatible && protocol == "openai_video" {
+				binding = pluginruntime.ProtocolBinding{Plugin: plugin, Protocol: protocol, Operation: operation, Model: pinModel}
+				found = true
+			}
+		}
 		if !found || binding.Plugin == nil {
 			c.Set(contextKeyTaskPluginEndpointModel, *modelRequest)
 			c.Next()
@@ -385,7 +408,7 @@ func PinTaskPluginEndpoint() gin.HandlerFunc {
 		modelRequest.Model = pinModel
 		c.Set(contextKeyTaskPluginEndpointModel, *modelRequest)
 		candidates := generation.LookupEndpointCandidates(c.Request.Method, c.Request.URL.Path, lookupModel)
-		if len(candidates) == 0 {
+		if len(candidates) == 0 || dynamicPluginKey != "" {
 			candidates = []pluginruntime.ProtocolBinding{binding}
 		}
 		if definition, known := pluginruntime.HostProtocol(binding.Protocol); known && len(definition.DefinedModes()) > 0 {
@@ -707,10 +730,21 @@ func PrepareTaskPluginEndpoint() gin.HandlerFunc {
 		if normalizedBody, present := resolved["requestBody"]; present {
 			requestContext.RequestBody = normalizedBody
 		}
+		persistedBody, persistErr := service.PersistTaskMedia(c.Request.Context(), c.GetInt("id"), requestContext.RequestBody)
+		if persistErr != nil {
+			abortWithOpenAiMessage(c, http.StatusBadRequest, persistErr.Error())
+			return
+		}
+		requestContext.RequestBody = persistedBody
 		c.Set(pluginruntime.ContextKeyRouteRequest, requestContext)
 		c.Set("task_request", requestContext.RequestBody)
 		if resolvedBodyText != nil {
-			c.Set(pluginruntime.ContextKeyRequestBodyText, resolvedBodyText)
+			encoded, encodeErr := common.Marshal(persistedBody)
+			if encodeErr != nil {
+				abortWithOpenAiMessage(c, http.StatusBadRequest, encodeErr.Error())
+				return
+			}
+			c.Set(pluginruntime.ContextKeyRequestBodyText, json.RawMessage(encoded))
 		}
 		c.Set("resolved_task_model", resolvedModel)
 		c.Set("expected_task_plugin_key", pinned.Plugin.Meta.Key)
@@ -1457,14 +1491,16 @@ func PrepareTaskPluginSubmit() gin.HandlerFunc {
 				modelName = folded
 			}
 		}
+		persistedBody, persistErr := service.PersistTaskMedia(c.Request.Context(), c.GetInt("id"), requestBody)
+		if persistErr != nil {
+			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": gin.H{"message": persistErr.Error(), "type": "invalid_request_error"}})
+			return
+		}
+		requestBody, _ = persistedBody.(map[string]any)
 		c.Set("task_request", requestBody)
 		if plugin.Meta.PreservesJSONOrder() {
-			// The body as stored after any model rewrite: the text hooks get.
-			storage, err := common.GetBodyStorage(c)
-			var raw []byte
-			if err == nil {
-				raw, err = storage.Bytes()
-			}
+			// Refresh the raw request after replacing Base64 media with public URLs.
+			raw, err := common.Marshal(requestBody)
 			if err != nil {
 				c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": gin.H{"message": err.Error(), "type": "invalid_request_error"}})
 				return

@@ -147,7 +147,7 @@ func TestCreateLogPersistsDisplayRatioSnapshotWithoutChangingCharge(t *testing.T
 	assert.Equal(t, 190, persisted.CompletionTokens)
 
 	common.UserLogGroupRatioManualValue = 0.02
-	hiddenLogs, _, err := GetUserLogs(log.UserId, LogTypeConsume, 0, 0, "", "", 0, 10, "", log.RequestId, "")
+	hiddenLogs, _, err := GetUserLogs(log.UserId, LogFilter{Type: LogTypeConsume, RequestId: log.RequestId}, 0, 10)
 	require.NoError(t, err)
 	require.Len(t, hiddenLogs, 1)
 	assert.Nil(t, hiddenLogs[0].UserDisplayGroupRatio)
@@ -163,7 +163,7 @@ func TestCreateLogPersistsDisplayRatioSnapshotWithoutChangingCharge(t *testing.T
 	assert.Equal(t, 1000.0, hiddenOther["fee_quota"])
 
 	common.UserLogGroupRatioDisplayEnabled = true
-	visibleLogs, _, err := GetUserLogs(log.UserId, LogTypeConsume, 0, 0, "", "", 0, 10, "", log.RequestId, "")
+	visibleLogs, _, err := GetUserLogs(log.UserId, LogFilter{Type: LogTypeConsume, RequestId: log.RequestId}, 0, 10)
 	require.NoError(t, err)
 	require.Len(t, visibleLogs, 1)
 	require.NotNil(t, visibleLogs[0].UserDisplayGroupRatio)

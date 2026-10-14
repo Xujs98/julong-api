@@ -629,18 +629,20 @@ func updateStandardChannelBalance(channel *model.Channel) (float64, error) {
 	return balance, nil
 }
 
-func updateChannelBalanceAndNotify(channel *model.Channel) (float64, error) {
+func updateChannelBalanceAndNotify(channel *model.Channel) (channelBalanceResult, error) {
 	previousBalance, previousUpdatedAt, err := model.GetChannelBalanceState(channel.Id)
 	if err != nil {
 		previousBalance = channel.Balance
 		previousUpdatedAt = channel.BalanceUpdatedTime
 	}
-	balance, err := updateChannelBalance(channel)
+	result, err := updateChannelBalance(channel)
 	if err != nil {
-		return 0, err
+		return channelBalanceResult{}, err
 	}
-	service.NotifyAccountQuotaEmail(channel, previousBalance, previousUpdatedAt, balance)
-	return balance, nil
+	if result.RawResponse == "" {
+		service.NotifyAccountQuotaEmail(channel, previousBalance, previousUpdatedAt, result.Balance)
+	}
+	return result, nil
 }
 
 func UpdateChannelBalance(c *gin.Context) {
@@ -658,7 +660,7 @@ func UpdateChannelBalance(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": "Task Plugin channels do not support balance queries"})
 		return
 	}
-	balance, err := updateChannelBalanceAndNotify(channel)
+	result, err := updateChannelBalanceAndNotify(channel)
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -691,7 +693,7 @@ func updateAllChannelsBalance() error {
 		//if channel.Type != common.ChannelTypeOpenAI && channel.Type != common.ChannelTypeCustom {
 		//	continue
 		//}
-		balance, err := updateChannelBalanceAndNotify(channel)
+		result, err := updateChannelBalanceAndNotify(channel)
 		if err != nil {
 			continue
 		} else if result.RawResponse == "" {

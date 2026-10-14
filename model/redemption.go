@@ -2,6 +2,7 @@ package model
 
 import (
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 
@@ -274,7 +275,7 @@ func Redeem(key string, userId int) (quota int, err error) {
 		return 0, ErrRedeemFailed
 	}
 	content := fmt.Sprintf("通过兑换码充值 %s，兑换码ID %d", logger.LogQuota(redemption.Quota), redemption.Id)
-	RecordLog(userId, LogTypeTopup, content)
+	RecordLog(userId, LogTypeTopup, common.NewMessage(content))
 	RecordQuotaIncreaseLog(userId, redemption.Quota, QuotaIncreaseSourceRedemption, content)
 	return redemption.Quota, nil
 }

@@ -33,6 +33,7 @@ var accessTokenExemptRoutes = []string{
 	"GET /api/home_page_content",
 	"GET /api/ratio_config",
 	"GET /api/user/groups",
+	"GET /api/about",
 
 	// Anonymous account entry points.
 	"GET /api/verification",
@@ -70,6 +71,11 @@ var accessTokenExemptRoutes = []string{
 	// API key authentication (TokenAuthReadOnly).
 	"GET /api/usage/token/",
 	"GET /api/log/token",
+
+	// Media content routes authenticate through the signed task/media URL,
+	// not dashboard PAT middleware.
+	"GET /api/media-assets/:asset_id/content",
+	"HEAD /api/media-assets/:asset_id/content",
 }
 
 // accessTokenHelperRoutes are declared through handlePermissionRoute outside

@@ -17,6 +17,8 @@ import (
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	"github.com/QuantumNous/new-api/pkg/jsplugin"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/relaykit/dto"
+	"github.com/QuantumNous/new-api/setting/config"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/QuantumNous/new-api/types"
 	"github.com/gin-gonic/gin"
@@ -427,6 +429,8 @@ func TestLogTaskConsumptionMarksInlineResultsAndDiscardedArtifacts(t *testing.T)
 			}
 			gin.SetMode(gin.TestMode)
 			ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+			ctx.Request = httptest.NewRequest(http.MethodPost, "/test", nil)
+			ctx.Request = httptest.NewRequest(http.MethodPost, "/test", nil)
 			ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/images/generations", nil)
 			ctx.Set("token_name", "test_token")
 			if tc.pinnedProtocol != "" {
@@ -1010,6 +1014,51 @@ func TestRefundTaskQuota_ZeroQuota(t *testing.T) {
 
 	// No log created
 	assert.Equal(t, int64(0), countLogs(t))
+}
+
+func TestFixedExpressionKeepsPerRequestSubscriptionPermission(t *testing.T) {
+	previous := config.GlobalConfig.ExportAllConfigs()
+	t.Cleanup(func() { require.NoError(t, config.GlobalConfig.LoadFromDB(previous)) })
+	require.NoError(t, model.DB.AutoMigrate(&model.SubscriptionPlan{}, &model.SubscriptionPreConsumeRecord{}))
+	for _, tc := range []struct {
+		name       string
+		allowed    bool
+		wantSource string
+	}{
+		{name: "wallet by default", wantSource: BillingSourceWallet},
+		{name: "subscription explicitly permitted", allowed: true, wantSource: BillingSourceSubscription},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			truncate(t)
+			require.NoError(t, model.DB.Where("id = ?", 701).Delete(&model.SubscriptionPlan{}).Error)
+			require.NoError(t, model.DB.Where("user_id = ?", 701).Delete(&model.SubscriptionPreConsumeRecord{}).Error)
+			seedUser(t, 701, 10_000)
+			require.NoError(t, model.DB.Create(&model.SubscriptionPlan{Id: 701, Title: "Fixed expression plan"}).Error)
+			seedSubscription(t, 701, 701, 10_000, 0)
+			require.NoError(t, model.DB.Model(&model.UserSubscription{}).Where("id = ?", 701).Update("plan_id", 701).Error)
+			permission, err := common.Marshal(map[string]bool{"fixed-test": tc.allowed})
+			require.NoError(t, err)
+			require.NoError(t, config.GlobalConfig.LoadFromDB(map[string]string{"billing_setting.per_request_subscription_allowed": string(permission)}))
+			info := &relaycommon.RelayInfo{
+				UserId: 701, RequestId: t.Name(), OriginModelName: "fixed-test", IsPlayground: true, ForcePreConsume: true,
+				UserSetting:           dto.UserSetting{BillingPreference: "subscription_only"},
+				TieredBillingSnapshot: &billingexpr.BillingSnapshot{EstimatedBillingUnit: billingexpr.BillingUnitRequest},
+			}
+			ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+			ctx.Request = httptest.NewRequest(http.MethodPost, "/test", nil)
+			session, apiErr := NewBillingSession(ctx, info, 100)
+			require.Nil(t, apiErr)
+			require.NotNil(t, session)
+			assert.Equal(t, tc.wantSource, info.BillingSource)
+			if tc.allowed {
+				assert.Equal(t, 10_000, getUserQuota(t, 701))
+				assert.Equal(t, int64(100), getSubscriptionUsed(t, 701))
+			} else {
+				assert.Equal(t, 9_900, getUserQuota(t, 701))
+				assert.Zero(t, getSubscriptionUsed(t, 701))
+			}
+		})
+	}
 }
 
 func TestRefundTaskQuota_NoToken(t *testing.T) {

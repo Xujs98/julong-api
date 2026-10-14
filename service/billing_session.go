@@ -12,10 +12,12 @@ import (
 	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/setting/billing_setting"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
 
 	"github.com/bytedance/gopkg/util/gopool"
 	"github.com/gin-gonic/gin"
@@ -428,7 +430,11 @@ func NewBillingSession(c *gin.Context, relayInfo *relaycommon.RelayInfo, preCons
 	}
 
 	pref := common.NormalizeBillingPreference(relayInfo.UserSetting.BillingPreference)
-	if relayInfo.PriceData.UsePrice && !billing_setting.IsPerRequestSubscriptionAllowed(relayInfo.OriginModelName) {
+	perRequest := relayInfo.PriceData.UsePrice
+	if snapshot := relayInfo.TieredBillingSnapshot; snapshot != nil {
+		perRequest = perRequest || snapshot.EstimatedBillingUnit == billingexpr.BillingUnitRequest
+	}
+	if perRequest && !billing_setting.IsPerRequestSubscriptionAllowed(relayInfo.OriginModelName) {
 		pref = "wallet_only"
 	}
 

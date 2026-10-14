@@ -3,8 +3,11 @@ package service
 import (
 	"bytes"
 	"compress/gzip"
+	"encoding/json"
 	"fmt"
 	"io"
+	"net/url"
+	"regexp"
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
@@ -20,12 +23,55 @@ import (
 const maxCapturedRequestContentBytes = 4 << 20
 
 var capturedRequestSensitiveKeys = map[string]struct{}{
-	"access_token":  {},
-	"api_key":       {},
+	"accesstoken":   {},
+	"apikey":        {},
 	"authorization": {},
-	"client_secret": {},
+	"clientsecret":  {},
+	"cookie":        {},
+	"key":           {},
 	"password":      {},
+	"privatekey":    {},
+	"refreshtoken":  {},
 	"secret":        {},
+	"setcookie":     {},
+	"signature":     {},
+	"token":         {},
+	"xapikey":       {},
+}
+
+var capturedRequestKeyNormalizer = strings.NewReplacer("_", "", "-", "", " ", "")
+var capturedRequestCredentialPattern = regexp.MustCompile(`(?i)(\bBearer\s+)[^\s"']+|\bsk-[A-Za-z0-9_-]{8,}`)
+
+// TaskRequestSnapshot reuses the request-content sanitizer for the compact
+// task-log preview. It stores no headers or file bytes and never changes the
+// request that will be submitted upstream.
+func TaskRequestSnapshot(body any) (json.RawMessage, bool) {
+	const limit = 32 << 10
+	raw, err := common.Marshal(body)
+	if err != nil {
+		return nil, false
+	}
+	var value any
+	if common.Unmarshal(raw, &value) != nil {
+		return nil, false
+	}
+	sanitized, err := common.Marshal(sanitizeCapturedRequestValue("", value))
+	if err != nil {
+		return nil, false
+	}
+	if len(sanitized) <= limit {
+		return sanitized, false
+	}
+	for size := min(len(sanitized), limit/2); size > 0; size /= 2 {
+		preview, previewErr := common.Marshal(map[string]any{
+			"_capture_notice": "Request content exceeded the capture limit; a partial sanitized preview is stored.",
+			"_preview":        string(sanitized[:size]),
+		})
+		if previewErr == nil && len(preview) <= limit {
+			return preview, true
+		}
+	}
+	return nil, true
 }
 
 func CaptureUserRequestContent(c *gin.Context, info *relaycommon.RelayInfo, request dto.Request) bool {
@@ -130,10 +176,9 @@ func DecodeUserRequestContent(log *model.UserRequestContentLog) (any, error) {
 
 func sanitizeCapturedRequestValue(key string, value any) any {
 	lowerKey := strings.ToLower(strings.TrimSpace(key))
-	if _, sensitive := capturedRequestSensitiveKeys[lowerKey]; sensitive {
-		if _, isString := value.(string); isString {
-			return "[REDACTED]"
-		}
+	normalizedKey := capturedRequestKeyNormalizer.Replace(lowerKey)
+	if _, sensitive := capturedRequestSensitiveKeys[normalizedKey]; sensitive {
+		return "[REDACTED]"
 	}
 
 	switch typed := value.(type) {
@@ -153,22 +198,22 @@ func sanitizeCapturedRequestValue(key string, value any) any {
 		if isEmbeddedCapturedMedia(lowerKey, typed) {
 			return fmt.Sprintf("[OMITTED EMBEDDED MEDIA: %d bytes]", len(typed))
 		}
-		return typed
+		if parsed, err := url.Parse(typed); err == nil && (parsed.Scheme == "http" || parsed.Scheme == "https") {
+			return common.MaskSensitiveInfo(typed)
+		}
+		return capturedRequestCredentialPattern.ReplaceAllString(typed, "[REDACTED]")
 	default:
 		return value
 	}
 }
 
 func isEmbeddedCapturedMedia(key, value string) bool {
-	if len(value) < 1024 {
-		return false
-	}
 	lowerValue := strings.ToLower(value[:min(len(value), 64)])
 	if strings.HasPrefix(lowerValue, "data:") && strings.Contains(lowerValue, ";base64,") {
 		return true
 	}
 	switch key {
-	case "b64_json", "file_data", "image_data", "audio_data":
+	case "b64_json", "file_data", "image_data", "audio_data", "video_data", "base64", "bytes":
 		return true
 	default:
 		return false

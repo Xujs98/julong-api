@@ -54,15 +54,18 @@ func GetTask(c *gin.Context) {
 	if task.Status == model.TaskStatusSuccess && taskFailReasonIsLegacyResultURL(task.FailReason) {
 		failReason = ""
 	}
-	c.JSON(http.StatusOK, gin.H{
+	response := gin.H{
 		"task_id":     task.TaskID,
-		"platform":    task.Platform,
 		"status":      task.Status,
 		"progress":    task.Progress,
 		"fail_reason": failReason,
 		"created_at":  createdAt,
 		"finished_at": task.FinishTime,
-	})
+	}
+	if c.GetInt("role") >= common.RoleAdminUser && c.GetInt("token_id") == 0 {
+		response["platform"] = task.Platform
+	}
+	c.JSON(http.StatusOK, response)
 }
 
 func GetTaskArtifacts(c *gin.Context) {
@@ -89,6 +92,133 @@ func GetDashboardTaskArtifacts(c *gin.Context) {
 		return
 	}
 	writeTaskArtifacts(c, task, true)
+}
+
+// GetDashboardTaskRequest loads a compact request preview only when requested.
+// It uses the same ownership boundary as the dashboard's task artifacts and
+// never returns the provider snapshot or task credentials.
+func GetDashboardTaskRequest(c *gin.Context) {
+	c.Header("Cache-Control", "private, no-store")
+	task, exists, err := getTaskForArtifactRequest(c, c.Param("task_id"))
+	if err != nil {
+		common.ApiErrorMsg(c, "Failed to query task")
+		return
+	}
+	if !exists || task == nil {
+		c.JSON(http.StatusNotFound, gin.H{"success": false, "message": "Task not found"})
+		return
+	}
+	response := gin.H{"task_id": task.TaskID, "request_body": nil, "truncated": false}
+	if execution := task.PrivateData.Execution; execution != nil && len(execution.RequestBody) > 0 {
+		// Sanitize again so historical or manually imported snapshots obey the
+		// current redaction rules before they cross the dashboard boundary.
+		preview, truncated := service.TaskRequestSnapshot(execution.RequestBody)
+		var body any
+		if len(preview) > 0 && common.Unmarshal(preview, &body) == nil {
+			response["request_body"] = redactTaskRequestMedia("", body)
+		}
+		response["truncated"] = truncated || execution.RequestBodyTruncated
+	}
+	common.ApiSuccess(c, response)
+}
+
+// GetDashboardTaskDetail returns the latest persisted polling state. Provider
+// credentials, private IDs and signed upstream media URLs never cross this API.
+func GetDashboardTaskDetail(c *gin.Context) {
+	c.Header("Cache-Control", "private, no-store")
+	task, exists, err := getTaskForArtifactRequest(c, c.Param("task_id"))
+	if err != nil {
+		common.ApiErrorMsg(c, "Failed to query task")
+		return
+	}
+	if !exists || task == nil {
+		c.JSON(http.StatusNotFound, gin.H{"success": false, "message": "Task not found"})
+		return
+	}
+	view := tasksToDto([]*model.Task{task}, false, c.GetInt("role"))[0]
+	result := gin.H{
+		"id": task.TaskID, "task_id": task.TaskID, "status": view.Status,
+		"progress": view.Progress, "action": task.Action,
+		"model":      task.Properties.OriginModelName,
+		"created_at": task.SubmitTime, "started_at": task.StartTime,
+		"completed_at": task.FinishTime, "updated_at": task.UpdatedAt,
+	}
+	if view.Platform != "" {
+		result["platform"] = view.Platform
+	}
+	if view.FailReason != "" {
+		result["fail_reason"] = view.FailReason
+	}
+	// Only harmless, typed provider metadata is projected; arbitrary upstream
+	// fields may contain private platform identities, credentials or signed URLs.
+	var snapshot map[string]any
+	if common.Unmarshal(task.Data, &snapshot) == nil {
+		for _, key := range []string{"duration", "seconds", "width", "height"} {
+			if value, ok := snapshot[key].(float64); ok {
+				result[key] = value
+			}
+		}
+		if value, ok := snapshot["delivery_status"].(string); ok {
+			switch value {
+			case "ready", "local_ready", "pending", "archiving", "failed":
+				result["delivery_status"] = value
+			}
+		}
+	}
+	if task.Status == model.TaskStatusSuccess && !task.PrivateData.ResultDiscarded {
+		artifacts, err := projectTaskArtifacts(task)
+		if err != nil {
+			writeTaskArtifactProjectionError(c, err)
+			return
+		}
+		for _, artifact := range artifacts {
+			if artifact.Type != "video" {
+				continue
+			}
+			contentURL, err := service.BuildTaskArtifactContentURL(task.TaskID, artifact.Key)
+			if err != nil {
+				common.ApiErrorMsg(c, "Failed to build artifact content URL")
+				return
+			}
+			result["result_url"] = contentURL
+			break
+		}
+		if _, ok := result["result_url"]; !ok && view.LegacyVideoAvailable {
+			result["result_url"] = "/v1/videos/" + task.TaskID + "/content"
+		}
+	}
+	common.ApiSuccess(c, result)
+}
+
+// redactTaskRequestMedia preserves parameter structure while replacing media
+// references, including nested arrays and multipart file placeholders.
+func redactTaskRequestMedia(key string, value any) any {
+	media := key == "images" || key == "videos" || key == "audios" ||
+		key == "image" || key == "video" || key == "audio" ||
+		key == "image_url" || key == "video_url" || key == "audio_url" ||
+		key == "input_reference" || key == "reference_image" || key == "first_frame_image" || key == "last_frame_image"
+	switch v := value.(type) {
+	case map[string]any:
+		if _, ok := v["__fileRef"]; ok {
+			return "[MEDIA]"
+		}
+		for childKey, child := range v {
+			nextKey := strings.ToLower(childKey)
+			if media {
+				nextKey = key
+			}
+			v[childKey] = redactTaskRequestMedia(nextKey, child)
+		}
+	case []any:
+		for i, child := range v {
+			v[i] = redactTaskRequestMedia(key, child)
+		}
+	case string:
+		if media && (strings.HasPrefix(v, "http://") || strings.HasPrefix(v, "https://") || strings.HasPrefix(v, "data:") || strings.HasPrefix(v, "request_file:")) {
+			return "[MEDIA]"
+		}
+	}
+	return value
 }
 
 func writeTaskArtifacts(c *gin.Context, task *model.Task, dashboard bool) {
@@ -270,7 +400,7 @@ func legacyVideoAvailable(task *model.Task) bool {
 
 func getTaskForArtifactRequest(c *gin.Context, taskID string) (*model.Task, bool, error) {
 	if middleware.IsTaskArtifactAccess(c) {
-		task, exists, err := model.GetUniqueByOnlyTaskId(taskID)
+		task, exists, err := getTaskByOnlyTaskID(taskID)
 		if err != nil || !exists || task == nil {
 			return task, exists, err
 		}
@@ -280,10 +410,26 @@ func getTaskForArtifactRequest(c *gin.Context, taskID string) (*model.Task, bool
 		}
 		return task, true, nil
 	}
+	if c.GetBool("use_access_token") {
+		return model.GetByTaskId(c.GetInt("id"), taskID)
+	}
 	if c.GetInt("token_id") == 0 && c.GetInt("role") >= common.RoleAdminUser {
-		return model.GetByOnlyTaskId(taskID)
+		return getTaskByOnlyTaskID(taskID)
 	}
 	return model.GetByTaskId(c.GetInt("id"), taskID)
+}
+
+func getTaskByOnlyTaskID(taskID string) (*model.Task, bool, error) {
+	if strings.TrimSpace(taskID) == "" {
+		return nil, false, nil
+	}
+	var task *model.Task
+	err := model.DB.Where("task_id = ?", taskID).First(&task).Error
+	exists, err := model.RecordExist(err)
+	if err != nil {
+		return nil, false, err
+	}
+	return task, exists, nil
 }
 
 func writeTaskArtifactProjectionError(c *gin.Context, err error) {
@@ -457,6 +603,23 @@ func tasksToDto(tasks []*model.Task, fillUser bool, viewerRole int) []*dto.TaskD
 			}
 		}
 		item := relay.TaskModel2Dto(task)
+		if execution := task.PrivateData.Execution; execution != nil {
+			item.RequestID = execution.RequestID
+			item.TokenName = execution.TokenName
+			item.RequestAvailable = len(execution.RequestBody) > 0
+		}
+		item.Data = nil
+		item.LegacyAudioAvailable = task.Status == model.TaskStatusSuccess && task.Platform == constant.TaskPlatformSuno && (task.PrivateData.Execution == nil || task.PrivateData.Execution.TaskPlugin == nil)
+		if viewerRole < common.RoleAdminUser {
+			item.Platform = ""
+		}
+		item.FailReason = common.MaskSensitiveInfo(item.FailReason)
+		if task.PrivateData.Key != "" {
+			item.FailReason = strings.ReplaceAll(item.FailReason, task.PrivateData.Key, "[REDACTED]")
+		}
+		if task.PrivateData.UpstreamTaskID != "" {
+			item.FailReason = strings.ReplaceAll(item.FailReason, task.PrivateData.UpstreamTaskID, task.TaskID)
+		}
 		item.LegacyVideoAvailable = legacyVideoAvailable(task)
 		item.ResultDiscarded = task.PrivateData.ResultDiscarded
 		if task.Status == model.TaskStatusSuccess {
@@ -493,6 +656,12 @@ func tasksToDto(tasks []*model.Task, fillUser bool, viewerRole int) []*dto.TaskD
 				UpstreamTaskID: task.PrivateData.UpstreamTaskID,
 				NodeName:       task.PrivateData.NodeName,
 			}
+			var state struct {
+				OriginTaskID string `json:"origin_task_id"`
+			}
+			if len(task.PrivateData.PluginState) > 0 && common.Unmarshal(task.PrivateData.PluginState, &state) == nil {
+				rootInfo.OriginTaskID = state.OriginTaskID
+			}
 			if execution := task.PrivateData.Execution; execution != nil {
 				if snapshot := execution.TaskPlugin; snapshot != nil {
 					rootInfo.TaskPlugin = &dto.TaskPluginRuntimeInfo{
@@ -503,7 +672,7 @@ func tasksToDto(tasks []*model.Task, fillUser bool, viewerRole int) []*dto.TaskD
 					}
 				}
 			}
-			if rootInfo.TaskPlugin != nil || rootInfo.UpstreamTaskID != "" || rootInfo.NodeName != "" {
+			if rootInfo.TaskPlugin != nil || rootInfo.UpstreamTaskID != "" || rootInfo.OriginTaskID != "" || rootInfo.NodeName != "" {
 				item.RootInfo = rootInfo
 			}
 		}

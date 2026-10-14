@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/i18n"
@@ -135,7 +136,7 @@ func recordLoginAudit(user *model.User, c *gin.Context, deviceID string) {
 		UserAgent:   c.Request.UserAgent(),
 	}
 	if deviceID != "" {
-		extra["device_id"] = deviceID
+		extra.DeviceID = deviceID
 	}
 	content := fmt.Sprintf("Logged in successfully via %s", method)
 	params := map[string]any{
@@ -173,7 +174,7 @@ func setupLoginAtAuthVersion(user *model.User, expectedAuthVersion int64, c *gin
 	if user.Role < common.RoleAdminUser && rejectBlockedLoginIP(c) {
 		return
 	}
-	currentUser, err := model.GetUserById(user.Id, false)
+	currentUser, err := model.GetSelfUserById(user.Id)
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -216,7 +217,7 @@ func setupLoginAtAuthVersion(user *model.User, expectedAuthVersion int64, c *gin
 			"token_type":        bundle.TokenType,
 			"access_expires_at": bundle.AccessExpiresAt,
 			"session":           bundle.Session,
-			"user":              buildSelfUserData(user),
+			"user":              buildSelfUserData(currentUser),
 		},
 	})
 }
@@ -754,8 +755,7 @@ func TransferAffQuota(c *gin.Context) {
 		return
 	}
 	err = user.TransferAffQuotaToQuota(tran.Quota)
-	var message *common.Message
-	if errors.As(err, &message) {
+	if err != nil {
 		common.ApiError(c, err)
 		return
 	}

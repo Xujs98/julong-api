@@ -21,6 +21,7 @@ import (
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/relay/helper"
+	kitdto "github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/billing_setting"
 	"github.com/QuantumNous/new-api/types"
@@ -257,6 +258,15 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 		pluginKey = pinnedPlugin.Plugin.Meta.Key
 	}
 	exprStr, exists := billing_setting.ResolveTaskBillingExpr(pluginKey, modelName, info.UpstreamModelName)
+	// A Suanli channel can carry its own selling price per video model. When
+	// no global task expression overrides it, materialize that channel-local
+	// price into the same usage-expression path so normal pre-consume,
+	// settlement, refunds, special group ratios, and audit logs remain shared.
+	if !exists && billing_setting.GetBillingMode(modelName) != billing_setting.BillingModeTieredExpr {
+		if localExpr, configured := suanliChannelBillingExpression(info, pluginKey, modelName); configured {
+			exprStr, exists = localExpr, true
+		}
+	}
 	useTiered := exists || billing_setting.GetBillingMode(modelName) == billing_setting.BillingModeTieredExpr
 	if useTiered {
 		provider, supported := adaptor.(channel.TaskUsageFactsProvider)
@@ -289,7 +299,10 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 			}
 			return nil, service.TaskErrorWrapper(runErr, "model_price_error", http.StatusBadRequest)
 		}
-		groupRatioInfo := helper.HandleGroupRatio(c, info)
+		groupRatioInfo, groupErr := helper.HandleGroupRatio(c, info)
+		if groupErr != nil {
+			return nil, service.TaskErrorWrapper(groupErr, "model_price_error", http.StatusBadRequest)
+		}
 		quota, clamp := common.QuotaRoundChecked(cost * common.QuotaPerUnit * groupRatioInfo.GroupRatio)
 		noteTaskQuotaClamp(info, clamp)
 		priceData = types.PriceData{Quota: quota, QuotaToPreConsume: quota, GroupRatioInfo: groupRatioInfo}
@@ -408,6 +421,25 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 		Immediate:      parsed.Immediate,
 		PluginState:    parsed.PluginState,
 	}, nil
+}
+
+func suanliChannelBillingExpression(info *relaycommon.RelayInfo, pluginKey, modelName string) (string, bool) {
+	if info == nil || info.ChannelMeta == nil || pluginKey != kitdto.SuanliVideoPluginKey || info.ChannelMeta.ChannelSetting.GatewayProvider != kitdto.SuanliGatewayProvider {
+		return "", false
+	}
+	profile, ok := info.ChannelMeta.ChannelSetting.VideoModelConfigs[modelName]
+	if !ok || profile.UnitPrice == nil || *profile.UnitPrice < 0 {
+		return "", false
+	}
+	price := strconv.FormatFloat(*profile.UnitPrice, 'g', -1, 64)
+	switch profile.BillingMode {
+	case "per_second":
+		return `tier("suanli_video", u("seconds") * ` + price + `)`, true
+	case "per_task":
+		return `tier("suanli_video", u("tasks") * ` + price + `)`, true
+	default:
+		return "", false
+	}
 }
 
 // recalcQuotaFromRatios 根据 adjustedRatios 重新计算 quota。

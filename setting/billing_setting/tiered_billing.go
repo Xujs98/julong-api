@@ -23,6 +23,8 @@ const (
 	BillingModeField                   = "billing_mode"
 	BillingExprField                   = "billing_expr"
 	PerRequestSubscriptionAllowedField = "per_request_subscription_allowed"
+	PluginBillingExprOption            = "billing_setting.plugin_billing_expr"
+	maxTaskExprSmokeTests              = 64
 )
 
 // BillingSetting is managed by config.GlobalConfig.Register.
@@ -31,12 +33,14 @@ const (
 type BillingSetting struct {
 	BillingMode                   map[string]string `json:"billing_mode"`
 	BillingExpr                   map[string]string `json:"billing_expr"`
+	PluginBillingExpr             map[string]string `json:"plugin_billing_expr"`
 	PerRequestSubscriptionAllowed map[string]bool   `json:"per_request_subscription_allowed"`
 }
 
 var billingSetting = BillingSetting{
 	BillingMode:                   make(map[string]string),
 	BillingExpr:                   make(map[string]string),
+	PluginBillingExpr:             make(map[string]string),
 	PerRequestSubscriptionAllowed: make(map[string]bool),
 }
 

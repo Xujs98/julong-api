@@ -1,6 +1,7 @@
 package model
 
 import (
+	kitdto "github.com/QuantumNous/new-api/relaykit/dto"
 	"slices"
 
 	"github.com/QuantumNous/new-api/constant"
@@ -106,6 +107,14 @@ func channelMatchesFilter(ch *Channel, modelName string, filter dto.ChannelFilte
 			// A New API channel serves every plugin it is extended with; the
 			// pinned plugin or any shared-model candidate may execute there.
 			setting := ch.GetSetting()
+			if filter.TaskPluginKey == kitdto.SuanliVideoPluginKey {
+				if setting.GatewayProvider != kitdto.SuanliGatewayProvider {
+					return false
+				}
+				if profile, configured := setting.VideoModelConfigs[modelName]; configured && profile.Enabled != nil && !*profile.Enabled {
+					return false
+				}
+			}
 			return setting.BindsTaskPlugin(filter.TaskPluginKey) || slices.ContainsFunc(filter.TaskPluginKeys, setting.BindsTaskPlugin)
 		}
 		return slices.Contains(filter.TaskPluginChannelTypes, ch.Type)

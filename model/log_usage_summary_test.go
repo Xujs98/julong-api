@@ -38,7 +38,7 @@ func TestGetUserQuotaIncreaseLogsPaginatesStructuredCredits(t *testing.T) {
 	RecordQuotaIncreaseLog(users[0].Id, 300, QuotaIncreaseSourceAdminAdjustment, "admin adjustment")
 	RecordQuotaIncreaseLog(users[1].Id, 900, QuotaIncreaseSourceOnlineRecharge, "other user recharge")
 	RecordQuotaIncreaseLog(users[0].Id, 0, QuotaIncreaseSourceRefund, "ignored zero increase")
-	RecordLog(users[0].Id, LogTypeTopup, "legacy top-up without structured quota increase")
+	RecordLog(users[0].Id, LogTypeTopup, common.NewMessage("legacy top-up without structured quota increase"))
 
 	items, total, err := GetUserQuotaIncreaseLogs(users[0].Id, 1, 1)
 	require.NoError(t, err)

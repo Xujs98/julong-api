@@ -20,6 +20,8 @@ const (
 	accessTokenRuleAny
 	// accessTokenRuleSession rejects every access token, legacy ones included.
 	accessTokenRuleSession
+	// Settings rules accept a section grant; the handler applies key-level authorization.
+	accessTokenRuleSettings
 )
 
 type accessTokenRouteRule struct {
@@ -28,8 +30,9 @@ type accessTokenRouteRule struct {
 }
 
 var (
-	accessTokenAnyRule     = accessTokenRouteRule{kind: accessTokenRuleAny}
-	accessTokenSessionRule = accessTokenRouteRule{kind: accessTokenRuleSession}
+	accessTokenAnyRule      = accessTokenRouteRule{kind: accessTokenRuleAny}
+	accessTokenSessionRule  = accessTokenRouteRule{kind: accessTokenRuleSession}
+	accessTokenSettingsRule = accessTokenRouteRule{kind: accessTokenRuleSettings}
 )
 
 func accessTokenScopeRule(scope string) accessTokenRouteRule {
@@ -45,6 +48,7 @@ var accessTokenRouteRules = map[string]accessTokenRouteRule{
 	"GET /api/models":                     accessTokenScopeRule("profile:read"),
 	"GET /api/status/test":                accessTokenScopeRule("log:read"),
 	"GET /api/pricing":                    accessTokenAnyRule,
+	"GET /api/model-documentation":        accessTokenAnyRule,
 	"GET /api/perf-metrics/summary":       accessTokenAnyRule,
 	"GET /api/perf-metrics":               accessTokenAnyRule,
 	"GET /api/rankings":                   accessTokenAnyRule,
@@ -106,21 +110,59 @@ var accessTokenRouteRules = map[string]accessTokenRouteRule{
 	"DELETE /api/user/oauth/bindings/:provider_id": accessTokenScopeRule("account_security:write"),
 
 	// router/api-router.go: /api/user (admin)
-	"GET /api/user/":                                   accessTokenScopeRule("user:read"),
-	"GET /api/user/topup":                              accessTokenScopeRule("billing:read"),
-	"POST /api/user/topup/complete":                    accessTokenScopeRule("billing:write"),
-	"GET /api/user/search":                             accessTokenScopeRule("user:read"),
-	"GET /api/user/:id/oauth/bindings":                 accessTokenScopeRule("user:read"),
-	"DELETE /api/user/:id/oauth/bindings/:provider_id": accessTokenScopeRule("user:write"),
-	"DELETE /api/user/:id/bindings/:binding_type":      accessTokenScopeRule("user:write"),
-	"GET /api/user/:id":                                accessTokenScopeRule("user:read"),
-	"POST /api/user/":                                  accessTokenScopeRule("user:write"),
-	"POST /api/user/manage":                            accessTokenScopeRule("user:write"),
-	"PUT /api/user/":                                   accessTokenScopeRule("user:write"),
-	"DELETE /api/user/:id":                             accessTokenScopeRule("user:write"),
-	"DELETE /api/user/:id/reset_passkey":               accessTokenScopeRule("user:write"),
-	"GET /api/user/2fa/stats":                          accessTokenScopeRule("user:read"),
-	"DELETE /api/user/:id/2fa":                         accessTokenScopeRule("user:write"),
+	"GET /api/user/":                                    accessTokenScopeRule("user:read"),
+	"GET /api/user/topup":                               accessTokenScopeRule("billing:read"),
+	"POST /api/user/topup/complete":                     accessTokenScopeRule("billing:write"),
+	"GET /api/user/search":                              accessTokenScopeRule("user:read"),
+	"GET /api/user/:id/oauth/bindings":                  accessTokenScopeRule("user:read"),
+	"DELETE /api/user/:id/oauth/bindings/:provider_id":  accessTokenScopeRule("user:write"),
+	"DELETE /api/user/:id/bindings/:binding_type":       accessTokenScopeRule("user:write"),
+	"GET /api/user/:id":                                 accessTokenScopeRule("user:read"),
+	"POST /api/user/":                                   accessTokenScopeRule("user:write"),
+	"POST /api/user/manage":                             accessTokenScopeRule("user:write"),
+	"PUT /api/user/":                                    accessTokenScopeRule("user:write"),
+	"DELETE /api/user/:id":                              accessTokenScopeRule("user:write"),
+	"DELETE /api/user/:id/reset_passkey":                accessTokenScopeRule("user:write"),
+	"GET /api/user/2fa/stats":                           accessTokenScopeRule("user:read"),
+	"DELETE /api/user/:id/2fa":                          accessTokenScopeRule("user:write"),
+	"GET /api/user/tags":                                accessTokenScopeRule("user:read"),
+	"POST /api/user/tags":                               accessTokenScopeRule("user:write"),
+	"PUT /api/user/tags/:tag_id":                        accessTokenScopeRule("user:write"),
+	"DELETE /api/user/tags/:tag_id":                     accessTokenScopeRule("user:write"),
+	"GET /api/user/options":                             accessTokenScopeRule("user:read"),
+	"POST /api/user/options/resolve":                    accessTokenScopeRule("user:read"),
+	"POST /api/user/batch-quota":                        accessTokenScopeRule("user:write"),
+	"GET /api/user/quota-summary":                       accessTokenScopeRule("user:read"),
+	"GET /api/user/quota-summary/settings":              accessTokenScopeRule("user:read"),
+	"PUT /api/user/quota-summary/settings":              accessTokenScopeRule("user:write"),
+	"GET /api/user/quota-summary/users":                 accessTokenScopeRule("user:read"),
+	"POST /api/user/quota-summary/users/resolve":        accessTokenScopeRule("user:read"),
+	"GET /api/user/agent-detail/:id":                    accessTokenScopeRule("user:read"),
+	"GET /api/user/:id/usage-summary":                   accessTokenScopeRule("user:read"),
+	"GET /api/user/:id/risk":                            accessTokenScopeRule("user:read"),
+	"PUT /api/user/:id/risk":                            accessTokenScopeRule("user:write"),
+	"PUT /api/user/:id/tag":                             accessTokenScopeRule("user:write"),
+	"GET /api/user/:id/quota-increases":                 accessTokenScopeRule("user:read"),
+	"GET /api/user/:id/login-ips":                       accessTokenScopeRule("user:read"),
+	"PUT /api/user/:id/login-ips":                       accessTokenScopeRule("user:write"),
+	"GET /api/user/:id/login-devices":                   accessTokenScopeRule("user:read"),
+	"PUT /api/user/:id/login-devices":                   accessTokenScopeRule("user:write"),
+	"GET /api/user/:id/request-content":                 accessTokenScopeRule("user:read"),
+	"GET /api/user/:id/request-content/:log_id":         accessTokenScopeRule("user:read"),
+	"PUT /api/user/:id/request-content":                 accessTokenScopeRule("user:write"),
+	"DELETE /api/user/:id/request-content":              accessTokenScopeRule("user:write"),
+	"GET /api/user/agent/users":                         accessTokenScopeRule("wallet:read"),
+	"PUT /api/user/agent/topup-link":                    accessTokenScopeRule("wallet:write"),
+	"GET /api/user/invoice":                             accessTokenScopeRule("wallet:read"),
+	"GET /api/user/invoice/applications":                accessTokenScopeRule("billing:read"),
+	"GET /api/user/invoice/email-templates":             accessTokenScopeRule("billing:read"),
+	"GET /api/user/invoice/applications/:id/attachment": accessTokenScopeRule("wallet:read"),
+	"POST /api/user/invoice/apply":                      accessTokenScopeRule("wallet:write"),
+	"POST /api/user/invoice/applications/:id/cancel":    accessTokenScopeRule("wallet:write"),
+	"POST /api/user/invoice/applications/:id/complete":  accessTokenScopeRule("billing:write"),
+	"POST /api/user/invoice/applications/:id/withdraw":  accessTokenScopeRule("billing:write"),
+	"PUT /api/user/invoice/applications/:id":            accessTokenScopeRule("billing:write"),
+	"GET /api/announcements":                            accessTokenScopeRule("profile:read"),
 
 	// router/api-router.go: /api/subscription
 	"GET /api/subscription/plans":                                    accessTokenScopeRule("wallet:read"),
@@ -144,34 +186,34 @@ var accessTokenRouteRules = map[string]accessTokenRouteRule{
 	"DELETE /api/subscription/admin/user_subscriptions/:id":          accessTokenScopeRule("billing:write"),
 
 	// router/api-router.go: /api/option
-	"GET /api/option/":                                           accessTokenScopeRule("option:read"),
-	"GET /api/option/request_policy":                             accessTokenScopeRule("option:read"),
-	"PATCH /api/option/request_policy":                           accessTokenScopeRule("option:write"),
-	"PUT /api/option/":                                           accessTokenScopeRule("option:write"),
-	"PUT /api/option/passkey/domains":                            accessTokenScopeRule("option:write"),
-	"GET /api/option/model_pricing":                              accessTokenScopeRule("option:read"),
-	"PATCH /api/option/model_pricing":                            accessTokenScopeRule("option:write"),
-	"POST /api/option/model_pricing/convert":                     accessTokenScopeRule("option:read"),
-	"POST /api/option/model_pricing/preview":                     accessTokenScopeRule("option:read"),
+	"GET /api/option/":                                           accessTokenSettingsRule,
+	"GET /api/option/request_policy":                             accessTokenSettingsRule,
+	"PATCH /api/option/request_policy":                           accessTokenSettingsRule,
+	"PUT /api/option/":                                           accessTokenSettingsRule,
+	"PUT /api/option/passkey/domains":                            accessTokenScopeRule(service.AccessTokenScopeOf(authz.SystemSettingsPermission("auth.passkey"))),
+	"GET /api/option/model_pricing":                              accessTokenScopeRule(service.AccessTokenScopeOf(authz.SystemSettingsPermission("billing.model-pricing"))),
+	"PATCH /api/option/model_pricing":                            accessTokenScopeRule(service.AccessTokenScopeOf(authz.SystemSettingsPermission("billing.model-pricing"))),
+	"POST /api/option/model_pricing/convert":                     accessTokenScopeRule(service.AccessTokenScopeOf(authz.SystemSettingsPermission("billing.model-pricing"))),
+	"POST /api/option/model_pricing/preview":                     accessTokenScopeRule(service.AccessTokenScopeOf(authz.SystemSettingsPermission("billing.model-pricing"))),
 	"POST /api/option/payment_compliance":                        accessTokenSessionRule,
-	"GET /api/option/channel_affinity_cache":                     accessTokenScopeRule("option:read"),
-	"DELETE /api/option/channel_affinity_cache":                  accessTokenScopeRule("option:write"),
-	"POST /api/option/rest_model_ratio":                          accessTokenScopeRule("option:write"),
-	"GET /api/option/waffo-pancake/catalog":                      accessTokenScopeRule("option:read"),
-	"POST /api/option/waffo-pancake/pair":                        accessTokenScopeRule("option:write"),
-	"POST /api/option/waffo-pancake/save":                        accessTokenScopeRule("option:write"),
-	"POST /api/option/waffo-pancake/subscription-product":        accessTokenScopeRule("option:write"),
-	"GET /api/option/waffo-pancake/subscription-product-options": accessTokenScopeRule("option:read"),
+	"GET /api/option/channel_affinity_cache":                     accessTokenScopeRule(service.AccessTokenScopeOf(authz.SystemSettingsPermission("models.channel-affinity"))),
+	"DELETE /api/option/channel_affinity_cache":                  accessTokenScopeRule(service.AccessTokenScopeOf(authz.SystemSettingsPermission("models.channel-affinity"))),
+	"POST /api/option/rest_model_ratio":                          accessTokenScopeRule(service.AccessTokenScopeOf(authz.SystemSettingsPermission("billing.model-pricing"))),
+	"GET /api/option/waffo-pancake/catalog":                      accessTokenScopeRule(service.AccessTokenScopeOf(authz.SystemSettingsPermission("billing.payment"))),
+	"POST /api/option/waffo-pancake/pair":                        accessTokenScopeRule(service.AccessTokenScopeOf(authz.SystemSettingsPermission("billing.payment"))),
+	"POST /api/option/waffo-pancake/save":                        accessTokenScopeRule(service.AccessTokenScopeOf(authz.SystemSettingsPermission("billing.payment"))),
+	"POST /api/option/waffo-pancake/subscription-product":        accessTokenScopeRule(service.AccessTokenScopeOf(authz.SystemSettingsPermission("billing.payment"))),
+	"GET /api/option/waffo-pancake/subscription-product-options": accessTokenScopeRule(service.AccessTokenScopeOf(authz.SystemSettingsPermission("billing.payment"))),
 
 	// router/api-router.go: /api/custom-oauth-provider, /api/ratio_sync
-	"POST /api/custom-oauth-provider/discovery": accessTokenScopeRule("option:write"),
-	"GET /api/custom-oauth-provider/":           accessTokenScopeRule("option:read"),
-	"GET /api/custom-oauth-provider/:id":        accessTokenScopeRule("option:read"),
-	"POST /api/custom-oauth-provider/":          accessTokenScopeRule("option:write"),
-	"PUT /api/custom-oauth-provider/:id":        accessTokenScopeRule("option:write"),
-	"DELETE /api/custom-oauth-provider/:id":     accessTokenScopeRule("option:write"),
-	"GET /api/ratio_sync/channels":              accessTokenScopeRule("option:read"),
-	"POST /api/ratio_sync/fetch":                accessTokenScopeRule("option:write"),
+	"POST /api/custom-oauth-provider/discovery": accessTokenScopeRule(service.AccessTokenScopeOf(authz.SystemSettingsPermission("auth.custom-oauth"))),
+	"GET /api/custom-oauth-provider/":           accessTokenScopeRule(service.AccessTokenScopeOf(authz.SystemSettingsPermission("auth.custom-oauth"))),
+	"GET /api/custom-oauth-provider/:id":        accessTokenScopeRule(service.AccessTokenScopeOf(authz.SystemSettingsPermission("auth.custom-oauth"))),
+	"POST /api/custom-oauth-provider/":          accessTokenScopeRule(service.AccessTokenScopeOf(authz.SystemSettingsPermission("auth.custom-oauth"))),
+	"PUT /api/custom-oauth-provider/:id":        accessTokenScopeRule(service.AccessTokenScopeOf(authz.SystemSettingsPermission("auth.custom-oauth"))),
+	"DELETE /api/custom-oauth-provider/:id":     accessTokenScopeRule(service.AccessTokenScopeOf(authz.SystemSettingsPermission("auth.custom-oauth"))),
+	"GET /api/ratio_sync/channels":              accessTokenScopeRule(service.AccessTokenScopeOf(authz.SystemSettingsPermission("billing.model-pricing"))),
+	"POST /api/ratio_sync/fetch":                accessTokenScopeRule(service.AccessTokenScopeOf(authz.SystemSettingsPermission("billing.model-pricing"))),
 
 	// router/api-router.go: /api/performance, /api/system-task, /api/system-info
 	"GET /api/performance/stats":                   accessTokenScopeRule("ops:read"),
@@ -180,6 +222,12 @@ var accessTokenRouteRules = map[string]accessTokenRouteRule{
 	"POST /api/performance/gc":                     accessTokenScopeRule("ops:write"),
 	"GET /api/performance/logs":                    accessTokenScopeRule("ops:read"),
 	"DELETE /api/performance/logs":                 accessTokenScopeRule("ops:write"),
+	"GET /api/performance/image-storage":           accessTokenScopeRule(service.AccessTokenScopeOf(authz.SystemSettingsPermission("operations.logs"))),
+	"PUT /api/performance/image-storage":           accessTokenScopeRule(service.AccessTokenScopeOf(authz.SystemSettingsPermission("operations.logs"))),
+	"POST /api/performance/image-storage/test":     accessTokenScopeRule(service.AccessTokenScopeOf(authz.SystemSettingsPermission("operations.logs"))),
+	"GET /api/performance/image-storage/stats":     accessTokenScopeRule(service.AccessTokenScopeOf(authz.SystemSettingsPermission("operations.logs"))),
+	"POST /api/performance/image-storage/cleanup":  accessTokenScopeRule(service.AccessTokenScopeOf(authz.SystemSettingsPermission("operations.logs"))),
+	"POST /api/performance/image-storage/purge":    accessTokenScopeRule(service.AccessTokenScopeOf(authz.SystemSettingsPermission("operations.logs"))),
 	"POST /api/system-task/log-cleanup":            accessTokenScopeRule("ops:write"),
 	"GET /api/system-task/list":                    accessTokenScopeRule("ops:read"),
 	"DELETE /api/system-task/history":              accessTokenScopeRule("ops:write"),
@@ -233,21 +281,66 @@ var accessTokenRouteRules = map[string]accessTokenRouteRule{
 	"DELETE /api/redemption/:id":     accessTokenScopeRule("redemption:write"),
 
 	// router/api-router.go: /api/audit, /api/log, /api/data
-	"GET /api/audit/self":                       accessTokenScopeRule("usage:read"),
-	"GET /api/log/":                             accessTokenScopeRule("log:read"),
-	"GET /api/log/stat":                         accessTokenScopeRule("log:read"),
-	"GET /api/log/self/stat":                    accessTokenScopeRule("usage:read"),
-	"GET /api/log/channel_affinity_usage_cache": accessTokenScopeRule("log:read"),
-	"GET /api/log/search":                       accessTokenScopeRule("log:read"),
-	"GET /api/log/self":                         accessTokenScopeRule("usage:read"),
-	"GET /api/log/self/search":                  accessTokenScopeRule("usage:read"),
-	"GET /api/log/export":                       accessTokenScopeRule("log:read"),
-	"GET /api/log/self/export":                  accessTokenScopeRule("usage:read"),
-	"GET /api/data/":                            accessTokenScopeRule("log:read"),
-	"GET /api/data/users":                       accessTokenScopeRule("log:read"),
-	"GET /api/data/self":                        accessTokenScopeRule("usage:read"),
-	"GET /api/data/flow":                        accessTokenScopeRule("log:read"),
-	"GET /api/data/flow/self":                   accessTokenScopeRule("usage:read"),
+	"GET /api/audit/self":                               accessTokenScopeRule("usage:read"),
+	"GET /api/log/":                                     accessTokenScopeRule("log:read"),
+	"GET /api/log/stat":                                 accessTokenScopeRule("log:read"),
+	"GET /api/log/self/stat":                            accessTokenScopeRule("usage:read"),
+	"GET /api/log/channel_affinity_usage_cache":         accessTokenScopeRule("log:read"),
+	"GET /api/log/search":                               accessTokenScopeRule("log:read"),
+	"GET /api/log/self":                                 accessTokenScopeRule("usage:read"),
+	"GET /api/log/self/search":                          accessTokenScopeRule("usage:read"),
+	"GET /api/log/export":                               accessTokenScopeRule("log:read"),
+	"GET /api/log/export/stream":                        accessTokenScopeRule("log:read"),
+	"GET /api/log/self/export":                          accessTokenScopeRule("usage:read"),
+	"GET /api/log/self/export/stream":                   accessTokenScopeRule("usage:read"),
+	"GET /api/data/":                                    accessTokenScopeRule("log:read"),
+	"GET /api/data/users":                               accessTokenScopeRule("log:read"),
+	"GET /api/data/self":                                accessTokenScopeRule("usage:read"),
+	"GET /api/data/flow":                                accessTokenScopeRule("log:read"),
+	"GET /api/data/flow/self":                           accessTokenScopeRule("usage:read"),
+	"GET /api/data/groups":                              accessTokenScopeRule("log:read"),
+	"GET /api/image-generation-logs":                    accessTokenScopeRule("log:read"),
+	"GET /api/image-generation-logs/":                   accessTokenScopeRule("log:read"),
+	"GET /api/image-generation-logs/:id/task":           accessTokenScopeRule("log:read"),
+	"GET /api/image-generation-logs/:id/images/:index":  accessTokenScopeRule("log:read"),
+	"GET /api/error-reports":                            accessTokenScopeRule("ops:read"),
+	"GET /api/error-reports/":                           accessTokenScopeRule("ops:read"),
+	"GET /api/error-reports/:id":                        accessTokenScopeRule("ops:read"),
+	"POST /api/error-reports":                           accessTokenAnyRule,
+	"GET /api/support-contacts":                         accessTokenScopeRule("profile:read"),
+	"PUT /api/support-contacts":                         accessTokenScopeRule(service.AccessTokenScopeOf(authz.SystemSettingsSupportContactsWrite)),
+	"POST /api/site-assets/logo":                        accessTokenScopeRule(service.AccessTokenScopeOf(authz.SystemSettingsPermission("site.system-info"))),
+	"DELETE /api/site-assets/logo/:filename":            accessTokenScopeRule(service.AccessTokenScopeOf(authz.SystemSettingsPermission("site.system-info"))),
+	"GET /api/site-assets/logo/:filename":               accessTokenAnyRule,
+	"GET /api/email-campaigns":                          accessTokenScopeRule(service.AccessTokenScopeOf(authz.SystemSettingsPermission("operations.email-campaigns"))),
+	"GET /api/email-campaigns/stats":                    accessTokenScopeRule(service.AccessTokenScopeOf(authz.SystemSettingsPermission("operations.email-campaigns"))),
+	"GET /api/email-campaigns/users":                    accessTokenScopeRule(service.AccessTokenScopeOf(authz.SystemSettingsPermission("operations.email-campaigns"))),
+	"POST /api/email-campaigns/users/resolve":           accessTokenScopeRule(service.AccessTokenScopeOf(authz.SystemSettingsPermission("operations.email-campaigns"))),
+	"POST /api/email-campaigns":                         accessTokenScopeRule(service.AccessTokenScopeOf(authz.SystemSettingsPermission("operations.email-campaigns"))),
+	"POST /api/email-campaigns/preview":                 accessTokenScopeRule(service.AccessTokenScopeOf(authz.SystemSettingsPermission("operations.email-campaigns"))),
+	"GET /api/email-campaigns/:id":                      accessTokenScopeRule(service.AccessTokenScopeOf(authz.SystemSettingsPermission("operations.email-campaigns"))),
+	"PUT /api/email-campaigns/:id":                      accessTokenScopeRule(service.AccessTokenScopeOf(authz.SystemSettingsPermission("operations.email-campaigns"))),
+	"DELETE /api/email-campaigns/:id":                   accessTokenScopeRule(service.AccessTokenScopeOf(authz.SystemSettingsPermission("operations.email-campaigns"))),
+	"POST /api/email-campaigns/:id/activate":            accessTokenScopeRule(service.AccessTokenScopeOf(authz.SystemSettingsPermission("operations.email-campaigns"))),
+	"POST /api/email-campaigns/:id/pause":               accessTokenScopeRule(service.AccessTokenScopeOf(authz.SystemSettingsPermission("operations.email-campaigns"))),
+	"POST /api/email-campaigns/:id/retry":               accessTokenScopeRule(service.AccessTokenScopeOf(authz.SystemSettingsPermission("operations.email-campaigns"))),
+	"GET /api/email-campaigns/:id/deliveries":           accessTokenScopeRule(service.AccessTokenScopeOf(authz.SystemSettingsPermission("operations.email-campaigns"))),
+	"GET /api/email-settings":                           accessTokenScopeRule(service.AccessTokenScopeOf(authz.SystemSettingsPermission("operations.email-templates"))),
+	"PUT /api/email-settings":                           accessTokenScopeRule(service.AccessTokenScopeOf(authz.SystemSettingsPermission("operations.email-templates"))),
+	"GET /api/email-settings/config":                    accessTokenScopeRule(service.AccessTokenScopeOf(authz.SystemSettingsPermission("operations.email-templates"))),
+	"PUT /api/email-settings/config":                    accessTokenScopeRule(service.AccessTokenScopeOf(authz.SystemSettingsPermission("operations.email-templates"))),
+	"GET /api/email-settings/recipients":                accessTokenScopeRule(service.AccessTokenScopeOf(authz.SystemSettingsPermission("operations.email-templates"))),
+	"POST /api/email-settings/recipients/resolve":       accessTokenScopeRule(service.AccessTokenScopeOf(authz.SystemSettingsPermission("operations.email-templates"))),
+	"GET /api/email-settings/monitored-users":           accessTokenScopeRule(service.AccessTokenScopeOf(authz.SystemSettingsPermission("operations.email-templates"))),
+	"POST /api/email-settings/monitored-users/resolve":  accessTokenScopeRule(service.AccessTokenScopeOf(authz.SystemSettingsPermission("operations.email-templates"))),
+	"POST /api/email-settings/channel-anomaly/test":     accessTokenScopeRule(service.AccessTokenScopeOf(authz.SystemSettingsPermission("operations.email-templates"))),
+	"POST /api/email-settings/dashboard-report/test":    accessTokenScopeRule(service.AccessTokenScopeOf(authz.SystemSettingsPermission("operations.email-templates"))),
+	"POST /api/email-settings/risk-user/test":           accessTokenScopeRule(service.AccessTokenScopeOf(authz.SystemSettingsPermission("operations.email-templates"))),
+	"POST /api/email-settings/user-presence/test":       accessTokenScopeRule(service.AccessTokenScopeOf(authz.SystemSettingsPermission("operations.email-templates"))),
+	"GET /api/email-settings/templates":                 accessTokenScopeRule(service.AccessTokenScopeOf(authz.SystemSettingsPermission("operations.email-templates"))),
+	"PUT /api/email-settings/templates/:event":          accessTokenScopeRule(service.AccessTokenScopeOf(authz.SystemSettingsPermission("operations.email-templates"))),
+	"POST /api/email-settings/templates/:event/preview": accessTokenScopeRule(service.AccessTokenScopeOf(authz.SystemSettingsPermission("operations.email-templates"))),
+	"POST /api/email-settings/templates/:event/reset":   accessTokenScopeRule(service.AccessTokenScopeOf(authz.SystemSettingsPermission("operations.email-templates"))),
 
 	// router/api-router.go: /api/group, /api/prefill_group
 	"GET /api/group/":               accessTokenScopeRule("group:read"),
@@ -262,6 +355,12 @@ var accessTokenRouteRules = map[string]accessTokenRouteRule{
 	"GET /api/task/self":               accessTokenScopeRule("usage:read"),
 	"GET /api/task":                    accessTokenScopeRule("log:read"),
 	"GET /api/task/:task_id/artifacts": accessTokenScopeRule("usage:read"),
+	"GET /api/task/:task_id/request":   accessTokenScopeRule("usage:read"),
+	"GET /api/task/:task_id/detail":    accessTokenScopeRule("usage:read"),
+
+	// router/api-router.go: /api/media-assets
+	"GET /api/media-assets":              accessTokenScopeRule("log:read"),
+	"DELETE /api/media-assets/:asset_id": accessTokenAnyRule,
 
 	// router/api-router.go: /api/vendors, /api/models (admin)
 	"POST /api/vendors/operations/preview":  accessTokenScopeRule("model:read"),
@@ -283,6 +382,13 @@ var accessTokenRouteRules = map[string]accessTokenRouteRule{
 	"PUT /api/models/":                      accessTokenScopeRule("model:write"),
 	"DELETE /api/models/:id":                accessTokenScopeRule("model:write"),
 
+	// router/api-router.go: /api/model-document-templates
+	"GET /api/model-document-templates":        accessTokenScopeRule("model:read"),
+	"GET /api/model-document-templates/:id":    accessTokenScopeRule("model:read"),
+	"POST /api/model-document-templates":       accessTokenScopeRule("model:write"),
+	"PUT /api/model-document-templates/:id":    accessTokenScopeRule("model:write"),
+	"DELETE /api/model-document-templates/:id": accessTokenScopeRule("model:write"),
+
 	// router/api-router.go: /api/deployments
 	"GET /api/deployments/settings":                     accessTokenScopeRule("deployment:read"),
 	"POST /api/deployments/settings/test-connection":    accessTokenScopeRule("deployment:write"),
@@ -303,6 +409,9 @@ var accessTokenRouteRules = map[string]accessTokenRouteRule{
 	"PUT /api/deployments/:id/name":                     accessTokenScopeRule("deployment:write"),
 	"POST /api/deployments/:id/extend":                  accessTokenScopeRule("deployment:write"),
 	"DELETE /api/deployments/:id":                       accessTokenScopeRule("deployment:write"),
+
+	// The handler requires wallet:read for ownership or billing:read for administrators.
+	"GET /api/user/invoice/applications/:id/payment-proofs/:proof_id": accessTokenAnyRule,
 
 	// router/relay-router.go
 	"POST /pg/chat/completions": accessTokenSessionRule,
@@ -361,6 +470,8 @@ func (rule accessTokenRouteRule) Kind() string {
 	switch rule.kind {
 	case accessTokenRuleScope:
 		return "scope"
+	case accessTokenRuleSettings:
+		return "settings"
 	case accessTokenRuleAny:
 		return "any"
 	case accessTokenRuleSession:

@@ -56,3 +56,30 @@ func TestSanitizedTruncatedPreviewCanStayWithinCaptureLimit(t *testing.T) {
 	assert.Contains(t, string(encoded), "_capture_notice")
 	assert.Contains(t, string(encoded), "_preview")
 }
+
+func TestTaskRequestSnapshotRedactsCredentialsSignedURLsAndMedia(t *testing.T) {
+	snapshot, truncated := TaskRequestSnapshot(map[string]any{
+		"model":         "seedance",
+		"prompt":        "a short prompt",
+		"api_key":       "secret-key",
+		"authorization": "Bearer secret-token",
+		"video_url":     "https://cdn.example/video.mp4?x-amz-signature=secret",
+		"input_image":   "data:image/png;base64," + strings.Repeat("x", 2048),
+	})
+	require.False(t, truncated)
+	assert.LessOrEqual(t, len(snapshot), 32<<10)
+	text := string(snapshot)
+	assert.Contains(t, text, "[REDACTED]")
+	assert.Contains(t, text, "[OMITTED EMBEDDED MEDIA:")
+	assert.NotContains(t, text, "secret-key")
+	assert.NotContains(t, text, "secret-token")
+	assert.NotContains(t, text, "x-amz-signature=secret")
+}
+
+func TestTaskRequestSnapshotBoundsLargePayload(t *testing.T) {
+	snapshot, truncated := TaskRequestSnapshot(map[string]any{
+		"prompt": strings.Repeat("x", 128<<10),
+	})
+	require.True(t, truncated)
+	assert.LessOrEqual(t, len(snapshot), 32<<10)
+}

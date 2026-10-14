@@ -17,7 +17,10 @@ import (
 func SetApiRouter(router *gin.Engine) {
 	apiRouter := router.Group("/api")
 	apiRouter.Use(middleware.RouteTag("api"))
-	apiRouter.Use(gzip.Gzip(gzip.DefaultCompression))
+	// Byte ranges and HEAD lengths describe the stored media, not a gzip stream.
+	apiRouter.Use(gzip.Gzip(gzip.DefaultCompression, gzip.WithExcludedPathsRegexs(
+		[]string{`^/api/media-assets/[^/]+/content$`},
+	)))
 	apiRouter.Use(middleware.AccessTokenAudit())
 	apiRouter.Use(middleware.BodyStorageCleanup()) // 清理请求体存储
 	apiRouter.Use(middleware.GlobalAPIRateLimit())
@@ -35,6 +38,14 @@ func SetApiRouter(router *gin.Engine) {
 		apiRouter.GET("/uptime/status", controller.GetUptimeKumaStatus)
 		apiRouter.GET("/models", middleware.UserAuth(), controller.DashboardListModels)
 		apiRouter.GET("/status/test", middleware.AdminAuth(), controller.TestStatus)
+		mediaAssetsRoute := apiRouter.Group("/media-assets")
+		mediaAssetsRoute.GET("/:asset_id/content", controller.MediaAssetContent)
+		mediaAssetsRoute.HEAD("/:asset_id/content", controller.MediaAssetContent)
+		mediaAssetsRoute.Use(middleware.UserAuth())
+		{
+			mediaAssetsRoute.GET("", controller.ListMediaAssets)
+			mediaAssetsRoute.DELETE("/:asset_id", controller.DeleteMediaAsset)
+		}
 		apiRouter.GET("/notice", controller.GetNotice)
 		apiRouter.GET("/user-agreement", controller.GetUserAgreement)
 		apiRouter.GET("/privacy-policy", controller.GetPrivacyPolicy)
@@ -43,6 +54,16 @@ func SetApiRouter(router *gin.Engine) {
 		//apiRouter.GET("/midjourney", controller.GetMidjourney)
 		apiRouter.GET("/home_page_content", controller.GetHomePageContent)
 		apiRouter.GET("/pricing", middleware.HeaderNavModuleAuth("pricing"), controller.GetPricing)
+		apiRouter.GET("/model-documentation", middleware.HeaderNavModuleAuth("pricing"), controller.GetModelDocumentation)
+		documentTemplatesRoute := apiRouter.Group("/model-document-templates")
+		documentTemplatesRoute.Use(middleware.AdminAuth())
+		{
+			documentTemplatesRoute.GET("", controller.ListModelDocumentTemplates)
+			documentTemplatesRoute.POST("", controller.CreateModelDocumentTemplate)
+			documentTemplatesRoute.GET("/:id", controller.GetModelDocumentTemplate)
+			documentTemplatesRoute.PUT("/:id", controller.UpdateModelDocumentTemplate)
+			documentTemplatesRoute.DELETE("/:id", controller.DeleteModelDocumentTemplate)
+		}
 		perfMetricsRoute := apiRouter.Group("/perf-metrics")
 		perfMetricsRoute.Use(middleware.HeaderNavModulePublicOrUserAuth("pricing"))
 		{
@@ -134,6 +155,7 @@ func SetApiRouter(router *gin.Engine) {
 				selfRoute.POST("/invoice/apply", middleware.CriticalRateLimit(), controller.ApplyInvoice)
 				selfRoute.POST("/invoice/applications/:id/cancel", middleware.CriticalRateLimit(), controller.CancelInvoiceApplication)
 				selfRoute.GET("/invoice/applications/:id/attachment", middleware.DisableCache(), controller.DownloadInvoiceAttachment)
+				selfRoute.GET("/invoice/applications/:id/payment-proofs/:proof_id", middleware.DisableCache(), controller.DownloadInvoicePaymentProof)
 				selfRoute.POST("/topup", middleware.CriticalRateLimit(), controller.TopUp)
 				selfRoute.POST("/pay", middleware.CriticalRateLimit(), controller.RequestEpay)
 				selfRoute.POST("/amount", controller.RequestAmount)
@@ -282,6 +304,11 @@ func SetApiRouter(router *gin.Engine) {
 			optionRoute.GET("/request_policy", controller.GetRequestPolicy)
 			optionRoute.PATCH("/request_policy", controller.UpdateRequestPolicy)
 			optionRoute.PUT("/", controller.UpdateOption)
+			optionRoute.PUT("/passkey/domains", middleware.RequirePermission(authz.SystemSettingsPermission("auth.passkey")), controller.UpdatePasskeyDomains)
+			optionRoute.GET("/model_pricing", middleware.RequirePermission(authz.SystemSettingsPermission("billing.model-pricing")), controller.GetModelPricingConfig)
+			optionRoute.PATCH("/model_pricing", middleware.RequirePermission(authz.SystemSettingsPermission("billing.model-pricing")), controller.UpdateModelPricingConfig)
+			optionRoute.POST("/model_pricing/convert", middleware.RequirePermission(authz.SystemSettingsPermission("billing.model-pricing")), controller.PreviewModelPricingConversion)
+			optionRoute.POST("/model_pricing/preview", middleware.RequirePermission(authz.SystemSettingsPermission("billing.model-pricing")), controller.PreviewModelPricing)
 			optionRoute.POST("/payment_compliance", middleware.RequirePermission(authz.SystemSettingsPermission("billing.payment")), controller.ConfirmPaymentCompliance)
 			optionRoute.GET("/channel_affinity_cache", middleware.RequirePermission(authz.SystemSettingsPermission("models.channel-affinity")), controller.GetChannelAffinityCacheStats)
 			optionRoute.DELETE("/channel_affinity_cache", middleware.RequirePermission(authz.SystemSettingsPermission("models.channel-affinity")), controller.ClearChannelAffinityCache)
@@ -431,12 +458,14 @@ func SetApiRouter(router *gin.Engine) {
 		logRoute := apiRouter.Group("/log")
 		logRoute.GET("/", middleware.AdminAuth(), controller.GetAllLogs)
 		logRoute.GET("/export", middleware.AdminAuth(), controller.ExportAllLogs)
+		logRoute.GET("/export/stream", middleware.AdminAuth(), controller.ExportAllLogsStream)
 		logRoute.GET("/stat", middleware.AdminAuth(), controller.GetLogsStat)
 		logRoute.GET("/self/stat", middleware.UserAuth(), controller.GetLogsSelfStat)
 		logRoute.GET("/channel_affinity_usage_cache", middleware.AdminAuth(), controller.GetChannelAffinityUsageCacheStats)
 		logRoute.GET("/search", middleware.AdminAuth(), controller.SearchAllLogs)
 		logRoute.GET("/self", middleware.UserAuth(), controller.GetUserLogs)
 		logRoute.GET("/self/export", middleware.UserAuth(), controller.ExportUserLogs)
+		logRoute.GET("/self/export/stream", middleware.UserAuth(), controller.ExportUserLogsStream)
 		logRoute.GET("/self/search", middleware.UserAuth(), middleware.SearchRateLimit(), controller.SearchUserLogs)
 
 		systemTaskRoute := apiRouter.Group("/system-task")
@@ -492,6 +521,8 @@ func SetApiRouter(router *gin.Engine) {
 			taskRoute.GET("/self", middleware.UserAuth(), controller.GetUserTask)
 			taskRoute.GET("", middleware.AdminAuth(), controller.GetAllTask)
 			taskRoute.GET("/:task_id/artifacts", middleware.UserAuth(), controller.GetDashboardTaskArtifacts)
+			taskRoute.GET("/:task_id/request", middleware.UserAuth(), controller.GetDashboardTaskRequest)
+			taskRoute.GET("/:task_id/detail", middleware.UserAuth(), controller.GetDashboardTaskDetail)
 		}
 
 		vendorRoute := apiRouter.Group("/vendors")

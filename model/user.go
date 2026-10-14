@@ -169,6 +169,7 @@ type User struct {
 	Id                           int                        `json:"id"`
 	Username                     string                     `json:"username" gorm:"unique;index" validate:"max=20"`
 	Password                     string                     `json:"password" gorm:"not null;" validate:"min=8,max=20"`
+	HasPassword                  bool                       `json:"-" gorm:"-:all"`
 	OriginalPassword             string                     `json:"original_password" gorm:"-:all"` // this field is only for Password change verification, don't save it to database!
 	DisplayName                  string                     `json:"display_name" gorm:"index" validate:"max=20"`
 	Role                         int                        `json:"role" gorm:"type:int;default:1"`   // admin, common
@@ -202,6 +203,7 @@ type User struct {
 	RiskTag                      *UserTag                   `json:"risk_tag,omitempty" gorm:"-:all"`
 	DeletedAt                    gorm.DeletedAt             `gorm:"index"`
 	LinuxDOId                    string                     `json:"linux_do_id" gorm:"column:linux_do_id;index"`
+	AccessTokenCreatedAt         *int64                     `json:"-" gorm:"column:access_token_created_at"`
 	Setting                      string                     `json:"setting" gorm:"type:text;column:setting"`
 	Remark                       string                     `json:"remark,omitempty" gorm:"type:varchar(255)" validate:"max=255"`
 	StripeCustomer               string                     `json:"stripe_customer" gorm:"type:varchar(64);column:stripe_customer;index"`
@@ -703,6 +705,29 @@ func GetUserById(id int, selectAll bool) (*User, error) {
 	return &user, err
 }
 
+// GetSelfUserById exposes password existence without selecting its hash or PAT.
+func GetSelfUserById(id int) (*User, error) {
+	if id == 0 {
+		return nil, common.NewMessage("ID is empty!")
+	}
+	var profile struct {
+		User
+		HasPassword bool `gorm:"column:has_password"`
+	}
+	err := DB.Model(&User{}).Select([]string{
+		"id", "username", "display_name", "role", "status", "email",
+		"github_id", "discord_id", "oidc_id", "wechat_id", "telegram_id",
+		"group", "quota", "used_quota", "request_count", "aff_code", "aff_count",
+		"aff_quota", "aff_history", "inviter_id", "linux_do_id", "setting",
+		"stripe_customer", "auth_version", "created_at", "last_login_at", "last_login_ip",
+		"is_agent", "agent_discount", "agent_topup_link", "group_ratio_adjustment_enabled", "group_ratio_adjustment",
+		"request_content_logging_enabled", "risk_detection_enabled",
+		"CASE WHEN password <> '' THEN 1 ELSE 0 END AS has_password",
+	}).First(&profile, "id = ?", id).Error
+	profile.User.HasPassword = profile.HasPassword
+	return &profile.User, err
+}
+
 func GetAgentByInviteeId(inviteeId int) (*User, error) {
 	if inviteeId == 0 {
 		return nil, errors.New("id 为空！")
@@ -1003,14 +1028,14 @@ func (user *User) finishInsert(inviterId int) {
 
 	if common.QuotaForNewUser > 0 {
 		content := fmt.Sprintf("新用户注册赠送 %s", logger.LogQuota(common.QuotaForNewUser))
-		RecordLog(user.Id, LogTypeSystem, content)
+		RecordLog(user.Id, LogTypeSystem, common.NewMessage(content))
 		RecordQuotaIncreaseLog(user.Id, common.QuotaForNewUser, QuotaIncreaseSourceRegistrationBonus, content)
 	}
 	if inviterId != 0 && operation_setting.IsPaymentComplianceConfirmed() {
 		if common.QuotaForInvitee > 0 {
 			if err := IncreaseUserQuota(user.Id, common.QuotaForInvitee, true); err == nil {
 				content := fmt.Sprintf("使用邀请码赠送 %s", logger.LogQuota(common.QuotaForInvitee))
-				RecordLog(user.Id, LogTypeSystem, content)
+				RecordLog(user.Id, LogTypeSystem, common.NewMessage(content))
 				RecordQuotaIncreaseLog(user.Id, common.QuotaForInvitee, QuotaIncreaseSourceInvitationBonus, content)
 			} else {
 				common.SysError("failed to add invitee quota: " + err.Error())
@@ -1067,14 +1092,14 @@ func (user *User) FinalizeOAuthUserCreation(inviterId int) {
 
 	if common.QuotaForNewUser > 0 {
 		content := fmt.Sprintf("新用户注册赠送 %s", logger.LogQuota(common.QuotaForNewUser))
-		RecordLog(user.Id, LogTypeSystem, content)
+		RecordLog(user.Id, LogTypeSystem, common.NewMessage(content))
 		RecordQuotaIncreaseLog(user.Id, common.QuotaForNewUser, QuotaIncreaseSourceRegistrationBonus, content)
 	}
 	if inviterId != 0 && operation_setting.IsPaymentComplianceConfirmed() {
 		if common.QuotaForInvitee > 0 {
 			if err := IncreaseUserQuota(user.Id, common.QuotaForInvitee, true); err == nil {
 				content := fmt.Sprintf("使用邀请码赠送 %s", logger.LogQuota(common.QuotaForInvitee))
-				RecordLog(user.Id, LogTypeSystem, content)
+				RecordLog(user.Id, LogTypeSystem, common.NewMessage(content))
 				RecordQuotaIncreaseLog(user.Id, common.QuotaForInvitee, QuotaIncreaseSourceInvitationBonus, content)
 			} else {
 				common.SysError("failed to add invitee quota: " + err.Error())

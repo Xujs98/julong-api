@@ -165,5 +165,5 @@ func completeVerifiedLoginResponse(c *gin.Context, bundle *service.AuthBundle, m
 			"verification_method": method, "notification_failed": notificationFailed,
 		})
 	}
-	writeLoginResponse(c, user, bundle)
+	setupLoginAtAuthVersion(user, user.AuthVersion, c)
 }

@@ -36,7 +36,7 @@ type TaskDto struct {
 	CreatedAt            int64  `json:"created_at"`
 	UpdatedAt            int64  `json:"updated_at"`
 	TaskID               string `json:"task_id"`
-	Platform             string `json:"platform"`
+	Platform             string `json:"platform,omitempty"`
 	UserId               int    `json:"user_id"`
 	Group                string `json:"group"`
 	ChannelId            int    `json:"channel_id"`
@@ -46,18 +46,22 @@ type TaskDto struct {
 	FailReason           string `json:"fail_reason"`
 	ResultURL            string `json:"result_url,omitempty"` // 任务结果 URL（视频地址等）
 	LegacyVideoAvailable bool   `json:"legacy_video_available,omitempty"`
+	LegacyAudioAvailable bool   `json:"legacy_audio_available,omitempty"`
 	// ResultDiscarded marks a synchronous result that was returned inline and
 	// never persisted; the UI must not offer artifact retrieval for it.
-	ResultDiscarded bool            `json:"result_discarded,omitempty"`
-	SubmitTime      int64           `json:"submit_time"`
-	StartTime       int64           `json:"start_time"`
-	FinishTime      int64           `json:"finish_time"`
-	Progress        string          `json:"progress"`
-	Properties      any             `json:"properties"`
-	Username        string          `json:"username,omitempty"`
-	Data            json.RawMessage `json:"data"`
-	AdminInfo       *TaskAdminInfo  `json:"admin_info,omitempty"`
-	RootInfo        *TaskRootInfo   `json:"root_info,omitempty"`
+	ResultDiscarded  bool            `json:"result_discarded,omitempty"`
+	SubmitTime       int64           `json:"submit_time"`
+	StartTime        int64           `json:"start_time"`
+	FinishTime       int64           `json:"finish_time"`
+	Progress         string          `json:"progress"`
+	RequestID        string          `json:"request_id,omitempty"`
+	TokenName        string          `json:"token_name,omitempty"`
+	RequestAvailable bool            `json:"request_available,omitempty"`
+	Properties       any             `json:"properties"`
+	Username         string          `json:"username,omitempty"`
+	Data             json.RawMessage `json:"data"`
+	AdminInfo        *TaskAdminInfo  `json:"admin_info,omitempty"`
+	RootInfo         *TaskRootInfo   `json:"root_info,omitempty"`
 }
 
 type TaskPluginInfo struct {
@@ -88,6 +92,7 @@ type TaskAdminInfo struct {
 type TaskRootInfo struct {
 	TaskPlugin     *TaskPluginRuntimeInfo `json:"task_plugin,omitempty"`
 	UpstreamTaskID string                 `json:"upstream_task_id,omitempty"`
+	OriginTaskID   string                 `json:"origin_task_id,omitempty"`
 	NodeName       string                 `json:"node_name,omitempty"`
 }
 

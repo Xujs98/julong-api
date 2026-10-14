@@ -1,10 +1,8 @@
 package controller
 
 import (
-	"errors"
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
@@ -31,6 +29,7 @@ var auditContentTemplates = map[string]string{
 	"user.passkey_delete":   "Deleted a passkey",
 	"user.reset_passkey":    "Reset the user passkey",
 	"option.update":         "Updated system setting ${key}",
+	"passkey.domain_update": "Updated passkey domain settings (success: ${success})",
 	"site_logo.upload":      "Uploaded site logo ${filename}",
 	"site_logo.delete":      "Deleted site logo ${filename}",
 
