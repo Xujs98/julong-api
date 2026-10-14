@@ -37,7 +37,7 @@ export function useColumnsByCategory(
   onOpenImageTask: (log: ImageGenerationLog) => void
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
 ): ColumnDef<any>[] {
-  const commonColumns = useCommonLogsColumns(isAdmin)
+  const commonColumns = useCommonLogsColumns(isAdmin, isRoot, showBillingSource)
   const drawingColumns = useDrawingLogsColumns(isAdmin)
   const imageColumns = useImageGenerationLogsColumns(isAdmin, onOpenImageTask)
   const taskColumns = useTaskLogsColumns(isAdmin)

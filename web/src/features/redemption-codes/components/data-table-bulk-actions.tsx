@@ -16,11 +16,14 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { useMutation } from '@tanstack/react-query'
 import type { Table } from '@tanstack/react-table'
 import { CopyPlus, Download, Trash2 } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 
+import { ConfirmDialog } from '@/components/confirm-dialog'
 import { CopyButton } from '@/components/copy-button'
 import { DataTableBulkActions as BulkActionsToolbar } from '@/components/data-table'
 import { Button } from '@/components/ui/button'
@@ -36,13 +39,11 @@ import { downloadRedemptionCodes, formatRedemptionCodes } from '../lib/utils'
 import type { Redemption } from '../types'
 import { RedemptionsMultiDeleteDialog } from './redemptions-multi-delete-dialog'
 
-type DataTableBulkActionsProps<TData> = {
-  table: Table<TData>
+type DataTableBulkActionsProps = {
+  table: Table<Redemption>
 }
 
-export function DataTableBulkActions<TData>({
-  table,
-}: DataTableBulkActionsProps<TData>) {
+export function DataTableBulkActions(props: DataTableBulkActionsProps) {
   const { t } = useTranslation()
   const currentUser = useAuthStore((state) => state.auth.user)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
@@ -61,6 +62,36 @@ export function DataTableBulkActions<TData>({
     [selectedRedemptions]
   )
   const isAdmin = (currentUser?.role ?? 0) >= ROLE.ADMIN
+
+  const deletion = useMutation({
+    mutationFn: async (targets: Redemption[]) => {
+      const result = await batchDeleteRedemptions(
+        targets.map((code) => code.id)
+      )
+      if (!result.success) throw createServerError(result)
+      return result.data ?? 0
+    },
+    onSuccess: (count, targets) => {
+      toast.success(
+        t('Successfully deleted {{count}} redemption codes', { count })
+      )
+      props.table.setRowSelection((previous) => {
+        const next = { ...previous }
+        for (const code of targets) delete next[String(code.id)]
+        return next
+      })
+      setDeleteTargets(null)
+      triggerRefresh()
+    },
+    onError: (_error, targets) => {
+      handleServerError(
+        _error,
+        t('Failed to delete {{count}} redemption codes', {
+          count: targets.length,
+        })
+      )
+    },
+  })
 
   return (
     <>

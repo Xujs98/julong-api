@@ -16,25 +16,13 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { ExternalLinkIcon, RefreshCcwIcon } from 'lucide-react'
-import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { toast } from 'sonner'
 
-import { Dialog } from '@/components/dialog'
-import { Button } from '@/components/ui/button'
-import { Markdown } from '@/components/ui/markdown'
-import { formatTimestamp, formatTimestampToDate } from '@/lib/format'
+import { SystemUpdateAction } from '@/features/system-update/system-update-action'
+import { useStatus } from '@/hooks/use-status'
+import { formatTimestamp } from '@/lib/format'
 
 import { SettingsSection } from '../components/settings-section'
-
-type ReleaseInfo = {
-  tag_name: string
-  name?: string
-  body?: string
-  html_url?: string
-  published_at?: string
-}
 
 type UpdateCheckerSectionProps = {
   julongVersion?: string | null
@@ -132,70 +120,17 @@ export function UpdateCheckerSection(props: UpdateCheckerSectionProps) {
               </div>
               <div className='text-lg font-semibold'>{uptime}</div>
             </div>
+            <div className='text-lg font-semibold break-all'>{version}</div>
           </div>
-
-          <Button onClick={handleCheckUpdates} disabled={checking}>
-            {checking ? (
-              t('Checking updates...')
-            ) : (
-              <>
-                <RefreshCcwIcon className='me-2 h-4 w-4' />
-                {t('Check for updates')}
-              </>
-            )}
-          </Button>
+          <div className='rounded-lg border p-4'>
+            <div className='text-muted-foreground text-sm'>
+              {t('Uptime since')}
+            </div>
+            <div className='text-lg font-semibold'>{uptime}</div>
+          </div>
         </div>
-      </SettingsSection>
-
-      <Dialog
-        open={dialogOpen}
-        onOpenChange={setDialogOpen}
-        title={
-          release?.tag_name
-            ? t('New version available: {{version}}', {
-                version: release.tag_name,
-              })
-            : t('Release details')
-        }
-        description={
-          release?.published_at
-            ? `${t('Published')} ${formatTimestampToDate(
-                new Date(release.published_at).getTime(),
-                'milliseconds'
-              )}`
-            : undefined
-        }
-        contentClassName='max-h-[80vh] overflow-y-auto'
-        contentHeight='auto'
-        bodyClassName='space-y-4'
-        footer={
-          <>
-            <Button
-              type='button'
-              variant='secondary'
-              onClick={() => setDialogOpen(false)}
-            >
-              {t('Close')}
-            </Button>
-            {release?.html_url && (
-              <Button type='button' onClick={goToRelease}>
-                <ExternalLinkIcon className='me-2 h-4 w-4' />
-                {t('Open release')}
-              </Button>
-            )}
-          </>
-        }
-      >
-        <div className='space-y-4'>
-          {release?.body ? (
-            <Markdown>{release.body}</Markdown>
-          ) : (
-            <p className='text-muted-foreground text-sm'>
-              {t('No release notes provided.')}
-            </p>
-          )}
-        </div>
-      </Dialog>
-    </>
+        <SystemUpdateAction compact={false} />
+      </div>
+    </SettingsSection>
   )
 }

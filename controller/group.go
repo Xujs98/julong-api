@@ -32,7 +32,7 @@ func GetGroups(c *gin.Context) {
 }
 
 func GetUserGroups(c *gin.Context) {
-	usableGroups := make(map[string]map[string]interface{})
+	usableGroups := make(map[string]map[string]any)
 	userGroup := ""
 	userId := c.GetInt("id")
 	userGroup, _ = model.GetUserGroup(userId, false)
@@ -47,8 +47,8 @@ func GetUserGroups(c *gin.Context) {
 		}
 	}
 	if _, ok := userUsableGroups["auto"]; ok {
-		usableGroups["auto"] = map[string]interface{}{
-			"ratio": "自动",
+		usableGroups["auto"] = map[string]any{
+			"ratio": "auto",
 			"desc":  setting.GetUsableGroupDescription("auto"),
 		}
 	}

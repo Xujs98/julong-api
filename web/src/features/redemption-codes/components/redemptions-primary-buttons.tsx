@@ -64,7 +64,7 @@ export function RedemptionsPrimaryButtons() {
         triggerRefresh()
         setShowDeleteInvalidConfirm(false)
       } else {
-        toast.error(result.message || t(ERROR_MESSAGES.DELETE_INVALID_FAILED))
+        handleServerError(result, t(ERROR_MESSAGES.DELETE_INVALID_FAILED))
       }
     } finally {
       setIsDeleting(false)
@@ -146,10 +146,11 @@ export function RedemptionsPrimaryButtons() {
         title={t('Delete Invalid Redemption Codes?')}
         desc={
           <>
-            {t('This will delete all')} <strong>{t('used')}</strong>,{' '}
-            <strong>{t('disabled')}</strong>
-            {t(', and')} <strong>{t('expired')}</strong>{' '}
-            {t('redemption codes.')}
+            <Trans
+              t={t}
+              i18nKey='This will delete all <strong>used</strong>, <strong>disabled</strong>, and <strong>expired</strong> redemption codes.'
+              components={{ strong: <strong /> }}
+            />
             <br />
             {t('This action cannot be undone.')}
           </>

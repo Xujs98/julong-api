@@ -65,13 +65,19 @@ export function DataTableRowActions<TData>({
       ? REDEMPTION_STATUS.DISABLED
       : REDEMPTION_STATUS.ENABLED
 
-    const result = await updateRedemptionStatus(redemption.id, newStatus)
-    if (result.success) {
-      const message = isEnabled
-        ? t(SUCCESS_MESSAGES.REDEMPTION_DISABLED)
-        : t(SUCCESS_MESSAGES.REDEMPTION_ENABLED)
-      toast.success(message)
-      triggerRefresh()
+    try {
+      const result = await updateRedemptionStatus(redemption.id, newStatus)
+      if (result.success) {
+        const message = isEnabled
+          ? t(SUCCESS_MESSAGES.REDEMPTION_DISABLED)
+          : t(SUCCESS_MESSAGES.REDEMPTION_ENABLED)
+        toast.success(message)
+        triggerRefresh()
+      } else {
+        handleServerError(result)
+      }
+    } catch (error) {
+      handleServerError(error)
     }
   }
 

@@ -17,8 +17,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import type { ColumnDef } from '@tanstack/react-table'
+import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { ActivityTimeCell } from '@/components/activity-time-cell'
 import { BadgeCell } from '@/components/data-table'
 import { GroupBadge } from '@/components/group-badge'
 import { LongText } from '@/components/long-text'
@@ -31,7 +33,9 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
-import { formatQuota, formatTimestamp } from '@/lib/format'
+import { getCurrencyDisplay } from '@/lib/currency'
+import { formatQuota } from '@/lib/format'
+import { useSystemConfigStore } from '@/stores/system-config-store'
 
 import {
   USER_STATUS,
@@ -235,194 +239,73 @@ export function useUsersColumns(tags: UserTag[]): ColumnDef<User>[] {
         const user = row.original
         const requestCount = user.request_count
 
-        const statusConfig = isUserDeleted(user)
-          ? USER_STATUSES[USER_STATUS.DELETED]
-          : USER_STATUSES[user.status as keyof typeof USER_STATUSES]
+          const statusConfig = isUserDeleted(user)
+            ? USER_STATUSES[USER_STATUS.DELETED]
+            : USER_STATUSES[user.status as keyof typeof USER_STATUSES]
 
-        if (!statusConfig) {
-          return null
-        }
+          if (!statusConfig) {
+            return null
+          }
 
-        return (
-          <Tooltip>
-            <TooltipTrigger render={<div className='-ml-1.5 cursor-help' />}>
-              <StatusBadge
-                label={t(statusConfig.labelKey)}
-                variant={statusConfig.variant}
-                copyable={false}
-              />
-            </TooltipTrigger>
-            <TooltipContent>
-              <p className='text-xs'>
-                {t('Requests:')} {requestCount.toLocaleString()}
-              </p>
-            </TooltipContent>
-          </Tooltip>
-        )
-      },
-      filterFn: (row, id, value) => {
-        return value.includes(String(row.getValue(id)))
-      },
-      enableSorting: false,
-      size: 120,
-      meta: { mobileBadge: true },
-    },
-    {
-      id: 'quota',
-      accessorKey: 'quota',
-      header: t('Quota'),
-      cell: ({ row }) => {
-        const user = row.original
-        return <UserQuotaCell used={user.used_quota} remaining={user.quota} />
-      },
-      size: 300,
-      minSize: 260,
-      meta: { mobileOrder: 40 },
-    },
-    {
-      accessorKey: 'group',
-      header: t('Group'),
-      cell: ({ row }) => {
-        const group = row.getValue('group') as string
-        return (
-          <BadgeCell>
-            <GroupBadge group={group} />
-          </BadgeCell>
-        )
-      },
-      filterFn: (row, id, value) => {
-        const group = String(row.getValue(id) || t('User Group')).toLowerCase()
-        const searchValue = String(value).toLowerCase()
-        return group.includes(searchValue)
-      },
-      size: 140,
-      meta: { mobileOrder: 30 },
-    },
-    {
-      accessorKey: 'role',
-      header: t('Role'),
-      cell: ({ row }) => {
-        const roleValue = row.getValue('role') as number
-        const roleConfig = USER_ROLES[roleValue as keyof typeof USER_ROLES]
-
-        if (!roleConfig) {
-          return null
-        }
-
-        return (
-          <div className='flex items-center gap-x-2'>
-            {roleConfig.icon && (
-              <roleConfig.icon size={16} className='text-muted-foreground' />
-            )}
-            <span className='text-sm'>{t(roleConfig.labelKey)}</span>
-          </div>
-        )
-      },
-      filterFn: (row, id, value) => {
-        return value.includes(String(row.getValue(id)))
-      },
-      enableSorting: false,
-      size: 120,
-      meta: { mobileOrder: 20 },
-    },
-    {
-      id: 'invite_info',
-      header: t('Invite Info'),
-      cell: ({ row }) => {
-        const user = row.original
-        const affCount = user.aff_count || 0
-        const affHistoryQuota = user.aff_history_quota || 0
-        const inviterId = user.inviter_id || 0
-
-        return (
-          <div className='flex max-w-full min-w-0 flex-wrap items-center gap-1 overflow-hidden'>
+          return (
             <Tooltip>
-              <TooltipTrigger
-                render={
-                  <StatusBadge
-                    label={`${t('Invited')}: ${affCount}`}
-                    variant='neutral'
-                    copyable={false}
-                    className='cursor-help'
-                  />
-                }
-              />
-              <TooltipContent>
-                <p className='text-xs'>{t('Number of users invited')}</p>
-              </TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <StatusBadge
-                    label={`${t('Revenue')}: ${formatQuota(affHistoryQuota)}`}
-                    variant='neutral'
-                    copyable={false}
-                    className='cursor-help'
-                  />
-                }
-              />
-              <TooltipContent>
-                <p className='text-xs'>{t('Total invitation revenue')}</p>
-              </TooltipContent>
-            </Tooltip>
-            {inviterId > 0 && (
-              <Tooltip>
-                <TooltipTrigger
-                  render={
-                    <StatusBadge
-                      label={`${t('Inviter')}: ${inviterId}`}
-                      variant='neutral'
-                      copyable={false}
-                      className='cursor-help'
-                    />
+              <TooltipTrigger render={<div className='-ml-1.5 cursor-help' />}>
+                <StatusBadge
+                  label={t(statusConfig.labelKey)}
+                  variant={
+                    isUserDeleted(user) ? 'neutral' : statusConfig.variant
                   }
+                  copyable={false}
+                  className='font-normal'
                 />
-                <TooltipContent>
-                  <p className='text-xs'>
-                    {t('Invited by user ID')} {inviterId}
-                  </p>
-                </TooltipContent>
-              </Tooltip>
-            )}
-            {inviterId === 0 && (
-              <StatusBadge
-                label={t('No Inviter')}
-                variant='neutral'
-                copyable={false}
-              />
-            )}
-          </div>
-        )
+              </TooltipTrigger>
+              <TooltipContent>
+                <p className='text-xs'>
+                  {t('Requests:')} {requestCount.toLocaleString()}
+                </p>
+              </TooltipContent>
+            </Tooltip>
+          )
+        },
+        filterFn: (row, id, value) => {
+          return value.includes(String(row.getValue(id)))
+        },
+        enableSorting: false,
+        size: 120,
+        meta: { mobileBadge: true },
       },
-      size: 240,
-      enableSorting: false,
-      meta: { mobileHidden: true },
-    },
-    {
-      accessorKey: 'created_at',
-      header: t('Created At'),
-      cell: ({ row }) => {
-        const ts = row.getValue('created_at') as number | undefined
-        return (
-          <span className='text-muted-foreground text-sm'>
-            {ts ? formatTimestamp(ts) : '-'}
-          </span>
-        )
+      {
+        id: 'quota',
+        accessorKey: 'quota',
+        header: `${t('Available Balance')} (${quotaUnit})`,
+        cell: ({ row }) => {
+          const user = row.original
+          return <UserQuotaCell remaining={user.quota} used={user.used_quota} />
+        },
+        size: 180,
+        minSize: 160,
+        meta: { mobileOrder: 40 },
       },
-      size: 180,
-      meta: { mobileHidden: true },
-    },
-    {
-      accessorKey: 'last_login_at',
-      header: t('Last Login'),
-      cell: ({ row }) => {
-        const ts = row.getValue('last_login_at') as number | undefined
-        return (
-          <span className='text-muted-foreground text-sm'>
-            {ts ? formatTimestamp(ts) : '-'}
-          </span>
-        )
+      {
+        accessorKey: 'group',
+        header: t('User Group'),
+        cell: ({ row }) => {
+          const group = row.getValue('group') as string
+          return (
+            <BadgeCell>
+              <GroupBadge group={group} className='font-normal' />
+            </BadgeCell>
+          )
+        },
+        filterFn: (row, id, value) => {
+          const group = String(
+            row.getValue(id) || t('User Group')
+          ).toLowerCase()
+          const searchValue = String(value).toLowerCase()
+          return group.includes(searchValue)
+        },
+        size: 140,
+        meta: { mobileOrder: 30 },
       },
       size: 180,
       meta: { mobileHidden: true },
