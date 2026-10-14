@@ -25,7 +25,7 @@
 | 后端 Gin API | 进行中 | 保留上游核心功能，并叠加 Julong 二开功能。本地后端通常监听 `:3000`。 |
 | 默认前端 UI | 进行中 | React 19 + Rsbuild + TanStack Router，代码在 `web`。本地开发服务通常是 `:5173`。 |
 | Classic 前端 | 已移除 | 跟随上游架构调整，只保留 `web/` 单一前端。 |
-| 上游同步 | 上游整合合并提交已存在，后续功能改动尚待分批提交/推送 | 2026-10-13 合并 `QuantumNous/new-api@ef60ef27f36e418143fa4abf0c9025ba6f17fba7`（发行版 `v1.0.0-rc.44` 及后续主线提交）。当前HEAD `f99b63cfc` 为双父合并提交，工作树没有MERGE_HEAD；后续模型/视频/素材/发票等工作区改动尚待分批Git提交，不能据此宣称已推送/上线；最新状态见 PROJECT_PROGRESS.md。 |
+| 上游同步 | 上游整合和后续功能已在本地分批提交，推送待网络恢复 | 2026-10-13 合并 `QuantumNous/new-api@ef60ef27f36e418143fa4abf0c9025ba6f17fba7`（发行版 `v1.0.0-rc.44` 及后续主线提交）。当前基线 `f99b63cfc` 为双父合并提交；本轮新增提交 `298b2cf33`、`dfb2b1425`、`734a26746`。推送至Xujs98/julong-api的origin两次因无法连接github.com:443失败，待下次任务重试；未推QuantumNous upstream，未线上部署。详见PROJECT_PROGRESS.md。 |
 | Docker 部署 | 进行中 | `docker-compose.yml` 使用 `qq1371446705/julong-api:latest`，包含 Postgres、Redis，宿主端口 `3388`。 |
 | 代理功能 | 已实现，仍需持续 QA | 代理折扣、代理生成兑换码、代理所属用户、代理充值链接、退款日志等。 |
 | 错误反馈工单 | 已实现 | 500 页面跳转 `/error-report`，管理员/root 在 `/error-reports` 查看。 |
