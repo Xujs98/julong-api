@@ -1,11 +1,14 @@
 # Julong-API 开发文档
 
-最后更新：2026-09-10
+最后更新：2026-10-15
 
 本文档是本二开项目的强制开发记录。以后新增、修改或删除任何 API、组件、数据模型、配置项、路由、数据库行为或部署行为时，必须在同一次改动中同步更新本文档，并在“变更日志”中新增记录。
 
 ## 维护规则
 
+- 本站线上视频客户端文档：`全站通用视频接口文档.md`（域名 `https://api.julongkj.top/`），区分 Bearer 内容路径与签名成品链接、face 配置默认值、Base64 素材及过期、Python 轮询/流式下载和部署检查；`视频生成使用指南.md` 保留管理员配置与本地示例。文档完成不等于线上部署完成。
+- 分批进度、当前任务和新对话交接入口：PROJECT_PROGRESS.md（绝对路径 /Users/xujs/.docker_dir/new-api/PROJECT_PROGRESS.md）。每批开始、重要进展、阻塞和交付时同步更新；详细 API/路由/模型仍登记在本文档。
+- 每次任务完成同步按批记录进度、提交本地 Git 并只向 Xujs98/julong-api 的已核实 origin 推送。推送失败只重试一次，仍失败记录待推送，下次任务再试；历史工作范围先确认，不 force-push。详细规则见 AGENTS.md。
 - 当前代码是唯一事实来源。如果本文档和代码不一致，必须先按当前代码修正文档，再继续开发。
 - 每次 API 变更必须同步更新 API 清单、请求/响应说明、权限说明和变更日志。
 - 每次前端组件、页面、交互或页面路由变更必须同步更新前端路由、组件清单或对应功能模块说明。
@@ -22,7 +25,7 @@
 | 后端 Gin API | 进行中 | 保留上游核心功能，并叠加 Julong 二开功能。本地后端通常监听 `:3000`。 |
 | 默认前端 UI | 进行中 | React 19 + Rsbuild + TanStack Router，代码在 `web`。本地开发服务通常是 `:5173`。 |
 | Classic 前端 | 已移除 | 跟随上游架构调整，只保留 `web/` 单一前端。 |
-| 上游同步 | 已完成 | 2026-07-28 合并 `QuantumNous/new-api@afe16c64c`（发行版 `v1.0.0-rc.22` 及其后续主线提交），保留 Julong 定制功能和失败任务退款对账。 |
+| 上游同步 | 上游整合合并提交已存在，后续功能改动尚待分批提交/推送 | 2026-10-13 合并 `QuantumNous/new-api@ef60ef27f36e418143fa4abf0c9025ba6f17fba7`（发行版 `v1.0.0-rc.44` 及后续主线提交）。当前HEAD `f99b63cfc` 为双父合并提交，工作树没有MERGE_HEAD；后续模型/视频/素材/发票等工作区改动尚待分批Git提交，不能据此宣称已推送/上线；最新状态见 PROJECT_PROGRESS.md。 |
 | Docker 部署 | 进行中 | `docker-compose.yml` 使用 `qq1371446705/julong-api:latest`，包含 Postgres、Redis，宿主端口 `3388`。 |
 | 代理功能 | 已实现，仍需持续 QA | 代理折扣、代理生成兑换码、代理所属用户、代理充值链接、退款日志等。 |
 | 错误反馈工单 | 已实现 | 500 页面跳转 `/error-report`，管理员/root 在 `/error-reports` 查看。 |
@@ -38,7 +41,7 @@
 | 兑换码搜索 | 已实现 | 后台兑换码支持按兑换码 key、生成者用户名/显示名、名称、ID、状态搜索。 |
 | 签到额度预览 | 已实现 | 计费与支付中的签到奖励输入框显示格式化额度预览。 |
 | 生图日志与异步生图 | 已实现 | 开启生图日志后，`async: true` 立即创建 `pending` 日志并返回任务 ID，支持 API Key 轮询、状态更新、图片读取和后台 JSON 详情；关闭日志时退回同步且不存图。 |
-| 系统设置权限 | 已实现 | root 可按 7 个一级菜单下的 44 个二级设置页面逐项授权管理员；菜单、路由、通用配置键和专用 API 均执行权限校验。 |
+| 系统设置权限 | 已实现 | root 可按一级菜单及二级设置页面逐项授权管理员（本次新增请求策略授权项，保留原授权项兼容）；菜单、路由、通用配置键和专用 API 均执行权限校验。 |
 | 客服联系 | 已实现 | 概览页展示联系客服弹窗；root 可授权指定管理员维护多条 QQ、微信和手机联系方式。 |
 | 站点徽标上传 | 已实现 | 系统信息支持 PNG/JPG/WebP 本地选择、保存前预览、移除和保存后应用；Docker 文件持久化在 `/data/site-assets`。 |
 | 文档纪律 | 新增 | 以后每次代码改动都必须同步维护本文档。 |
@@ -65,7 +68,7 @@
 
 ### 后端
 
-- 语言：Go，模块名仍为 `github.com/QuantumNous/new-api`，`go 1.25.1`。
+- 语言：Go，模块名仍为 `github.com/QuantumNous/new-api`，根模块与 `tokenkit/` 使用 `go 1.26`，`relaykit/` 使用 `go 1.25.1`。
 - HTTP 框架：Gin。
 - ORM：GORM。
 - 数据库：
@@ -173,6 +176,7 @@ docker compose up -d
 | `invoice_setting.unit` | 同上 | 发票金额显示单位 | 默认 `USD`，去除首尾空白后长度为 1-16 字符；提交时保存快照。 |
 | `invoice_setting.processing_days` | 同上 | 预计处理工作日说明 | 默认 `1-3`，长度为 1-32 字符。 |
 | `invoice_setting.rejection_freeze_hours` | 同上 | 已驳回来源的冷冻小时数 | 默认 `72`，允许 `0-8760`；驳回后来源立即回到可申请列表，冷冻到期前展示但禁止勾选，`0` 表示立即恢复。 |
+| `invoice_setting.allowed_sources` | 同上；`controller/system_settings_access.go` | 可申请发票的支付来源 | JSON 字符串数组，默认 `["online_recharge","redemption","admin_adjustment"]`；界面对应在线支付（支付宝、微信等）、兑换卡密、管理员增加；允许空数组关闭所有来源，拒绝未知值、重复值和非数组。列表过滤和后台提交共同执行，只影响新申请，历史申请保持可查。Root 或 `billing.invoice` 权限可修改。 |
 | `QuotaForNewUser` | `quota-settings-section.tsx` | 新用户初始额度 | 使用 `formatQuota` 显示预览。 |
 | `QuotaForInviter` / `QuotaForInvitee` | 同上 | 邀请奖励 | 受支付合规确认约束。 |
 | `SidebarModulesAdmin` | `web/src/features/system-settings/maintenance/config.ts` | 控制侧边栏模块显示 | 自定义模块包含 `errorReports`。 |
@@ -182,6 +186,7 @@ docker compose up -d
 | `UserLogGroupRatioManualValue` | 同上 | 手动模式写入新日志的展示倍率 | 默认 `1`，必须为大于等于 `0` 的有效数字；保存到 `Log.UserDisplayGroupRatio` 后不再随全局配置变化。 |
 | `UserRiskDetectionEnabled` | `common/constants.go`、`model/option.go`、`user_risk.go`、`log-settings-section.tsx` | 全局启用用户风险评估 | 默认 `false`；开启后全部用户进入风险评估，关闭时仍可通过 `User.risk_detection_enabled` 单独开启指定用户。只聚合既有日志，不拦截 Relay 请求。 |
 | `ModelSquareGroupRatioDisplayMode` | `common/constants.go`、`controller/pricing.go`、`group-ratio-form.tsx` | 模型广场使用哪种分组倍率展示价格 | `actual`（默认）包含当前登录用户命中的特殊倍率规则；`pricing_group` 始终使用“分组定价”的基础倍率并忽略用户特殊倍率。只改变 `/api/pricing` 展示数据，不改变实际扣费。 |
+| 模型广场任务价格矩阵 | `web/src/features/pricing/components/model-card.tsx`、`task-price-display.test.tsx` | 在模型卡片上逐项展示任务模型的条件价格和计费单位 | 视频模型标记“视频生成”，按分辨率等任务条件展示单价，并标明 `/ 秒`、`/ 次` 等单位；按秒和按次都配置时，模型名下方和每项条件价格同时展示两项，使用 `+` 表示累计收费；只配置一项时单独显示该项，隐藏未使用的零价字段。继续使用模型广场现有倍率、充值价和币种换算，只改变展示。 |
 | `TokenGroupRatioDisplayMode` | `common/constants.go`、`controller/group.go`、`group-ratio-form.tsx` | API 密钥令牌分组选择器展示哪种倍率 | `actual`（默认）展示当前用户命中的特殊倍率；`pricing_group` 始终展示基础定价分组倍率。只改变 `/api/user/self/groups` 返回的展示倍率，不改变实际扣费。 |
 | `group_ratio_setting.model_token_ratio` | `setting/ratio_setting/group_ratio.go`、`types/model_token_adjustment.go`、`model-token-ratio-editor.tsx` | 模型 Token 特殊倍率规则 | JSON 层级为“用户分组 → 计费分组 → 模型”；输入、输出、缓存读取、缓存创建各自可选，配置值 `x` 按 `1+x` 乘到真实 Token，单项范围 `0-100`。影响实际 Token 计费并在日志 `other.admin_info.model_token_adjustment` 保存真实/计费后 Token 审计。 |
 | `ImageGenerationLogEnabled` | `common/constants.go`、`model/option.go`、`log-settings-section.tsx` | 是否记录生图请求并启用本地异步生图 | Root 或获授权管理员配置，默认 `false`；关闭时 `async: true` 退回同步，不创建任务、不捕获或保存图片。 |
@@ -190,6 +195,9 @@ docker compose up -d
 | `ImageGenerationLogImageAuthWhitelistEnabled` | `common/constants.go`、`model/option.go`、`middleware/image_generation_image_auth.go`、`log-settings-section.tsx` | 是否允许图片读取白名单免 API Key | 默认 `false`；只作用于 `GET /v1/images/generations/:task_id/images/:index`，不放开任务 JSON 查询和生图提交。 |
 | `ImageGenerationLogImageAuthWhitelist` | 同上、`common/image_generation_image_auth_whitelist.go` | 图片读取免鉴权来源列表 | 换行/逗号分隔精确 IP 或域名；IP 匹配 `ClientIP`，域名匹配浏览器 `Origin/Referer`；URL 会归一化为主机名；不支持通配符/CIDR；`0.0.0.0` 表示全部放行。 |
 | `IMAGE_LOG_STORAGE_DIR` | `service/image_generation_log.go` | 覆盖生图图片文件目录 | 默认 `image-generation-logs`；Docker `WORKDIR /data` 下位于持久化卷 `/data/image-generation-logs`。 |
+| `MediaAssetRetentionDays` | `common/constants.go`、`model/option.go`、`controller/system_settings_access.go`、`log-settings-section.tsx` | Base64 视频输入素材保留天数 | 在“系统设置 → 运维 → 日志维护”设置，默认 `1` 天，范围 `1-365`；过期素材由系统任务删除文件和数据库记录。 |
+| `TaskPublicAddress` | `setting/system_setting/system_setting_old.go`、`SystemInfoSection`、`service/media_asset.go` | 生成可供上游模型访问的任务/素材公网 URL | 生产环境必须设置为本服务可公网访问的 HTTPS 根地址，例如 `https://api.julongkj.top`；Base64 素材 URL 使用该地址拼接 `/api/media-assets/:asset_id/content`，为空时回退 `ServerAddress`。 |
+| `MEDIA_ASSET_STORAGE_DIR` | `service/media_asset.go` | 覆盖 Base64 视频输入素材目录 | 默认 `data/media-assets`；Docker `WORKDIR /data` 下为持久化卷 `/data/data/media-assets`。公网素材只保存原 URL，不下载内容。 |
 | `ImageGenerationStorage*` | `service/image_object_storage.go`、`controller/image_object_storage.go`、`log-settings-section.tsx` | 异步生图 MinIO/S3 私有对象存储与生命周期 | 在“系统设置 → 运维 → 日志维护 → 记录生图日志”中配置；包含启用、Endpoint、Bucket、Region、Access/Secret Key、HTTPS、Path Style、对象前缀和图片保留天数。Secret Key 不回传前端，留空保存/测试沿用已存密钥。默认 Bucket `julong-media`、前缀 `generated/images`、保留 `30` 天；`ImageGenerationStorageRetentionDays=0` 表示永久保留，范围 `0-3650`。`ImageGenerationStorageLastCleanupAt` 保存最近一次成功的过期清理或全量清空任务完成时间。全量清空严格限制在当前 Bucket 的配置前缀内。 |
 | `async` 生图请求参数 | `dto/openai_image.go`、`controller/image_generation_task.go` | 将同步 `/v1/images/generations` 包装为本地异步任务 | 默认 `false`；仅在 `ImageGenerationLogEnabled=true` 时生效；转发上游前删除；有效异步模式与 `stream: true` 互斥。 |
 | `SupportContacts` | `common/constants.go`、`model/option.go` | 客服联系方式 JSON 数组 | 每项包含 `type`（qq/wechat/phone）、`label`、`value`；最多 30 条。 |
@@ -326,10 +334,11 @@ curl http://localhost:3000/api/error-reports \
 | PUT | `/api/user/agent/topup-link` | `controller.UpdateAgentTopUpLink` | 代理自定义充值链接 | `{agent_topup_link}` | 代理用户 | 完成 |
 | GET | `/api/user/checkin` | `controller.GetCheckinStatus` | 读取每日签到状态 | 无 | 用户 | 完成 |
 | POST | `/api/user/checkin` | `controller.DoCheckin` | 执行每日签到 | 无 | 用户 + Turnstile | 完成 |
-| GET | `/api/user/invoice` | `controller.GetInvoiceInfo` | 读取自助发票配置、可申请充值和当前用户申请记录 | query `credit_page`、`application_page`、`page_size` | 用户；响应含开关、最低金额、单位、预计工作日、驳回冷冻小时数和两类分页数据；`credits[].frozen_until` 表示禁选截止 Unix 秒；不回传管理员内部备注 | 完成 |
-| POST | `/api/user/invoice/apply` | `controller.ApplyInvoice` | 从在线充值、兑换码和管理员增加额度记录提交发票申请 | `{request_ids:string[]}`，1-100 条；累计金额须达到门槛且账户已有邮箱 | 用户 + critical rate limit；成功写申请单及唯一来源明细，所选记录不再出现在可申请列表 | 完成 |
+| GET | `/api/user/invoice` | `controller.GetInvoiceInfo` | 读取自助发票配置、可申请充值和当前用户申请记录 | query `credit_page`、`application_page`、`page_size` | 用户；响应新增绑定邮箱 `email` 和 `allowed_sources`；可申请列表仅含启用来源。申请含开票资料与 `payment_proofs` 元数据，不回传图片 BLOB 或管理员内部备注；保留门槛、单位、预计工作日、冷冻小时数及两类分页数据 | 完成 |
+| POST | `/api/user/invoice/apply` | `controller.ApplyInvoice` | 从允许的支付来源提交资料完整的发票申请 | multipart：`request_ids` 为 JSON 数组字符串（1-100 条）；`invoice_type=ordinary`（增值税普通发票）或 `special`（增值税专用发票）；`company_name` 1-200 字符；`tax_number` 1-50 字母数字；`email` 有效邮箱且最长 254 字节，空值回退绑定邮箱；`notes` 可选且最多 1000 字符；重复 `payment_proofs` 文件 1-3 张 PNG/JPEG/WebP，每张最多 5 MiB、2500 万像素，总请求最多 16 MiB | 用户 + critical rate limit；金额满足门槛、来源属于本人且未被占用/冷冻/禁用；成功同一事务写申请、唯一来源明细、私有截图，失败不占用额度记录。接收邮箱仅作为申请快照，不修改账户绑定邮箱。旧 JSON 无截图请求不能提交新申请 | 完成 |
 | POST | `/api/user/invoice/applications/:id/cancel` | `controller.CancelInvoiceApplication` | 当前用户取消自己的待确认发票申请 | path 正整数 `id` | 仅 `pending` 可取消；记录保留为 `cancelled` 终态，来源立即释放且不冷冻，管理员内部备注不回传；critical rate limit | 完成 |
 | GET | `/api/user/invoice/applications/:id/attachment` | `controller.DownloadInvoiceAttachment` | 下载已完成申请的电子发票附件 | path 正整数 `id` | 普通用户仅可下载本人申请，管理员/root 可下载任意申请；仅 `completed` 且已存附件时返回原文件，响应 `Cache-Control: private, no-store` | 完成 |
+| GET | `/api/user/invoice/applications/:id/payment-proofs/:proof_id` | `controller.DownloadInvoicePaymentProof` | 读取申请支付凭证原图 | path 正整数 `id`、`proof_id` | 登录用户仅可读取本人申请，管理员/root 按既有发票管理权限读取；个人访问令牌读取本人截图须 `wallet:read`，管理员非 legacy 令牌跨用户读取另须 `billing:read`；不匹配申请或越权不返回图片。响应为原图，`Cache-Control: private, no-store`、`X-Content-Type-Options: nosniff`；无公开图片路径 | 完成 |
 
 ### 后台用户 API
 
@@ -352,7 +361,7 @@ curl http://localhost:3000/api/error-reports \
 | GET | `/api/user/options` | `controller.SearchUserManagementOptions` | 批量额度用户选择器搜索 | `keyword`, `p`, `page_size` | 当前操作者可管理的用户最小信息分页 | 完成 |
 | POST | `/api/user/options/resolve` | `controller.ResolveUserManagementOptions` | 回显批量额度已选用户 | `{user_ids:number[]}` | 当前操作者可管理的用户最小信息数组 | 完成 |
 | POST | `/api/user/batch-quota` | `controller.BatchAdjustUserQuota` | 批量增加或减少用户额度 | `{mode,value,all_users,user_ids,send_email,email_locale,email_subject,email_content}` | `{adjusted_count,email_success_count,email_skipped_count,email_failed_count}` | 完成；单事务调整可管理用户，增加额度写额度明细，可选真实 SMTP 通知 |
-| GET | `/api/user/invoice/applications` | `controller.AdminGetInvoiceApplications` | 分页查看全部用户的发票申请和审核账单资料 | `p`, `page_size` | `PageInfo<InvoiceApplication[]>`，含用户名、邮箱、金额、状态、附件标记和来源明细；每条来源含金额、完成时间、请求 ID 和日志内容 | 完成；管理员/root |
+| GET | `/api/user/invoice/applications` | `controller.AdminGetInvoiceApplications` | 分页查看全部用户的发票申请和审核账单资料 | `p`, `page_size` | `PageInfo<InvoiceApplication[]>`，含用户名、接收邮箱、发票类型、公司名称、税号、备注、截图元数据、金额、状态、交付附件标记和来源明细（不含截图 BLOB）；每条来源含金额、完成时间、请求 ID 和日志内容 | 完成；管理员/root |
 | GET | `/api/user/invoice/email-templates` | `controller.AdminGetInvoiceEmailTemplates` | 读取电子发票交付邮件的中英文模板 | 无 | `EmailTemplate[]`，仅返回 `invoice.delivered` 的 `zh/en` 模板 | 完成；管理员/root |
 | PUT | `/api/user/invoice/applications/:id` | `controller.AdminUpdateInvoiceApplication` | 更新发票申请处理状态和内部备注 | path `id`；`{status:pending\|processing\|rejected\|non_reusable,admin_note}`，备注最多 500 字符；`completed` 必须走专用附件接口 | `InvoiceApplication`；`rejected` 释放来源并冷冻且成为终态，`non_reusable` 不释放来源并成为终态 | 完成；管理员/root，写管理审计 |
 | POST | `/api/user/invoice/applications/:id/complete` | `controller.AdminCompleteInvoiceApplication` | 发送带电子发票附件的模板邮件并完成申请 | multipart：`locale=zh\|en`、`admin_note`、`attachment`；附件限 PDF/OFD/XML/PNG/JPG 且最大 10 MB | 邮件成功后在同一事务持久化附件 BLOB 并写入 `completed/completed_at`；失败保持原状态；15 分钟发送锁阻止并发重复发送 | 完成；管理员/root，写管理审计 |
@@ -972,10 +981,22 @@ curl -X DELETE \
 | `/api/channel` | `GET/POST/PUT/DELETE`、`/search`、`/test`、状态/批量路由见 `router/api-router.go` 和 `router/channel-router.go` | 管理员/root 及 authz 权限 | 上游渠道管理 | 完成 |
 | `/api/channel/:id/key` | `POST` | 管理员/root | 显示渠道 key | 完成 |
 | `/api/models` | `GET /`、`/search`、`/:id`、`POST /`、`PUT /`、`DELETE /:id`、`/sync_upstream/*`、`/missing` | 管理员/root | 模型元数据/目录/部署元数据 | 完成 |
+| `/api/model-document-templates` | `GET` → `ListModelDocumentTemplates` | 管理员/root；PAT需 `model:read` | `p,page_size,keyword`；返回 `{success,data:{items,total,page,page_size}}`。每项 `id,name,format,original_filename,created_time,updated_time`，列表不加载 content | 完成；B08验收见PROJECT_PROGRESS.md |
+| `/api/model-document-templates` | `POST` → `CreateModelDocumentTemplate` | 管理员/root；PAT需 `model:write` | multipart `file` 必填、`name` 可选，默认原文件去扩展名；MD/.markdown或Word .docx；成功 `{success,data:模板}` 含 Markdown content；空/非法/超限400 | 完成 |
+| `/api/model-document-templates/:id` | `GET` → `GetModelDocumentTemplate` | 管理员/root；PAT需 `model:read` | 正整数id；成功 `{success,data:模板}` 含 content；不存在404 | 完成 |
+| `/api/model-document-templates/:id` | `PUT` → `UpdateModelDocumentTemplate` | 管理员/root；PAT需 `model:write` | JSON `name?,content?` 至少一项，或multipart `file,name?` 替换上传内容；保持 id/created_time/模型绑定；成功完整模板，不存在404/非法400；并发部分更新不覆盖未提交字段 | 完成 |
+| `/api/model-document-templates/:id` | `DELETE` → `DeleteModelDocumentTemplate` | 管理员/root；PAT需 `model:write` | 正整数id；事务清除所有模型的绑定并删除模板，回退原内置示例；成功 `{success,data:null}`，不存在404 | 完成 |
+| `/api/model-documentation` | `GET` → `GetModelDocumentation` | 沿用模型广场 HeaderNavModuleAuth(pricing)；公开/登录/关闭按站点设置；PAT使用accessTokenAnyRule并保留分组身份 | `model` 为具体模型名；仅 caller 可用分组的可见模型，未绑定 `data:null`，绑定返回模板；隐藏/不可用模型404。不能按模板id公开枚举 | 完成 |
 | `/api/vendors` | `GET /`、`/search`、`/:id`、`POST`、`PUT`、`DELETE` | 管理员/root | Vendor 元数据 | 完成 |
 | `/api/deployments` | settings、test、CRUD、硬件/地区/副本辅助、日志/容器详情 | 管理员/root | IONet/模型部署管理 | 完成 |
 | `/api/mj` | `GET /`、`GET /self` | 管理员或用户 | Midjourney 任务日志 | 完成 |
 | `/api/task` | `GET /`、`GET /self` | 管理员或用户 | 通用异步任务日志 | 完成 |
+| `/api/media-assets` | `GET` → `ListMediaAssets` | 须登录；普通用户仅本人、管理员全部 | 参数 `page`（默认1）、`page_size`（默认50，最大200）；返回 `{success,data:{items,total,page,page_size}}`，每项含 asset_id/user_id/username/source_type/media_type/mime_type/url/size/created_at/expires_at，不返回本地文件路径 | 完成 |
+| `/api/media-assets/:asset_id` | `DELETE` → `DeleteMediaAsset` | 仅管理员，普通用户403 | 路径参数 asset_id；删除文件及元数据，公网素材只删元数据；成功 `{success:true}`，不存在404 | 完成 |
+| `/api/media-assets/:asset_id/content` | `GET/HEAD` → `MediaAssetContent` | 高熵素材链接公开读取，供上游抓取 | 路径参数 asset_id，可传 Range/条件请求头；成功200或206原始媒体字节，HEAD无正文，已过期410、删除/未知/外部公网记录404；只此内容路径排除API gzip，保留原始 Content-Length/Content-Range；no-store/nosniff/sandbox，CSP仅允许同源媒体。不是生成视频的过期接口 | 完成 |
+| `/api/task/:task_id/detail` | `GET` → `GetDashboardTaskDetail` | 登录用户仅本人；管理员可查全站 | 路径参数 `task_id`；返回 `{success,data}`，data 包含本地 task_id/id、status/progress、模型、时间、duration/seconds、delivery_status、失败原因及可用时本地签名 result_url；非管理员不返回 platform；只读已保存的最新轮询状态，不创建视频或触发付费请求；响应禁止缓存 | 完成 |
+| `/api/task/:task_id/request` | `GET` → `GetDashboardTaskRequest` | 登录用户仅本人；管理员可查全站 | 路径参数 `task_id`；返回 `{success,data:{task_id,request_body,truncated}}`；凭据脱敏、图片/音频/视频 URL 和上传文件引用显示 `[MEDIA]`；历史未留存请求体返回 null | 完成 |
+| `/v1/tasks/:key` | `GET` → `GetTask` | 沿用任务鉴权及归属校验 | 普通用户结果不再包含 platform，其他任务状态字段保持不变 | 完成 |
 
 ### Relay 兼容 API
 
@@ -1019,6 +1040,81 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 - Midjourney-compatible：`/mj/submit/*`、`/mj/task/*`、`/mj/image/:id`、`/mj/insight-face/swap`。
 - 视频路由见 `router/video-router.go`：`/v1/video/generations`、`/v1/videos`、`/v1/videos/:task_id`、`/kling/v1/videos/*`、`/jimeng/*`。
 
+算力 AI 视频网关适配：New API 渠道选择“算力 AI”后，默认接入 `https://suanliai.top/v1` 的统一 `POST /v1/videos`、状态查询和内容下载协议；管理端可按模型配置时长、比例、分辨率、图片/视频/音频引用、过脸、生成音频、并发/超时元数据及按秒/按任务售价。请求会在本地按配置校验并归一化，异步任务保留公开任务 ID，视频内容通过本地鉴权代理返回，不暴露上游签名地址。插件支持 JSON、multipart、数据 URI、文件引用、别名参数和 `queued/in_progress/archiving/completed/failed` 状态；上游提交超时不自动重试，避免重复创建付费任务。真实算力账号/模型仍需在渠道中填写有效 Key，并以算力平台实际返回为准。终端调用步骤见 [`视频生成使用指南.md`](./视频生成使用指南.md)。
+
+逐模型配置组件 `web/src/features/channels/components/suanli-video-model-settings.tsx` 的动态能力标签、数量/时长/超时/并发限制、售价/成本、画面比例/分辨率及自定义校验提示均通过七语言资源显示。计费与成本货币选择器复用共享 Select 的 `items` 映射，在首次展示和切换语言时显示本地化标签；提交值仍为 `inherit/per_second/per_task` 和 `USD/CNY`。动态翻译键统一登记在 `web/src/i18n/static-keys.ts`。
+
+算力视频计费复用现有任务插件 usage/billing expression、分组特殊倍率、预扣/结算/失败退款和收益审计链路；渠道模型配置中的按秒/按任务售价会在未设置更高优先级全局任务表达式时生成对应任务表达式。`unit_cost` 仅作为渠道配置元数据，当前不改变用户售价或额度结算。
+
+### 2026-10-13 上游合并：新增与变更 API
+
+本节补充前面的原矩龙清单。管理接口使用通用 `ApiResponse<T>`；安全操作可能返回二次验证所需的错误码/上下文，完成浏览器验证后重试。PAT 的 scope 必须同时满足路由能力和矩龙 Casbin 权限，不能通过 PAT 提升管理员权限；安全令牌管理只允许浏览器会话。
+
+| 方法 | 路径 | Handler | 用途 | 参数/请求体 | 响应合同 | 权限 |
+| --- | --- | --- | --- | --- | --- | --- |
+| GET | `/api/user/login/encryption-key` | `GetPasswordEncryptionKey` | 获取登录密码加密公钥 | 无 | 公钥/加密参数 | 公开、禁缓存 |
+| POST | `/api/user/login` | `Login` | 密码登录，必要时进入新验证流程 | 登录标识及密码密文/兼容请求 | 会话或验证流程、`flow_token`、可用方法 | 公开、限流/Turnstile |
+| POST | `/api/user/login/verify` | `VerifyLogin` | 完成登录 TOTP 校验 | `flow_token,method,code` | 登录会话/迁移信息 | 登录验证流程、限流 |
+| POST | `/api/user/login/passkey/begin` | `LoginPasskeyBegin` | 开始登录二次 Passkey 校验 | `flow_token,rp_id?` | `flow_token,expires_at,options,rp_ids` | 有效登录验证流程 |
+| POST | `/api/user/login/passkey/finish` | `LoginPasskeyFinish` | 完成登录 Passkey 校验 | `flow_token,passkey_flow_token,credential` | 登录会话 | 有效 WebAuthn 流程 |
+| GET | `/api/verify/methods` | `GetVerificationMethods` | 获取操作验证方法 | 无 | 可用验证方法 | 登录用户 |
+| POST | `/api/verify` | `UniversalVerify` | 按操作 scope 和上下文获取验证证明 | 方法、验证码/凭证、scope/context | 绑定操作的短期证明 | 登录用户、逐用户限流 |
+| GET | `/api/user/access_tokens` | `ListAccessTokens` | 多 PAT 列表及旧令牌过渡状态 | 无 | `items,legacy`，不返回令牌明文 | 浏览器会话 |
+| GET | `/api/user/access_tokens/catalog` | `GetAccessTokenCatalog` | 当前用户可授权的 PAT 资源 | 无 | `groups,max_tokens,default_expiry_days` | 浏览器会话、按原管理员权限过滤 |
+| GET | `/api/user/access_tokens/scopes` | `GetAccessTokenScopes` | scope 描述字典 | 无 | `resources` | 浏览器会话 |
+| POST | `/api/user/access_tokens` | `CreateAccessToken` | 创建命名、有限权限及有效期的 PAT | `name,scopes[],expires_at?` + 安全证明 | 令牌及明文（仅创建时） | 浏览器会话、操作验证 |
+| PATCH | `/api/user/access_tokens/:id` | `UpdateAccessToken` | 改名或替换授权 | `name,scopes?` | 更新结果 | 本人浏览器会话、操作验证 |
+| DELETE | `/api/user/access_tokens/:id` | `DeleteAccessToken` | 撤销单个 PAT | `id` + 安全证明 | success | 本人浏览器会话 |
+| DELETE | `/api/user/access_tokens/legacy` | `RevokeLegacyAccessToken` | 主动撤销过渡中的旧 PAT | 安全证明 | success | 本人浏览器会话 |
+| POST | `/api/oauth/email/bind/start` | `EmailBindStart` | 开始邮箱绑定/变更 | `email` + 绑定操作证明 | 绑定流程和通知状态 | 登录用户、二次验证 |
+| POST | `/api/oauth/email/bind/resend` | `EmailBindResend` | 重发绑定验证码 | `flow_token` | 绑定流程状态 | 本人绑定流程、限流 |
+| POST | `/api/oauth/email/bind` | `EmailBind` | 确认绑定邮箱 | `flow_token,new_code,old_code?` | success | 本人绑定流程 |
+| GET/POST/GET | `/api/oauth/telegram/login`、`/api/oauth/telegram/bind/start`、`/api/oauth/telegram/bind/:flow_token` | `TelegramLegacyAuth` | 旧 Telegram 入口兼容提示 | 原流程参数 | 引导采用标准 OAuth 流程 | 原登录/绑定入口权限 |
+| GET | `/api/oauth/telegram` | `HandleOAuth` | Telegram 接入统一 OAuth/OIDC | OAuth code/state | 会话或绑定结果 | 校验 OAuth 状态及绑定证明 |
+| GET | `/api/option/request_policy` | `GetRequestPolicy` | 读取请求过滤/路由/健康策略 | `section` | `data.options`，仅返回该页面配置键 | Root 或相应设置页面权限 |
+| PATCH | `/api/option/request_policy` | `UpdateRequestPolicy` | 原子更新并验证请求策略 | `section`；`options:{key:string}` | 生效后的 `options` | 同上，写入键逐项校验 |
+| PUT | `/api/option/passkey/domains` | `UpdatePasskeyDomains` | 预览/修改 WebAuthn RP 域名 | `rp_id,legacy_rp_ids,origins,preview,removal_confirmation?` | 变更影响；危险移除返回 409 确认合同 | Root 或 `auth.passkey` |
+| GET | `/api/option/model_pricing` | `GetModelPricingConfig` | 模型定价快照 | `model[]?` | `entries,options,empty_version`，含旧按次订阅许可 | Root 或 `billing.model-pricing` |
+| PATCH | `/api/option/model_pricing` | `UpdateModelPricingConfig` | 原子保存/重置模型定价 | `changes:[{model_name,expected_version,pricing,reset?}]` | `updated_models`；并发版本冲突 HTTP 409 | 同上 |
+| POST | `/api/option/model_pricing/convert` | `PreviewModelPricingConversion` | 定价表达式转换预览 | `model_name,pricing` | 转换结果、不持久化 | 同上 |
+| POST | `/api/option/model_pricing/preview` | `PreviewModelPricing` | 生效定价及缓存规则预览 | `model_name,pricing` | `effective,cache_write_mode,billing_details` | 同上 |
+| GET | `/api/plugin/task` | `ListTaskPlugins` | 插件及工厂/覆盖版本列表 | 无 | 插件列表/运行状态 | Root |
+| POST/PUT | `/api/plugin/task` | `UploadTaskPlugin` | 安装/更新 JS 任务插件 | `source,enabled?,remark?,force?,sourceSha256?,icon?` | 安装/重建结果；源码上限 8 MiB | Root |
+| GET | `/api/plugin/task/runtime/status` | `GetTaskPluginRuntime` | 路由代际和插件运行状态 | 无 | 运行状态 | Root |
+| GET | `/api/plugin/task/marketplace/sources` | `GetTaskPluginMarketplaceSources` | 读取插件市场来源 | 无 | 市场源列表 | Root |
+| PUT | `/api/plugin/task/marketplace/sources` | `UpdateTaskPluginMarketplaceSources` | 保存插件市场来源 | 市场源列表 | success | Root |
+| GET | `/api/plugin/task/:key` | `GetTaskPlugin` | 获取插件详情/源码 | `key,version?` | meta、source、来源层及图标状态 | Root |
+| GET | `/api/plugin/task/:key/icon` | `GetTaskPluginIcon` | 插件图标 | `key,version?` | 图像及缓存头 | Root |
+| GET | `/api/plugin/task/:key/versions` | `GetTaskPluginVersions` | 查看历史版本 | `key` | 版本列表 | Root |
+| POST | `/api/plugin/task/:key/activate` | `ActivateTaskPlugin` | 激活指定版本 | `version` | 激活/重建结果 | Root |
+| POST | `/api/plugin/task/:key/status` | `SetTaskPluginStatus` | 启停插件 | `enabled`；`cascade?,force?` | 更新/影响结果 | Root |
+| POST | `/api/plugin/task/:key/dryrun` | `DryRunTaskPlugin` | 插件函数调试 | `hook,member?,args[]` | 执行返回值/诊断 | Root |
+| DELETE | `/api/plugin/task/:key/versions/:version` | `DeleteTaskPluginVersion` | 删除覆盖版本 | `key,version,force?` | 删除/重建结果 | Root |
+| GET | `/api/task_plugin_options` | `GetTaskPluginOptions` | 渠道编辑器可绑定插件 | 无 | 可绑定插件及模型 | 管理员 + `task-plugin.bind` 权限 |
+| GET | `/api/token/auto-groups` | `GetTokenAutoGroups` | API Key 自动分组可选项 | 无 | 分组元数据 | 登录用户 |
+| GET | `/api/audit` | `GetAuditLogs` | 独立安全/操作审计日志 | 分页、用户/类型/时间/操作筛选 | 审计列表；敏感信息按权限裁剪 | 管理员 + `audit.read` |
+| GET | `/api/audit/self` | `GetAuditLogs` | 查看本人审计日志 | 分页及筛选 | 本人审计列表 | 登录用户，强制本人过滤 |
+| GET | `/api/log/export`、`/api/log/self/export` | `ExportAllLogs`、`ExportUserLogs` | 保留矩龙 CSV 导出 | 原日志过滤与时间范围 | 带 BOM 中文表头 CSV、截断提示，最多 5000 行 | 管理员/本人；导出开关及互斥锁 |
+| GET | `/api/log/export/stream`、`/api/log/self/export/stream` | `ExportAllLogsStream`、`ExportUserLogsStream` | 新增流式日志导出 | 日志过滤及时间范围 | NDJSON，末尾完成/截断记录 | 管理员/本人；导出开关及互斥锁 |
+| DELETE | `/api/system-task/history` | `DeleteSystemTaskHistory` | 清理已结束系统任务历史 | 任务筛选 query | `deleted_count` | Root |
+| GET | `/api/task` | `GetAllTask` | 统一插件任务管理列表 | 任务分页/筛选 | 插件任务/用量/成果 | 管理员 |
+| GET | `/api/task/:task_id/artifacts` | `GetDashboardTaskArtifacts` | 获取任务成果访问地址 | `task_id` | `task_id,artifacts[]`，兼容旧音频/视频 | 本人或获准的管理员 |
+| POST | `/api/vendors/operations/preview` | `PreviewVendorOperation` | 厂商合并/移动预览 | `VendorOperation` | 影响预览 | 管理员 |
+| POST | `/api/vendors/operations` | `ApplyVendorOperation` | 应用厂商操作 | `VendorOperation` | 修改模型/厂商结果 | 管理员，记录操作审计 |
+| POST | `/api/models/delete` | `BatchDeleteModelMeta` | 批量删除模型及可选渠道/价格清理 | `model_ids[],remove_from_channels,remove_pricing` | 删除及更新渠道结果 | 管理员；移除定价仅 Root |
+| GET | `/v1/responses` | `ResponsesWebSocket` | Responses WebSocket 会话 | Upgrade + `response.create` 事件 | WebSocket 事件/响应 | API Key，逐事件限流/计费 |
+| POST | `/v1/responses` | `RelayTaskPluginEndpoint` | 文本与插件成果统一 Responses | 原 Responses 请求 | 同步/SSE/后台任务 Responses | API Key；无插件匹配回退原 Relay |
+| GET | `/v1/responses/:response_id` | `RetrieveTaskPluginResponse` | 读取插件后台响应 | `response_id` | Responses 结果 | API Key、任务所有权 |
+| POST | `/v1/images/generations` | `RelayImageGeneration` → 插件桥或原 Relay | 保留矩龙同步/异步生图，新增插件供应商 | 原 ImageRequest；`async?,n,size,quality` | 原同步响应；异步仍为 202 + `task_id,poll_url` | API Key；保留日志和图片读取权限 |
+| POST | `/v1/images/edits` | `RelayTaskPluginEndpoint` | 插件/原生图片编辑 | JSON/multipart 图像编辑请求 | OpenAI Images 格式 | API Key，模型/插件分发 |
+| POST | `/v1/videos`、`/v1/video/generations` | `RelayTaskPluginEndpoint` → `RelayTask` | 视频提交 | 模型、prompt、duration/seconds、图像/视频素材 | 视频任务 ID/状态 | API Key；插件模型/时长校验和预扣 |
+| GET | `/v1/videos/:task_id`、`/v1/video/generations/:task_id` | `RelayTaskFetch` | 视频轮询 | `task_id` | 视频状态及结果 | API Key、任务所有权 |
+| GET/HEAD | `/v1/videos/:task_id/content` | `VideoProxy` | 视频成果读取 | `task_id` | 视频/成果代理响应 | API Key 或 Dashboard 用户，保留所有权检查 |
+
+`/suno`、`/kling/v1`、`/jimeng` 等供应商专用路由由启用的内置插件元数据动态注册，替代旧固定 Go 路由。平台任务统一保存、轮询和结算；工厂插件覆盖版本由 root 管理。旧 `/api/user/token` 单令牌生成入口由新多 PAT 管理取代，已有旧 PAT 在迁移日起保留 30 天过渡，期限存入 `LegacyAccessTokenRetireAt`，新 PAT 仅存哈希。旧 CSV 地址没有改为 NDJSON。
+
+日志 `content` 使用结构化消息以支持国际化，`other` 使用 `LogOther` 分层；非管理员看不到 `admin_info`，非 root 看不到 root 审计字段。矩龙登录日志仍进入原业务日志以支持风险/IP分析，同时写入新独立审计日志；特殊 Token 倍率、原始费用和倍率收益仍保存在受权限保护的管理员信息中。
+
 ## 数据模型与数据库结构
 
 迁移在 `model/main.go` 中通过 `DB.AutoMigrate(...)` 执行。SQLite 下 `SubscriptionPlan` 有专门迁移处理。快速迁移 `migrateDBFast()` 会并发迁移模型表，新增模型时也必须同步更新。
@@ -1039,7 +1135,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 | `Ability` | `model/ability.go` | 渠道/模型能力映射 | channel/model/group enabled 字段 | 用于模型可用性和路由。 | 活跃 |
 | `Log` | `model/log.go` | 使用日志和审计日志 | 既有消费字段、可空 `user_display_group_ratio`、JSON `other`；`type=8` 为额度增加明细 | 模型 Token 倍率后的计费 Token写入 Token 列，真实/计费后 Token 保存到 `other.admin_info.model_token_adjustment`；原费用和两类倍率收益保存到 `admin_info.billing_revenue`，非管理员响应剥离。额度增加日志记录来源和额度，风险报告直接聚合既有日志信号。 | 活跃 |
 | `LedgerEntry` | `model/ledger.go` | 运营账号额度与成本账本 | `id`；索引 `platform/type/occurred_at/created_by/deleted_at`；`account/email`；原始 `quota int`；`cost_price decimal(20,6)`；`quantity int`；创建/更新时间 | `occurred_at` 与创建时间分离，按 Unix 秒保存用户选择的本地日期及时、分、秒，支持补录历史账本；删除使用 GORM `DeletedAt` 软删除。汇总读取使用日志和用户额度，但不参与 Relay 计费、预扣、结算、退款或用户余额写入。 | 活跃 |
-| `InvoiceApplication` / `InvoiceItem` / `InvoiceAttachment` | `model/invoice.go` | 自助发票申请、来源明细及交付附件 | 申请保存 `user_id/email/amount_quota/amount_value/unit/status/admin_note/created_at/updated_at/completed_at` 及内部发送锁 `email_sending_at`；明细保存申请、用户、来源 `request_id/source/quota/source_created_at/released_at/frozen_until`，`source_request_id+released_at` 复合唯一；附件按唯一 `application_id` 保存原文件名、MIME、大小和 BLOB | 待确认/处理中来源以 `released_at=0` 占用；用户取消后记录保留为 `cancelled`、来源立即释放且不冷冻；已驳回记录保留并写释放时间和冷冻截止，过期后可重新申请；`non_reusable` 保持占用；已完成默认锁定，但管理员/root 可撤回到待确认并删除附件，来源仍保持占用。 | 活跃 |
+| `InvoiceApplication` / `InvoiceItem` / `InvoiceAttachment` / `InvoicePaymentProof` | `model/invoice.go` | 自助发票申请、来源明细、支付凭证及交付附件 | 申请保存 `user_id/email/amount_quota/amount_value/unit/status/admin_note/created_at/updated_at/completed_at` ，新增 `invoice_type/company_name/tax_number/notes`；邮箱为可编辑收件快照；内部发送锁 `email_sending_at`；明细保存申请、用户、来源 `request_id/source/quota/source_created_at/released_at/frozen_until`，`source_request_id+released_at` 复合唯一；附件按唯一 `application_id` 保存原文件名、MIME、大小和 BLOB；支付截图按 `application_id` 索引存文件名、MIME、大小、创建时间和 BLOB，JSON 不含图片数据，列表只查元数据 | 待确认/处理中来源以 `released_at=0` 占用；用户取消后记录保留为 `cancelled`、来源立即释放且不冷冻；已驳回记录保留并写释放时间和冷冻截止，过期后可重新申请；`non_reusable` 保持占用；已完成默认锁定，但管理员/root 可撤回到待确认并删除附件，来源仍保持占用。 | 活跃 |
 | `ImageGenerationLog` / `ImageGenerationImage` | `model/image_generation_log.go` | 同步生图日志与本地异步任务 | 日志含 `id`；索引 `task_id/status/user_id/username/token_id/channel_id/model_name/request_id/created_at/updated_at`；`prompt/size/quality/image_count/quota/use_time`；内部 `images/response` JSON。`ImageGenerationImage` JSON 字段为 `type/value/bucket/mime_type/sha256/size/revised_prompt`，`type` 支持 `local/remote/minio`。 | 任务属于一个 User/Token；MinIO 元数据写入现有 `images` 文本 JSON，不新增数据库列或表。旧 local/remote JSON 继续兼容；AutoMigrate 无额外迁移。 | 活跃 |
 | `UserRequestContentLog` | `model/user_request_content_log.go` | 按用户留存 Relay 请求上下文与提示词 | `id int` 主键；`user_id int` 与 `created_at int64` 组成排序索引；唯一 `request_id varchar(64)`；`model_name/token_name varchar(191)`、`request_path varchar(255)`、索引 `status varchar(16)`、`error_message text`、`original_size/captured_size int`、`truncated bool`、`compressed_json []byte` | 逻辑上属于 `User`，硬删除用户时同步删除；不建立数据库外键以兼容现有删除流程。正文先脱敏、限制为 4 MiB，再 gzip 存主库；创建和清理旧记录位于同一事务，每用户只保留最近 50 条。 | 活跃 |
 | `EmailCampaign` | `model/email_campaign.go` | 邮件群发、定时和条件任务 | `id bigint` 主键；`name varchar(128)`、`subject varchar(255)`、`content text`；索引 `mode`；`target_type`、JSON 文本 `target_user_ids`；`trigger_type/trigger_days`；`scheduled_at/next_run_at/last_run_at bigint`；`status+next_run_at` 复合索引；`created_by` 索引；累计收件/成功/失败/跳过数、`last_error`、时间戳 | 状态为 `draft/scheduled/active/running/completed/partial_failed/paused`。立即和定时任务执行一次；条件任务完成后恢复 `active` 并把 `next_run_at` 推迟 24 小时。 | 活跃 |
@@ -1047,11 +1143,13 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 | `Redemption` | `model/redemption.go` | 兑换码 | 唯一 `key`、`user_id` 生成者、`status`、`name`、`quota`、`created_time`、`redeemed_time`、`used_user_id`、`expired_time`、`agent_charge`、软删除 | 生成者显示字段是 transient。搜索支持 code、生成者、ID、名称。代理退款使用 `agent_charge`。 | 活跃 |
 | `TopUp` | `model/topup.go` | 在线支付/充值订单 | trade no、user、amount/money、provider、status | 支付回调结算。 | 活跃 |
 | `Checkin` / `CheckinRecord` | `model/checkin.go` | 每日签到奖励记录 | user/date/quota/time 字段 | 设置位于 `checkin_setting.*`。 | 活跃 |
-| `Model` | `model/model_meta.go` | 模型目录元数据 | 模型名、vendor、展示元数据、定价/可见性 | 用于模型广场和后台模型元数据。 | 活跃 |
+| `Model` | `model/model_meta.go` | 模型目录元数据 | 模型名、vendor、展示元数据、定价/可见性、`document_template_id`（0/NULL为未绑定） | 模型编辑端点处绑定本站文档；Insert/Update事务验证模板存在；元数据同步不覆盖本站绑定。 | 活跃 |
+| `ModelDocumentTemplate` | `model/model_document_template.go` | 管理员上传的模型调用文档 | id、name(128字符)、format、original_filename、content(LongText)、created_time/updated_time(Unix秒) | 标准/快速迁移均注册；Markdown最大2MiB，MySQL使用LongText避免64KiB截断；不留存原始Word文件；删除与清模型关联在共享元数据事务锁内进行。 | 活跃 |
 | `Vendor` | `model/vendor_meta.go` | Vendor 元数据 | id/name/display/config 字段 | 与 Model 元数据关联。 | 活跃 |
 | `Pricing` / `PricingVendor` | `model/pricing.go` | 定价页面数据 | 模型定价和 vendor 分组字段 | 用于公开定价页。 | 活跃 |
 | `PrefillGroup` | `model/prefill_group.go` | 模型预填分组 | group name、models/config | 后台模型管理。 | 活跃 |
 | `Task` | `model/task.go` | 异步模型/媒体任务 | platform、task id、action、status、quota/billing private data | 用于视频/音乐/图片任务 relay。 | 活跃 |
+| `MediaAsset` | `model/media_asset.go` | 视频输入素材元数据 | 唯一 asset_id、user_id、source_type、media_type、MIME、大小、原始 URL、文件路径、创建/过期时间 | Base64 素材落盘并由 `MEDIA_ASSET_STORAGE_DIR` 指定目录；公网素材仅保存原 URL；`media_asset_cleanup` 系统任务按 `MediaAssetRetentionDays` 清除 Base64 文件和记录，公网 URL 元数据不按时效删除。 | 活跃 |
 | `Midjourney` | `model/midjourney.go` | MJProxy 风格任务 | mj id/action/status/prompt/result 字段 | 兼容/旧版图片任务跟踪。 | 活跃 |
 | `SubscriptionPlan` | `model/subscription.go` | 订阅计划 | id/title/price/quota/reset/status，以及 `allow_image_generation_logs`、`image_generation_log_limit`（0 为不限条数） | SQLite 有自定义迁移；生图日志权益默认关闭。 | 活跃 |
 | `SubscriptionOrder` | `model/subscription.go` | 订阅支付订单 | order id/user/plan/payment status 字段 | 支付回调使用。 | 活跃 |
@@ -1082,7 +1180,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 - `LedgerEntry` 已同时加入标准和快速 AutoMigrate。升级启动会自动创建 `ledger_entries` 及平台、类型、账本日期时间、创建人和软删除索引；金额使用 GORM `decimal(20,6)`，兼容 SQLite、MySQL、PostgreSQL，无需手工 SQL。预估倍率以 `LedgerEstimateRatio` 保存到既有 `options` 表，默认 `1x`，不增加配置表。该迁移不修改用户额度、使用日志或既有计费数据，部署前仍应备份主库。
 - `EmailCampaign`、`EmailDelivery` 已同时加入标准和快速 AutoMigrate。升级启动会自动创建 `email_campaigns`、`email_deliveries` 及索引，不修改用户、订阅、余额和既有日志；SQLite、MySQL、PostgreSQL 均使用 GORM 兼容类型，无需手工 SQL。部署前仍应备份主库。
 - `UserPresence` 已同时加入标准和快速 AutoMigrate。升级启动自动创建 `user_presences`，只保存被监控用户的状态与最后活动元数据，不修改 `users`、令牌、额度或日志表；部署前仍应备份主库。
-- `InvoiceApplication`、`InvoiceItem`、`InvoiceAttachment` 已同时加入标准和快速 AutoMigrate。升级启动自动增加邮件发送锁、释放时间和冷冻截止字段及附件表，将旧来源唯一索引迁移为 `source_request_id+released_at` 复合唯一索引；升级前已驳回但仍占用的旧明细会自动释放且不追加冷冻期，其余旧明细保持占用，不修改用户额度或历史日志，兼容 SQLite、MySQL、PostgreSQL。
+- `InvoiceApplication`、`InvoiceItem`、`InvoiceAttachment` 已同时加入标准和快速 AutoMigrate。升级启动自动增加邮件发送锁、释放时间和冷冻截止字段及附件表，将旧来源唯一索引迁移为 `source_request_id+released_at` 复合唯一索引；升级前已驳回但仍占用的旧明细会自动释放且不追加冷冻期，其余旧明细保持占用，不修改用户额度或历史日志，兼容 SQLite、MySQL、PostgreSQL。 本次开票资料新增四个字符串列与 `invoice_payment_proofs` 私有截图表，两种 AutoMigrate 均登记；旧申请新增字段保持空值且原金额、附件、状态及来源占用不变，截图和申请/明细同事务保存。新来源设置复用 `options`，未配置时保留全部原来源。
 - 邮件设置的 12 类双语模板、数据报表多规则/调度历史、风险邮件状态及上线/下线配置均保存到既有 `options` 表；订阅提醒发送记录继续复用 `email_deliveries` 且 `campaign_id=0`。中文模板继续使用旧事件键，英文使用 `event::en` 键；旧模板和旧单条报表频率/时间配置会自动兼容，无需手工迁移。
 - 用户运营与风控升级由主库 AutoMigrate 新增 `users.group_ratio_adjustment_enabled`、`users.group_ratio_adjustment`、`users.tag_id`、`users.risk_detection_enabled`、`user_sessions.device_id`，并创建 `user_tags`、`blocked_devices`。均使用 GORM 通用字段和索引，兼容 SQLite、MySQL、PostgreSQL；旧用户字段零值表示倍率不调整、无标签、单用户风险检测关闭。
 - 模型 Token 特殊倍率、计费收益审计、额度增加明细和风险评分不新增日志列：规则存 `options`，真实/计费后 Token 与收益审计存 `Log.other.admin_info`，额度明细复用 `logs` 并使用 `type=8`。ClickHouse 无需增加字段。
@@ -1098,6 +1196,14 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 - `BlockedIP` 已加入 `migrateDB()` 和 `migrateDBFast()`；部署新版本启动后自动创建 `blocked_ips` 表，不改动现有用户和日志数据。
 - 本次上游同步新增 `users.auth_version`，并自动创建 `user_sessions`、`auth_flows`、`external_identity_claims`；`InitializeUserAuthVersions` 和 `InitializeExternalIdentityClaims` 会初始化认证版本及回填外部身份。升级前必须备份主库，升级后旧 Dashboard 登录态会失效，用户需重新登录，但余额、订阅、代理和日志数据不受影响。
 - 站点徽标上传不新增数据库表或字段；仍使用现有 `Option(key=Logo,value=<URL>)`。迁移/备份服务器时除数据库外必须同步 `SITE_ASSET_STORAGE_DIR`，默认 Docker 部署即宿主机 `./data/site-assets`。遗漏该目录只会使本地上传徽标返回 404，不影响用户、余额、订阅和日志数据。
+
+本次自助发票数据库验证（2026-10-14）：使用 SQLite `3.50.4`、MySQL `5.7.44`、PostgreSQL `16.15`，执行 `go test /tmp/julong-invoice-db-20261014/invoice_matrix_test.go -run TestInvoiceDatabaseMatrix -v -count=1`，8 个子场景全部通过。三种引擎均覆盖全新库和改动前旧模型升级；MySQL/PostgreSQL 另覆盖分离日志库。每场景运行两次实际 `InitDB/InitLogDB` 并比较发票 schema；旧金额、附件、唯一索引、额外索引及来源外键保持，新增中文字段和可编辑邮箱完整往返。每申请 3 份各 5 MiB 截图在再次启动后 SHA-256 不变（SQLite BLOB、MySQL LONGBLOB、PostgreSQL BYTEA），本人/管理员可读，跨用户和错误申请关系拒绝；重复申请不新增申请或截图，禁用来源无法提交。日志保留于 `/tmp/julong-invoice-db-20261014/matrix.log`，验证容器仅使用隔离测试数据并已清理。
+
+本次自助发票前后端验证（2026-10-14）：`go test ./middleware -count=1` 全包通过；`go test ./controller ./model -run 'Invoice|SystemSettings|SectionOption' -count=1` 通过。`pnpm exec vitest run src/features/system-settings/general/__tests__/invoice-settings.test.tsx src/features/invoices/components/__tests__/application.test.tsx` 共 17 项通过；原发票取消/管理/来源选择 10 项 node 测试通过（Node24、临时静态资源 loader、`pnpm dlx tsx --test --tsconfig tsconfig.app.json`）。`pnpm run typecheck`、目标 `oxlint/oxfmt`、`pnpm run i18n:sync`、范围 `git diff --check` 通过；本次新文案七语种无缺失。Bun 当前不可用，使用已安装 Node24 和 pnpm 等价运行，未更改项目包管理约定。
+
+授权复查同步修复了 `middleware/auth.go` 的个人访问令牌上下文传递：`authHelper` 接入既有 `setAccessTokenContext`，供新截图接口正确检查 scopes/legacy/token ID；保留浏览器会话、legacy 兼容和单次凭证查找。独立 `go test /tmp/julong-invoice-db-20261014/invoice_pat_review_test.go -run TestInvoiceProofScopedAdminPATReview -v -count=1` 12 场景全部通过：本人 wallet:read、管理员 billing:read 正常，受限钱包令牌跨用户、无关/空 scope、错误申请绑定、过期、撤销及匿名均拒绝。依据 OWASP ASVS 稳定版 5.0.0（8.2.1、8.2.2、8.3.1）及 Authentication、Session Management、Authorization、File Upload Cheat Sheets；仅执行本次适用的后台动作/对象权限和图片上传校验，未作全项目合规声明。结果日志 `/tmp/julong-invoice-db-20261014/pat-review-fixed.log`。
+
+本次本地交付验证（2026-10-14）：前端 `VITE_REACT_APP_VERSION=v1.0.0-julong.1 pnpm run build` 和根模块 `go build -ldflags '-X github.com/QuantumNous/new-api/common.Version=v1.0.0-julong.1' -o /Users/xujs/.codex/tmp/julong-api-runtime/new-api.next .` 均通过。SQLite 在线备份和旧二进制保存到 `/Users/xujs/.codex/backups/julong-api/invoice-runtime-20261014-042751`；本地项目已重启，PID `51871` 在 `3000` 监听，`GET /api/status` 成功、版本为 `v1.0.0-julong.1`，首页 6 个最新内嵌 JS/CSS 资源均返回 200。主库新开票资料字段和截图表已生效，原用户/密钥/申请/来源/附件/配置行数及账户总额度与备份前一致。未登录访问发票信息和截图接口均返回 401；实际账号页面交互由完整 React 测试验证，本轮未使用真实用户登录或提交测试发票。详细启动验证保存在 `/Users/xujs/.codex/tmp/julong-api-runtime/invoice-runtime-verification.json`。
 
 ## 前端路由
 
@@ -1116,13 +1222,15 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 | `/keys` | `_authenticated/keys/index.tsx` | API Keys | 用户 | 完成 |
 | `/ledger` | `_authenticated/ledger/index.tsx` | 运营账本：日期查询、六项汇总、可点击配置的预估倍率、CSV 下载、秒级日期时间记录增改和 10 秒确认单项/批量删除 | Root 或 `ledger.read`；写入按钮及预估倍率设置需 `ledger.write`，删除控件需 `ledger.delete` | 完成 |
 | `/usage-logs/*` | `_authenticated/usage-logs/*` | 使用日志/任务日志/绘图日志 | 用户/管理员视图不同 | 完成 |
+| `/usage-logs/assets` | `_authenticated/usage-logs/$section.tsx` + `media-assets-table.tsx` | 视频输入素材列表、预览、复制 URL、删除 | 用户查看本人；管理员查看全部并可手动删除 | 完成 |
 | `/wallet` | `_authenticated/wallet/index.tsx` | 钱包、充值、兑换码 | 用户 | 完成 |
-| `/invoices` | `_authenticated/invoices/index.tsx` | 自助发票：多选可申请充值、门槛累计、申请记录；管理员/root 同页查看全部用户申请并更新状态 | 用户；管理列表仅管理员/root | 完成 |
+| `/invoices` | `_authenticated/invoices/index.tsx` | 自助发票：仅勾选已启用来源，多选金额达到门槛后打开申请表；填写普通/专用票、粘贴识别、公司名/税号/接收邮箱/备注，上传与预览 1-3 张支付截图。邮箱默认绑定值且可更改；管理员查看开票资料和私有截图，保留原审核、交付、取消、撤回功能 | 用户；管理列表仅管理员/root | 完成 |
 | `/profile` | `_authenticated/profile/index.tsx` | 个人资料/安全 | 用户 | 完成 |
 | `/agent-users` | `_authenticated/agent-users/index.tsx` | 代理所属用户 | 代理 | 完成 |
 | `/redemption-codes` | `_authenticated/redemption-codes/index.tsx` | 兑换码管理；新生成代码复制/下载，多选复制/下载/倒计时删除 | 用户；管理员全部，代理限自己；批量删除仅管理员/root | 完成 |
 | `/channels` | `_authenticated/channels/index.tsx` | 渠道管理 | 管理员/root | 完成 |
 | `/models/*` | `_authenticated/models/*` | 模型元数据/部署 | 管理员/root | 完成 |
+| `/models/document-templates` | `_authenticated/models/$section.tsx` + `features/models/index.tsx` | 文档模板列表、MD/Word上传、编辑预览、替换、改名、确认删除 | 管理员/root，沿用现有模型section路由校验 | 完成；B08验证和边界见PROJECT_PROGRESS.md |
 | `/users` | `_authenticated/users/index.tsx` | 用户管理；筛选栏在标签后提供“不统计用户”配置并展示随 URL search 实时变化的剩余总配额与用户数，支持搜索、分组、状态、角色及 `tag[]` 风险/自定义标签筛选，含标签、批量额度、风险和登录设备弹窗 | 管理员/root | 完成 |
 | `/subscriptions` | `_authenticated/subscriptions/index.tsx` | 订阅管理 | 管理员/root | 完成 |
 | `/error-reports` | `_authenticated/error-reports/index.tsx` | 错误反馈列表 | 管理员/root | 完成 |
@@ -1131,7 +1239,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 | `/system-settings/operations/logs` | 同上 | 消费/生图日志、风险检测全局开关、用户日志倍率展示 | Root 或 `operations.logs` 权限 | 完成 |
 | `/system-settings/operations/update-checker` | `_authenticated/system-settings/operations/$section.tsx`、`maintenance/update-checker-section.tsx` | 系统维护；分别展示 Julong 构建版本、已合并 New API 版本/提交和运行时间，检查更新时只比较上游版本 | Root 或 `operations.update-checker` 权限 | 完成 |
 | `/system-settings/billing/group-pricing` | `_authenticated/system-settings/billing/$section.tsx` | 分组定价、特殊倍率规则、模型 Token 特殊倍率规则 | Root 或 `billing.group-pricing` 权限 | 完成 |
-| `/system-settings/billing/invoice` | `_authenticated/system-settings/billing/$section.tsx` | 自助发票开关、最低申请金额、单位和预计工作日配置 | Root 或 `billing.invoice` 权限 | 完成 |
+| `/system-settings/billing/invoice` | `_authenticated/system-settings/billing/$section.tsx` | 自助发票开关、可申请来源多选、最低申请金额、单位、预计工作日和驳回冷冻配置 | Root 或 `billing.invoice` 权限 | 完成 |
 | `/system-settings/*` | `_authenticated/system-settings/*` | 其他系统设置页面 | 管理员/root，视页面而定 | 完成 |
 | `/401`、`/403`、`/404`、`/500`、`/503` | `routes/(errors)/*` | 错误页 | 公开 | 完成 |
 
@@ -1163,20 +1271,21 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 | `system-settings/operations/email-campaigns` | `email-campaigns-section.tsx:EmailCampaignsSection/Stat`、`email-campaign-user-picker.tsx:EmailCampaignUserPicker`、`email-campaigns-api.ts`、`email-templates-api.ts`、`operations/section-registry.tsx` | 运维邮件任务列表、统计、创建/编辑、收件人预估、草稿/启用/暂停/失败重试/删除和逐用户明细；指定用户支持分页模糊搜索及回显；创建任务可选择 `campaign_compatible` 中英文模板，预览样例渲染后套用主题和 HTML；关键状态含 `page/form/editing/templateKey/templatePreview/selected/deliveryPage` | `/api/email-campaigns*`、`GET/POST /api/email-settings/templates*`；依赖 React Query、Popover/Command/Checkbox、Dialog、HtmlContent、Table、NativeSelect、i18n | 完成 |
 | `system-settings/operations/email-templates`（显示名“邮件设置”） | `email-template-settings-section.tsx:EmailTemplateSettingsSection`、`email-alert-settings.tsx:EmailAlertSettings/AlertPanel`、`dashboard-report-schedule-editor.tsx`、`email-templates-api.ts`、`email-campaign-user-picker.tsx` | 七张提醒卡配置订阅到期、余额不足、渠道账号额度、渠道异常、数据看板报表、风险用户和用户上线/下线；上线事件和监控用户可多选，默认 5 分钟无登录/后台/API 活动判定下线，收件人仅限管理员/root，并可发送真实 SMTP 测试。下方按事件和 `zh/en` 编辑 12 类图片式模板（含电子发票交付） | `/api/email-settings/config`、`/recipients*`、`/monitored-users*`、`/channel-anomaly/test`、`/dashboard-report/test`、`/risk-user/test`、`/user-presence/test`、`/templates*` | 完成 |
 | `channels` | `channels-table.tsx`、`channels-columns.tsx`、dialogs/drawers、`api.ts` | 上游渠道 CRUD/测试/配置 | `/api/channel*` | 完成 |
-| `keys` | `api-keys-table.tsx`、`api-keys-columns.tsx`、`api-keys-mutate-drawer.tsx`、`api-key-group-combobox.tsx`、mutate/delete dialogs | 用户 API key 管理；令牌分组下拉框和列表倍率统一读取 `/api/user/self/groups`，可配置展示真实特殊倍率或基础定价分组倍率 | `/api/token*`、`/api/user/self/groups` | 完成 |
+| `keys` | `index.tsx`、`custom-endpoints.tsx`、`api-keys-table.tsx`、`api-keys-columns.tsx`、`api-keys-mutate-drawer.tsx`、`api-key-group-combobox.tsx`、mutate/delete dialogs | 用户 API key 管理；自定义端点区保留高度，列表占用页面剩余高度并复用共享表格的纵向滚动，桌面固定表头，桌面/移动端分页始终在页脚；令牌分组下拉框和列表倍率统一读取 `/api/user/self/groups`，可配置展示真实特殊倍率或基础定价分组倍率 | `/api/token*`、`/api/user/self/groups` | 完成 |
 | `ledger` | `index.tsx`、`api.ts`、`types.ts`、`ledger-summary-cards.tsx`、`ledger-estimate-ratio-dialog.tsx`、`ledger-entry-dialog.tsx`、`ledger-export-menu.tsx`、`ledger-delete-dialog.tsx` | 账本日期筛选、统一预估倍率设置、六项汇总卡片、秒级日期时间、分页表格、权限感知的新增/编辑/单项与批量删除、10 秒确认和四种 CSV 下载范围 | `/api/ledger*`；复用使用日志日期范围选择器、用户权限矩阵和全站额度/货币格式 | 完成 |
 | `usage-logs` | `usage-logs-table.tsx`、`usage-logs-export-menu.tsx`、`cost-breakdown-tooltip.tsx`、普通/绘图/生图/任务 columns、倍率审计 libs | 普通消费日志、绘图、生图和媒体任务日志；下载菜单支持本页、今日、自定义时间和全部 CSV。用户和管理员均展示模型倍率调整后的 Token；管理员/root 悬浮 Tokens 查看真实 Token，悬浮费用查看原始费用及分组特殊倍率/模型倍率收益。原有普通用户倍率展示逻辑保持不变 | `/api/log*`、`/api/log/export`、`/api/log/self/export`、`/api/mj`、`/api/image-generation-logs*`、`/api/task` | 完成 |
+| `media-assets-table.tsx` | `usage-logs/components/media-assets-table.tsx` | Base64/公网图片、视频、音频的彩色分类，提交/过期时间，详情预览、复制 URL；管理员可删除；复用 StaticDataTable、CopyButton、ConfirmDialog | `/api/media-assets` | 完成 |
 | `wallet` | recharge cards、subscription cards、affiliate rewards、redemption hook | 钱包充值、兑换码、订阅 | `/api/user/topup*`、`/api/subscription*`、支付 API | 完成 |
-| `invoices` | `index.tsx`、`api.ts`、`types.ts`、`eligible-credits-table.tsx`、`applications-table.tsx`、`cancel-invoice-dialog.tsx`、`manage-invoice-dialog.tsx`、`complete-invoice-dialog.tsx`、`withdraw-invoice-dialog.tsx` | 用户多选符合条件的充值额度记录申请发票并查看历史；待确认申请可二次确认后取消，已完成申请可下载交付附件。管理员/root 可打开全部状态申请查看卡片式账单来源明细，来源请求 ID 一键复制且长文本完整换行；选择已完成后在详情内上传附件、确认发送邮件并保存邮件模板设置，最终保存时发送；已完成详情可二次确认撤回，删除错误附件并恢复待确认 | `/api/user/invoice*`；React Query、Card、Checkbox、Dialog、AlertDialog、Clipboard、Blob 下载、multipart、i18n | 完成 |
+| `invoices` | `index.tsx`、`api.ts`、`types.ts`、`apply-invoice-dialog.tsx`、`invoice-payment-proofs.tsx`、`lib/invoice-application.ts`、`eligible-credits-table.tsx`、`applications-table.tsx`、`cancel-invoice-dialog.tsx`、`manage-invoice-dialog.tsx`、`complete-invoice-dialog.tsx`、`withdraw-invoice-dialog.tsx` | 用户多选符合配置来源的额度记录，通过申请表填写普通/专用票、公司、税号、可编辑接收邮箱和备注；本地解析粘贴资料，地址/电话/银行信息保留到备注；1-3 张付款截图选择、预览与私有查看；查看历史；待确认申请可二次确认后取消，已完成申请可下载交付附件。管理员/root 可打开全部状态申请查看开票资料、私有支付截图和卡片式账单来源明细，来源请求 ID 一键复制且长文本完整换行；选择已完成后在详情内上传附件、确认发送邮件并保存邮件模板设置，最终保存时发送；已完成详情可二次确认撤回，删除错误附件并恢复待确认 | `/api/user/invoice*`；React Query、Card、Checkbox、Dialog、AlertDialog、Clipboard、Blob 下载、multipart、i18n | 完成 |
 | `redemption-codes` | `redemptions-generated-dialog.tsx`、`data-table-bulk-actions.tsx`、`redemptions-multi-delete-dialog.tsx`、表格和编辑弹窗 | 管理员/代理兑换码管理；刚生成的兑换码支持仅复制代码、复制名称和代码、一键下载；多选支持仅复制代码、下载和管理员 5 秒确认批量删除 | `/api/redemption*`、`POST /api/redemption/batch`、`/api/user/agent/topup-link` | 完成 |
 | `users` | `index.tsx`、`users-table.tsx`、`users-columns.tsx`、`users-mutate-drawer.tsx`、`user-detail-dialog.tsx`、`user-quota-summary-control.tsx`、`user-quota-summary-badge.tsx`、`user-tags-dialog.tsx`、`user-batch-quota-dialog.tsx`、`user-risk-panel.tsx`、`user-login-access-panel.tsx`、`user-group-ratios-card.tsx`、`lib/user-quota-summary.ts` | 后台用户管理、筛选余额汇总、标签筛选/标注、批量额度、代理详情和用户详情；标签后可持久化选择不统计用户，剩余总配额和匹配人数会排除该名单后再按表格 URL 筛选实时汇总，被排除用户仍正常显示。详情含今日消费、总/今日 Token、额度明细、已选分组真实倍率及额度/Token、风险报告、登录 IP 与设备、上下文审计。编辑用户可在特殊规则后的最终真实倍率上增加或减少单用户调整，并实时预览已有分组结果；绑定信息区域对已有用户默认只读，打开编辑开关后才可修改，创建用户时默认可编辑 | `/api/user*`、`/api/user/quota-summary*`、`/api/user/tags*`、`/api/user/options*`、`/api/user/batch-quota`、`/api/user/:id/{usage-summary,quota-increases,risk,login-ips,login-devices,request-content}*` | 完成 |
-| `models` | metadata/deployment tables and drawers | 模型元数据和部署管理 | `/api/models*`、`/api/vendors*`、`/api/deployments*` | 完成 |
+| `models` | metadata/deployment tables/drawers、`document-templates-table.tsx`、`dialogs/document-template-{dialog,form}.tsx`、`document-templates-api.ts` | 模型元数据、部署和文档模板管理；列表分页/搜索、MD/Word上传、编辑Markdown与预览、改名/替换/确认删除，端点绑定 | `/api/models*`、`/api/vendors*`、`/api/deployments*`、`/api/model-document-templates*` | 完成；B08验收边界见PROJECT_PROGRESS.md |
 | `subscriptions` | subscription table/drawers | 后台订阅计划/用户绑定 | `/api/subscription/admin*` | 完成 |
 | `system-settings` | 各一级菜单 section registries；`maintenance/{log-settings-section,update-checker-section}.tsx`、`models/group-ratio-form.tsx`、`model-token-ratio-editor.tsx`、邮件设置组件和 `ImageStorageSettings` | 管理员/root 运行时设置；系统维护展示 Julong 与已合并 New API 双版本并按上游版本检查更新；日志维护含全局风险检测；分组定价含模型 Token 特殊倍率；邮件设置维护数据报表、风险及用户上线/下线提醒；其余站点徽标、普通用户倍率展示、MinIO 生命周期等既有功能保持 | `/api/status`、`/api/option*`、`/api/email-settings*`、`/api/site-assets/logo*`、`/api/performance/image-storage*`、`/api/system-task/*` | 完成 |
 | `system-info` | system instances/tasks panels | Root 系统运维 | `/api/system-info*`、`/api/system-task*` | 完成 |
 | `error-reports` | `submit-error-report.tsx`、`index.tsx`、`api.ts` | 提交/查看 500 页面反馈 | `/api/error-reports*` | 完成 |
 | `errors` | `general-error.tsx`、forbidden/not-found/maintenance/unauthorized | 错误页 | `/error-report` 路由用于反馈 | 完成 |
-| `pricing` | `hooks/use-pricing-data.ts`、pricing tables/cards、model detail、`lib/model-helpers.ts` | 公开模型定价；卡片、表格和详情共享 `/api/pricing.group_ratio`，可展示真实特殊倍率或始终展示基础定价分组倍率 | `/api/pricing` | 完成 |
+| `pricing` | `hooks/use-pricing-data.ts`、pricing tables/cards、model detail、`model-document-template-section.tsx`、`lib/model-helpers.ts` | 公开模型定价与详情API；调用示例优先绑定文档，未绑定保留内置协议示例，失败明确报错/可重试；安全Markdown展示并可复制整份源码，计费不变 | `/api/pricing`、`/api/model-documentation` | 完成；B08验收边界见PROJECT_PROGRESS.md |
 | `rankings` | hero/model leaderboard/provider sections | 公开排行榜 | `/api/rankings` | 完成 |
 | `playground` | chat playground UI | 浏览器内请求测试 | `/pg/chat/completions` | 完成 |
 | `setup` | setup wizard steps | 初始化安装 | `/api/setup` | 完成 |
@@ -1374,10 +1483,71 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 - Julong 生产 `.env` 模板。
 - CI 流程：Go tests、前端 typecheck、build、Docker image push。
 
+### 任务日志成品与请求预览（2026-10-14）
+
+- 继续复用共享 `Dialog`、`CopyButton`、`Button`、错误/加载组件；`TaskResultCell` 仅组合任务数据和轮询，无新增通用弹窗实现。任务 ID 点击显示当前已保存的轮询结果，进行中每 3 秒刷新，成功/失败/关闭后停止，支持手动刷新及复制。
+- 请求体使用「模型请求体 → 提示词 → 其他参数」布局；显示真实保存的提交快照（不宣称是最终上游原始报文），复制保留 false/0 等值；媒体使用占位符。普通用户仍仅能读自己任务。
+- 「制品」列改为「成品」；视频成功提供「查看视频」，任务失败提供带失败图标的红色「失败原因」按钮。预览或成品接口加载失败后同样显示失败按钮，弹窗保留重试。待处理任务不误报失败；图片、音频的现有预览继续保留。
+- 任务类型列改为彩色状态标签区分文生视频、图生视频、首尾帧/参考视频、视频 Remix、音乐和歌词；任务结果与请求参数 JSON 使用共享语法高亮代码块，支持长内容滚动、折叠及下载。任务 ID 保持单行省略并可悬停查看完整值；「成品」列固定在表格右侧。
+- 普通用户任务列表 DTO、详情弹窗、任务结果 JSON 不显示平台，管理员保留；新增只读 DTO 字段 `legacy_audio_available` 防止隐藏平台后历史音频预览退化；数据库表与计费无变更。
+- `suanliai-video` 1.0.1：优先读取上游 `result_url`（兼容 url/video_url/download_url），相对路径按上游域名解析，签名媒体链接使用 credentialless 内容代理，可安全跨域跳转且不发送渠道密钥；对外视频 URL 别名改为本地内容路径。无须用户手填结果字段路径。既有 SSRF、任务归属和 URL 校验保持生效。
+- 安全参考：OWASP Authentication / Session Management Cheat Sheets（2026-10-14 查阅）；本次复用现有登录/所有权检查，无会话或凭据机制变更；任务结果私有禁止缓存，测试覆盖本人、他人、管理员和平台/媒体信息隔离。不声明整个应用满足 ASVS。
+- 验证记录：定向 Go/前端测试、typecheck、目标 lint、生产构建、重启和现有任务 Range 下载检查结果在本次交付中记录；不新建付费视频任务。
+
+### 任务日志固定列修复（2026-10-15）
+
+- `UsageLogsTable` 自定义行必须使用共享表格的 `helpers.getCellClassName`，让成品表头及每行单元格都保持右侧 sticky、不透明背景；待处理或无成品时显示「暂无内容」。共享固定列最新阴影采用独立 `::before` 渐变和主题边界线，固定单元格允许阴影外绘，避免 Chromium/Safari 折叠表格本体 box-shadow 裁剪差异；内部静态文字仍截断，明暗主题分别使用 .18/.5 黑色渐变。
+- 长任务 ID 限宽并单行省略，悬停显示完整 ID，复制按钮不挤出单元格。继续复用共享 `CodeBlock`，补齐 JSON 解析器，结果和请求参数支持语法着色、格式化和长链接自动换行；新增「打开成品链接」入口。
+- 现有 `GET/HEAD /v1/tasks/:key/artifacts/:artifact_key/content`（`controller.TaskArtifactContent`）及视频代理响应的 CSP 允许 `media-src 'self'`，用于浏览器直接打开媒体及 Range 播放；继续 sandbox、禁用脚本与嗅探。路由、请求参数、权限和视频响应契约不变。
+- 成品 capability 没有时间到期字段；本轮未增加任何视频过期或清理逻辑。本地 `.env` 持久化随机 `SESSION_SECRET`/`CRYPTO_SECRET`（0600、Git 忽略、不记录值），避免以后重启因随机签名密钥变化使链接失效；此前密钥生成的旧链接需重新打开任务结果获取。配置变更遵循 OWASP Authentication / Session Management Cheat Sheets 的随机性及秘密保护指导，不声明全站 ASVS 合规。
+- 验证：三个前端测试文件 16 项通过，目标 Go 媒体代理测试通过，typecheck、前端构建通过。Chrome 使用模拟 API 数据加载真实构建页面，横滚前后成品列右边界均为 1255px，成功、失败及空内容均可见；JSON 实际呈现多种 token 颜色。真实任务读接口可获取签名正确的链接，但本机 VPN 将 `suanliai.top` 解析为 `198.18.0.8`，触发 SSRF 防护；待切换真实 DNS 后验证播放，不通过关闭安全检查掩盖该环境问题。
+
+### 成品列阴影和横向滚轮（2026-10-15 续修）
+
+- `DataTablePage.horizontalWheelColumnId` / `DataTableView.horizontalWheelColumnId` 为兼容可选项，不开启时现有表格滚动不变；桌面任务日志仅指定 artifacts 列。公共组件原先不支持“指定列滚轮转横向”的行为，故兼容扩展原组件及新增本地监听 hook，而非另造业务表格。移动端不启用。
+- 成品表头和行内按钮均将滚轮转换为同一滚动容器的 scrollLeft，按像素/行/页处理、限制边界；列外、Ctrl 缩放、无溢出及到边界均释放原生行为，卸载/取消 opt-in 清理监听。
+- 复用共享固定列、TruncatedCell 和按钮；不改任务结果、媒体代理、API/路由、数据库或计费，不增加视频成品过期机制。
+- 本轮 4 个测试文件 17 项通过，typecheck/目标 lint/format/build、Go build 通过；Chromium 真实组件夹具确认明暗阴影可见、成功/失败/暂无内容占位、列内滚轮与 splitHeader，x/right 保持稳定。Safari 当前工具无连接，未实测。后端已重启 PID 5915，状态成功、首页 6 个资源与最新构建 SHA256 一致。
+- 用户切换 VPN DNS 后，本轮确认 suanliai.top 使用真实 IP；已有视频内容链接重启前后均返回 206/video/mp4，Range 0-1023/11173528，MP4 头正确。Chromium 中嵌入播放以及直接打开同一成品 URL 均 readyState=4、1280×720、时长14.08秒、无媒体错误，点击播放后 paused=false、currentTime 增长。未生成新付费任务。
+
+### 输入素材验收与媒体内容修复（2026-10-15 续验）
+
+- 真实路由中的 API gzip 曾将素材 Range 的原始字节再次压缩，HEAD 也产生 gzip 正文；`router/api-router.go` 仅排除 `/api/media-assets/[^/]+/content`，普通 API JSON 仍压缩。`controller/media_asset.go` 允许 `media-src 'self'`，供原生视频/音频页面重新请求自身媒体，继续 sandbox、禁止脚本/其他内容和 MIME 嗅探。没有更改素材权限、模型计费、数据库结构或生成成品生命周期。
+- 仓库回归先失败后修复通过：`go test ./router -run 'Test(MediaAssetContent|SetTaskRouter|InvoiceAPI)' -count=1 -v`，覆盖真实 SetApiRouter 的 GET/HEAD + Accept-Encoding:gzip + Range、原字节/空HEAD、CSP以及普通JSON继续压缩；日志 `~/.codex/tmp/julong-api-runtime/media-range-{before,after}-20261015.log`。独立复核亦通过。
+- 素材核心行为、权限/到期清理及真三库宿主矩阵通过：`python3 /tmp/julong-media-verify-20261015/run_matrix.py`，8/8无Skip；SQLite 3.50.4（新库/升级）、MySQL 5.7.44和PostgreSQL 16.15（各新库/升级/独立日志库），每场景真实 InitDB/InitLogDB 两次、schema稳定/唯一约束/旧用户任务配置保留。升级库是素材加入前的代表性数据，不是确切发行版全量升级认证。详细命令与结果见 `/tmp/julong-media-verify-20261015/REPORT.md`、`matrix.log`。
+- 初次service运行因缺DSN有2项Skip；随后带真实测试DSN运行 `go test ./service -run TestMediaAssetSchemaCompatibility -count=1 -v` 两项通过无Skip（`/tmp/julong-media-schema-real-20261015.log`）。素材前端 `bun run test src/features/usage-logs/components/__tests__/media-assets.test.tsx` 2/2（`/tmp/julong-media-ui-20261015.log`）。不把Skip计作通过。
+- 浏览器补验发现只有sandbox + media-src self仍使原生输入素材视频停在readyState0：不透明源造成self不匹配。隔离代理仅加allow-same-origin后同一视频解码/播放成功；已在输入素材控制器和生成视频代理同步修正为 `sandbox allow-same-origin; default-src 'none'; media-src 'self'`，不含allow-scripts，真实路由/代理回归先失败后通过。当前仓库补丁的隔离真路由直接素材视频320×180、3秒、readyState4/error=null，点击后paused=false且时间增长；图片及嵌入视频/音频正常。详细浏览器证据在 `/tmp/julong-media-browser-20261015/REPORT.md`（该报告早期“需修复”状态由本段后续结果取代）；Safari与音频原生直链导航未宣称已验。
+- 阶段重启记录（最终CSP/字段修复前）：根Go重新构建，旧PID5915退出，新PID10797监听3000，`/api/status success=true`、版本v1.0.0-julong.1，首页6个资源SHA256与web/dist一致，匿名素材列表401。新日志 `~/.codex/tmp/julong-api-runtime/media-content-server-20261015.log`；公网部署/真实付费上游未验，不代表线上已更新。
+- 素材字段误判已修：独立内存SQLite复现普通image_size/video_quality、豆包sequential_image_generation、xAI参考音频voice_id及素材对象role被宽泛字段识别误当URL。现在按明确媒体字段/别名处理，素材对象仅url继承媒体类型，元数据和文件引用保持，首尾帧/camelCase别名及带type的媒体对象继续支持；5项新增回归先4失败/1通过、修复后5/5。仅service与现有测试，不改变上游用量/计费参数语义或数据库结构。
+- Base64解码前先核算有效编码长度和padding推导的解码大小，按50MiB单文件与128MiB剩余请求预算拒绝，再分配输出；CR/LF不计入预算，保留标准/无padding两种编码。精确小边界、非法/空内容、真实大于单文件上限、剩余总预算和已取消上下文均加入原测试文件；原落盘/到期/失败回滚仍受回归保护。宿主请求体限制继续有效。
+- 最终验证：`go test ./service ./router ./controller -run 'Test(PersistTaskMedia|MediaDataURL|ValidateUserMediaURL|MediaAssetContent|ProxyTaskMedia|SetTaskRouter|InvoiceAPI)' -count=1 -v` 三包通过、无Skip（media-final-tests-20261015.log）；`python3 /tmp/julong-media-verify-20261015/run_matrix_final.py` 再验三库8/8无Skip，matrix-final.log。根Go构建成功，最终PID15826于05:13:29监听3000，状态成功/首页6资源hash一致/匿名素材列表401；已有成品Range206、1024字节MP4、最终CSP正确（未输出私密签名URL）。本轮未跑全量Go测试，不宣称全站验收。
+
 ## 变更日志
+
+### 2026-10-15 模型文档模板（B08，验证结果见 PROJECT_PROGRESS.md）
+
+- 模型管理增加文档模板页签，上传时间/名字/修改/改名/删除，模型编辑端点可选绑定；模型广场详情API调用示例显示绑定文档，保留其他API内容和无模板时的原示例。
+- 复用 `DataTablePage/useDataTable`、共享 `Dialog/ConfirmDialog`、`ErrorState/LoadingState`、`CopyButton`、安全 `Markdown`；新feature组件仅组合业务API/字段，不重复实现通用表格、确认、复制或Markdown渲染。无现成模型文档CRUD业务组件，这是新增组合的能力缺口。
+- MD/.markdown保持原文本；Word仅支持 .docx，转换基本标题/段落/列表/表格/代码；不保留精确原排版、嵌入图片/对象或Word外部链接关系，旧.doc须另存为.docx。客户端与服务端明确格式与限额，不把旧.doc误报成功。
+- 上传原文件1字节至10MiB；Markdown及转换结果最大2MiB、必须UTF-8/非空/不含NUL；WordZIP成员数/总展开16MiB/正文XML8MiB/深度128有限额，不执行宏或下载外链、不写解压文件。模板仅保存标准Markdown并由已有DOMPurify安全渲染，代码高亮/表格/正常换行继承原组件。
+- 新表及Model绑定字段通过SQLite3.50.4/MySQL5.7.44/PostgreSQL16.15真实临时库：宿主新库/代表性模板加入前Model升级/每场景两次InitDB，6/6无Skip，schema/index/旧Model描述端点时间/Option及绑定内容保存；控制器三库CRUD/大于64KiB文本/解析/隐藏模型和私有组过滤通过。没有修改数据库驱动/计费/视频逻辑或线上部署，升级夹具为改前Model快照，不扩大为全部旧发行版本认证。证据 `/tmp/julong-documents-verify-20261015/{matrix.log,controller-matrix.log}`。
+- AGENTS.md固定每次任务完成分批进度与本地Git保存，只推Xujs98/julong-api，推送失败重试一次、二次失败待下一任务。用户授权一并保存历史后，原上游merge暂存提交为f99b63cfc；本次完整交付及后续commit/push另记，不能以该基线宣称全部功能已发布。
+- 模型管理标签固定为同一单行组，顺序为模型、供应商、部署、文档模板；小视口下只在标签组内横向滚动，不让最后一项脱离标签底色。回归测试和实际服务资源重启证据见 PROJECT_PROGRESS.md B08。
 
 | 日期 | 变更 | 更新文件/API/模型 | 验证 |
 | --- | --- | --- | --- |
+| 2026-10-15 | 修复素材gzip Range/HEAD、原生媒体sandbox源匹配、非素材字段误判及解码前Base64单文件/总量限制；补完整API合同和验收证据 | `router/api-router.go`、素材控制器/服务与现有测试、`controller/video_proxy.go`、`controller/task_generic_test.go`、`router/media_asset_router_test.go`、DEVELOPMENT.md、PROJECT_PROGRESS.md | 三包定向回归无Skip、最终三库8/8、素材前端2/2；Chromium图片/嵌入媒体/素材视频直链通过；根Go构建和PID15826最终重启、健康/6资源hash/匿名401/既有视频206通过。未改schema/计费/生成视频生命周期，未上线。 |
+| 2026-10-15 | 将通用视频接口文档适配为本站线上接入文档，补全 Base64 输入素材托管/保留期、face 默认值、成品签名地址与带鉴权地址区别、Python 轮询和流式下载及部署边界 | 根 `全站通用视频接口文档.md`、`视频生成使用指南.md`、PROJECT_PROGRESS.md | 对照当前算力插件、宿主渲染、素材服务/控制器和任务签名 URL 实现，语法/路径/敏感凭证与空白检查；文档不宣称线上部署 |
+| 2026-10-15 | 成品列左侧阴影使用独立渐变，修复 Chromium 折叠表格阴影差异；成品列内滚轮控制横向，其余滚动行为不变 | 共享 DataTableView/DataTablePage、column-pinning、use-horizontal-wheel-scroll、任务日志、CSS、回归测试、PROJECT_PROGRESS.md | 17/17 前端回归、typecheck/目标 lint/format、前端和Go构建通过；Chromium 真实组件验证；PID 5915 重启与6资源 hash验证。Safari 未实测，无API/DB/价格变更。 |
+| 2026-10-15 | 新建按批次记录的项目进度文档，区分实现、验证、本地运行、Git 提交与线上发布；记录当前任务、未闭环事项和接续步骤。在 AGENTS.md 登记绝对路径并要求新对话与上下文恢复先读取；纠正当前上游合并尚未完成 Git 提交的状态。 | PROJECT_PROGRESS.md、AGENTS.md、DEVELOPMENT.md | 核对当前分支/HEAD、MERGE_HEAD、未解决冲突、远端和 /api/status；检查文档入口/章节及 git diff --check。文档变更，无业务代码和数据库变更。 |
+| 2026-10-15 | 修复成品整列表体固定、空内容占位、固定列左缘阴影、任务 ID 溢出和 JSON 高亮换行；允许原生媒体文档同源播放，持久化本地签名密钥且不添加视频过期机制 | usage-logs、共享表格/CodeBlock、`controller/video_proxy.go`、现有回归测试；本地忽略的 `.env` | 前端 16 项测试、定向 Go 测试、typecheck/build 通过；Chrome 模拟数据横滚验证通过；真实视频播放仍受本机 VPN fake-IP 阻塞 |
+| 2026-10-14 | 任务日志新增任务结果弹窗、请求体分区预览及媒体占位符；用户平台信息屏蔽；成品成功/失败按钮；修复算力签名 result_url 与跨域媒体跳转；任务类型按类型着色，结果/参数 JSON 使用格式化语法高亮，成品列固定右侧 | `controller/task.go`、任务 DTO/路由、算力插件 1.0.1、usage-logs 组件与七语言翻译 | 本次定向回归、构建与本地运行验证 |
+| 2026-10-14 | 编写算力 AI 视频生成使用指南，说明渠道配置、JSON/multipart 创建任务、异步状态查询、本地鉴权下载及常见问题。 | `视频生成使用指南.md`、算力 AI 视频适配说明 | 按当前插件实现、渠道预设和 OpenAPI 视频路由逐项核对；`git diff --check`。未使用生产凭证提交真实付费生成请求。 |
+| 2026-10-14 | 修复系统设置“计费与支付 → 分组定价”进入页面时报错：将顶部倍率展示字段纳入 React Hook Form 上下文，并修复其布局容器的无效嵌套结构；分组定价、特殊倍率、模型 Token 规则和保存行为保持不变。 | `web/src/features/system-settings/models/group-ratio-form.tsx`、`group-ratio-visual-editor.tsx`、`group-special-usable-editor.tsx`、分组定价回归测试 | 两个 Vitest 文件 11/11 通过；TypeScript 类型检查、目标 lint/format、前端生产构建通过；重启本地后端 PID `71721`，状态接口、首页及 6 个首页资源返回 200；`git diff --check` 通过。 |
+| 2026-10-14 | 补齐算力视频模型配置汉化：登记动态字段和校验提示，补全七语言翻译；修复计费下拉框首次显示 `inherit`，成本货币显示本地化名称，语言切换同步更新。 | `suanli-video-model-settings.tsx`、现有组件测试、`static-keys.ts`、七语言 locale；复用共享 Select，配置值和 API 不变 | `bun x --no-install vitest run src/features/channels/components/__tests__/suanli-video-model-settings.test.tsx` 7/7 通过；`bun run typecheck`、目标 `oxlint/oxfmt`、`bun run i18n:sync`、`bun run build`、根模块 `go build` 通过。本次 28 个目标键七语言完整。后端已重启，PID `29217` 监听 `3000`，`GET /api/status` 成功，首页 6 个最新资源均返回 200；浏览器重新登录前未访问受保护配置页，中文交互由真实语言包组件测试验证。 |
+| 2026-10-14 | 适配算力 AI 统一视频网关：新增 `suanliai-video` 任务插件、New API 渠道“算力 AI”预设、逐模型能力与限制配置、统一视频三段式协议、异步状态轮询、本地视频内容代理、请求体审计和视频任务日志；渠道按秒/按任务售价接入现有任务 usage 计费表达式，保留原代理、特殊倍率、收益审计、风控、邮件、发票、账本、异步生图、日志导出与权限功能。 | `plugins/tasks/suanliai-video/plugin.js`、`relaykit/dto/video_model_config.go`、`relay/channel/task/jsplugin/adaptor.go`、`relay/relay_task.go`、`middleware/task_plugin.go`、`model/task_model_alias.go`、`model/channel_constraint.go`、创建渠道配置组件、任务日志和请求体查看 API | 算力文档字段/路径核对；`GOWORK=off go test ./...`（relaykit）；根模块算力/任务插件定向测试；前端算力配置与渠道测试 24/24；typecheck/build 与本地健康检查待本次交付收尾完成。真实付费视频未使用生产 Key 验证。 |
+| 2026-10-14 | 自助发票新增普通/专用票、粘贴识别、公司名称/税号/备注、默认绑定且可编辑的接收邮箱，以及 1-3 张支付截图；计费设置新增兑换卡密、在线支付、管理员增加的可申请来源选择，列表与后台提交共同拦截禁用来源。保存接收邮箱不修改账户绑定邮箱，原发票审核、邮件交付、取消、撤回保持兼容。 | `invoice_setting.allowed_sources`、`InvoiceApplication` 新字段、`InvoicePaymentProof`、`POST /api/user/invoice/apply` multipart、私有截图 GET、开票表单/解析/预览、来源设置、七语言 locale | 发票申请与截图/来源回归、真实三数据库新建与旧库升级/二次迁移、前端测试/typecheck/lint/build、i18n 同步、后端重启与健康验证；具体结果见本次验证记录。 |
+| 2026-10-14 | 修复 API 密钥较多时底部条目被裁切、列表无法滚动：端点区与列表改用受约束的纵向 flex 布局，地址区不收缩，表格仅占剩余高度，继续复用共享 DataTablePage 的滚动区和固定页脚分页。 | `web/src/features/keys/index.tsx`、`custom-endpoints.tsx`、`api-key-listing.test.tsx`；API、权限和数据模型不变 | 桌面/移动端完整页面滚动布局回归、前端 typecheck、目标 lint/format、生产构建、后端重启及状态/资源验证。 |
 | 2026-09-10 | 修复管理员编辑用户时的 `unsupported data`：普通用户资料保存不再默认提交绑定信息；用户编辑抽屉的绑定信息改为只读，只有打开“启用绑定信息编辑”开关后才会提交绑定修改，创建用户仍可直接填写绑定信息。 | `users-mutate-drawer.tsx`、`user-form.ts`、`PUT /api/user/`、七语言 locale | 绑定字段提交/省略回归测试、前端 typecheck、目标文件格式与 lint、i18n 同步、`git diff --check`。 |
 | 2026-09-08 | 用户新增/更新抽屉新增内置绑定信息编辑，管理员/root 可设置、修改或清除邮箱及六类第三方账号绑定；修复自助发票“用户申请列表”操作按钮点击后管理弹窗未渲染的问题。 | `UserBindingUpdates`、`POST/PUT /api/user/`、`users-mutate-drawer.tsx`、`invoices/index.tsx`、`manage-invoice-dialog.tsx` | 绑定长度/唯一性及 Telegram 身份占用事务测试；前端 typecheck、目标 lint、生产构建；真实浏览器验证弹窗打开、取消关闭、再次打开。 |
 | 2026-09-08 | 控制台新增“自助发票”：所有用户可查看在线充值、兑换码和管理员增加形成的可申请记录，多选累计达到可配置门槛后提交；申请金额、单位和邮箱留存快照，来源明细唯一占用并从可申请列表移除。管理员/root 同页查看全用户申请并流转待处理、处理中、已完成、已驳回状态；计费设置新增功能开关、最低金额、单位和预计工作日，关闭时用户页展示内测提示。 | `InvoiceApplication`、`InvoiceItem`、`invoice_setting.*`、`controller/invoice.go`、`/api/user/invoice*`、`web/src/features/invoices/*`、`/invoices`、`/system-settings/billing/invoice`、侧边栏与七语言 locale | Model 来源过滤、门槛、金额快照、唯一占用、申请后移除、管理员列表和状态流转测试；Controller 备注长度、Router/Authz 测试、前端门槛选择/关闭提示测试、typecheck/lint/build、i18n 同步、后端重启及接口验证。 |
@@ -1413,6 +1583,8 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 | 2026-07-25 | 后台用户详情新增“上下文与提示词”审计。管理员/root 可按用户开启，仅记录开启后的 Relay DTO；请求发送上游前创建 `pending`，完成后标记 `success/error`，支持结构化对话、脱敏 JSON 查看/复制/下载和二次确认清空。每用户事务保留最近 50 条，单条脱敏正文严格限制 4 MiB 并 gzip 存主库；已知凭据和内嵌 Base64 媒体不入库。新增用户字段、记录表、Redis cache schema 3 和硬删除级联清理，不接触计费及上游请求。 | `User.request_content_logging_enabled`、`UserRequestContentLog`、`service.CaptureUserRequestContent/FinishUserRequestContent`、`GET/PUT/DELETE /api/user/:id/request-content`、`GET /api/user/:id/request-content/:log_id`、`UserRequestContentPanel`、`extractRequestConversation`、locale files、`DEVELOPMENT.md` | `go test ./...`、`go test ./model ./service ./controller ./middleware`、`bun run typecheck`、Bun 前端单元测试、目标文件 `oxlint/oxfmt`、`bun run i18n:sync`、`bun run format:check`、`bun run build`、`git diff --check` 均通过；本地 SQLite AutoMigrate 表/字段及 `3000/5173` HTTP 200 已验证。 |
 | 2026-07-25 | 使用日志新增持久化的用户展示倍率快照。每条新日志在写入时按 `system/pricing_group/manual` 保存 `user_display_group_ratio`，后续修改展示配置只影响新日志，历史日志不再被重新计算；旧日志回退到自身保存的真实倍率。普通用户单条日志响应中的费用、输入/输出 Tokens 和缓存 Tokens 按“展示倍率 / 真实倍率”换算；日志页顶部“用量”保持真实扣费、RPM 保持真实请求数，TPM 按最近 60 秒各日志快照换算。普通用户数据看板的额度、Token、TPM 和消费/分流图表读取新增的展示聚合列，调用次数/RPM 保持真实；管理员/root 的日志和看板保留真实数据。所有展示字段均在计费完成后写入，未接入预扣费、结算、退款、余额或订阅链路，数据库原 `quota/token` 和真实倍率字段保持不变。 | `Log.UserDisplayGroupRatio`、`QuotaData.{UserDisplayQuota,UserDisplayTokenUsed}`、`model.{createLog,snapshotUserDisplayGroupRatio,applyUserLogDisplayMetrics,userVisibleLogDataMetrics,formatUserLogs,SumUserVisibleUsedQuota,formatAdminLogGroupRatioDisplay,GetQuotaDataByUserId,getSelfFlowQuotaData}`、`controller.GetLogsSelfStat`、`migrateLOGDB`、ClickHouse `logs.user_display_group_ratio`、usage logs schema/columns/tests、locale files、`DEVELOPMENT.md` | `go test ./...`、`go test ./model`、`go test ./controller`、`bun run typecheck`、目标文件 oxlint、倍率前端单元测试、`bun run build`、`bun run i18n:sync`、`bun run format:check`、`git diff --check` 均通过。 |
 | 2026-07-25 | 新增倍率展示控制：日志维护可完全隐藏普通用户日志倍率、跟随真实倍率、跟随计费分组基础倍率或统一手动展示；管理员日志同时显示请求真实倍率和当前用户展示倍率。分组定价新增模型广场和令牌分组两个独立展示模式，均可选择包含特殊倍率规则的真实倍率，或始终使用基础定价分组倍率。初版在读取日志时实时转换展示倍率，不影响实际扣费。 | `UserLogGroupRatioDisplayEnabled`、`UserLogGroupRatioDisplayMode`、`UserLogGroupRatioManualValue`、`ModelSquareGroupRatioDisplayMode`、`TokenGroupRatioDisplayMode`、`controller.{GetPricing,GetUserGroups}`、`model.{formatUserLogs,formatAdminLogGroupRatioDisplay}`、`GroupRatioForm`、`LogSettingsSection`、`usage-logs/lib/group-ratio.ts`、locale files、`DEVELOPMENT.md` | `go test ./...`、`bun run typecheck`、目标文件 oxlint、`bun run build`、`bun run i18n:sync`、`bun run format:check`、倍率前端单元测试、`git diff --check` 均通过。 |
+| 2026-10-15 | 模型广场模型卡片补充视频类型标识和任务价格矩阵；视频模型隐藏“视频生成单价”等内部字段描述，按秒直接显示 `/ 秒`、按次直接显示 `/ 次`；两项都配置则在模型名下方和每个分辨率价格区同时展示，两项只有一项配置则只显示该项。分辨率/条件和实际时长等计费依据仍保留。时间动态定价和自定义表达式继续使用原摘要展示，价格换算和扣费行为不变。 | `pricing/components/model-card.tsx`、`pricing/__tests__/task-price-display.test.tsx`、`i18n/locales/*.json`、`DEVELOPMENT.md` | 三个相关 Vitest 文件 90/90 通过；typecheck、目标 oxlint/oxfmt、前端 build、根模块 go build、`git diff --check` 通过。本地后端已重启（PID `96689`），`/api/status` 成功，首页 6 个资源与最新构建一致，重启前后 `/api/pricing` 的模型配置一致。 |
+| 2026-10-15 | 视频任务插件接入输入素材托管：请求体内的 Base64 图片、视频、音频写入本机持久化目录并替换为可供上游读取的公网 URL；公网素材只记录原 URL，不下载或代删。任务日志新增素材页，普通用户只看本人、管理员可看全站并手动删除；Base64 素材默认 1 天后由系统任务清理，保留期可在运维日志维护中设置。 | `MediaAsset`、`service/media_asset.go`、`controller/media_asset.go`、`GET/DELETE /api/media-assets*`、`media_asset_cleanup`、`MediaAssetRetentionDays`、`MEDIA_ASSET_STORAGE_DIR`、`TaskPublicAddress`、`usage-logs/assets`、`media-assets-table.tsx`、`DEVELOPMENT.md`、视频接口文档 | 素材保存/替换/失败回滚/过期清理及 SQLite、MySQL、PostgreSQL schema 测试；前端素材页 Vitest、typecheck、目标 lint；`git diff --check`；本机后端重启与 `/api/status`、素材接口验证。 |
 | 2026-07-25 | 合并上游 `QuantumNous/new-api@84a79b68`。默认前端从 `web/default` 迁移为单一 `web/`，删除 Classic；接入新的 Dashboard access/refresh token 与 `UserSession`/`AuthFlow`/`ExternalIdentityClaim` 架构、模型未定价视图、用户排序/额度溢出保护、渠道模型发现以及计费、缓存写入、图片流和任务退款修复。Julong 的代理、兑换码退款、订阅抵扣、IP 管理、错误工单、客服/公告/自定义端点、系统设置权限、生图日志/轮询/白名单/MinIO 和品牌资源全部迁移保留；修复禁用用户未撤销活跃会话、新认证测试未迁移 `BlockedIP` 的合并回归，并将后端开发命令更新为可包含全部主包文件的 `go run .`。 | `upstream/main@84a79b68`、`controller/{user,model_list_test,auth_session_test,theme_compat_test}.go`、`middleware/{auth,auth_test}.go`、`model/{user,user_session,auth_flow,external_identity_claim,blocked_ip}.go`、`relay/channel/openai/relay_image.go`、`router/api-router.go`、`web/`、`README.md`、`electron/README.md`、`DEVELOPMENT.md` | `go test ./...`、`bun run typecheck`、`bun run i18n:sync`、`bun run format:check`、`bun run build`、Julong 差异文件 oxlint（0 错误、1 个已知 `react/no-danger` 警告）、`git diff --check` 均通过；全量 `bun run lint` 仍有上游基线 364 错误/73 警告，已列入已知问题。 |
 | 2026-07-20 | 日志维护的 MinIO 生图存储增加“清空全部 MinIO 图片”：二次确认框展示实际 Bucket/对象前缀，确认按钮强制等待 10 秒；后端通过 `delete_all` 任务 payload 复用 `image_storage_cleanup` 锁，只删除当前配置前缀下的全部非目录对象，与过期清理互斥，Bucket 其他对象不受影响。无数据库字段或迁移。 | `service.DeleteAllGeneratedImageObjects`、`imageObjectStorageScanMode`、`controller.StartImageObjectStoragePurge`、`POST /api/performance/image-storage/purge`、`imageStorageCleanupHandler`、`ImageStorageSettings`、locale files、`生图轮询接口说明.md` | `go test ./...`、`go test ./service ./controller ./router`、`bun run typecheck`、目标 `oxfmt/oxlint`、`bun run build`、`bun run i18n:sync`、`git diff --check` |
 | 2026-07-19 | 为 MinIO 生图对象增加可配置生命周期与每日自动清理：默认 30 天、`0` 永久保留，按对象 `LastModified` 删除当前 Bucket 前缀下的过期图片；复用系统任务数据库租约实现每日及手动清理互斥。日志维护页新增保留天数、对象数、占用空间、过期数量、最近清理时间、统计刷新和立即清理确认。 | `ImageGenerationStorageRetentionDays`、`ImageGenerationStorageLastCleanupAt`、`image_storage_cleanup`、`service/image_object_storage.go`、`controller/image_object_storage.go`、`GET /api/performance/image-storage/stats`、`POST /api/performance/image-storage/cleanup`、`ImageStorageSettings`、locale files、`生图轮询接口说明.md` | `go test ./...`、`bun run typecheck`、目标 `oxfmt/oxlint`、`bun run build`、`bun run i18n:sync`、`git diff --check` |

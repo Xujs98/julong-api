@@ -2,6 +2,22 @@
 
 DO NOT send optional commentary
 
+## Project Progress (mandatory read at the start of every conversation)
+
+- Project progress file: `/Users/xujs/.docker_dir/new-api/PROJECT_PROGRESS.md` (repository-relative: `PROJECT_PROGRESS.md`).
+- Before planning, implementing, reviewing, or answering project status in a new conversation or after context recovery, read its current-state snapshot, latest active batch, unfinished work, and relevant validation records. Then consult `DEVELOPMENT.md` and applicable subsystem instructions; the progress file does not replace those rules.
+- Continue unfinished work from the handoff instead of historical chat claims. Reconcile the snapshot with current code, git status, merge state, and tool output; preserve existing local changes.
+- Update the file at each batch start, meaningful milestone/blocker, and final handoff. Record exact verified outcomes and next steps; distinguish implementation, tests, local restart, Git commit/push, and production deployment. Skipped or unrun checks are not passes.
+- Keep batch history and reopen batches for regressions instead of silently overwriting earlier results. Never write credentials, secrets, private data, or large Base64 payloads into this document.
+
+## Task Completion, Local Commits, and GitHub Push (mandatory)
+
+- After each task, append its batch outcome to `PROJECT_PROGRESS.md` and synchronize `DEVELOPMENT.md` in the same change. Record completed work, exact validation, outstanding issues, restart results, and Git delivery status; never erase prior batches.
+- Save completed, verified task changes in the local Git repository, then push to the user's repository `https://github.com/Xujs98/julong-api.git` through the verified `origin` remote. Never push Julong changes to `QuantumNous/new-api` or `upstream`, and never force-push without explicit user authorization.
+- Review the commit scope and protect pre-existing staged/unstaged/untracked work. An unfinished merge or unrelated historical work must not be discarded or silently included; resolve the authorized scope first and record any delivery blocker honestly.
+- If a push fails, retry once (two attempts total). If the retry also fails, record the local commit, destination branch, concise non-secret failure reason, and pending-push status in `PROJECT_PROGRESS.md`; retry that pending push during the next task instead of looping indefinitely.
+- A successful local build/restart is not a successful Git push or production deployment. Final handoffs must report those states separately and must not claim completion of an unperformed delivery step.
+
 ## Overview
 
 This is an AI API gateway/proxy built with Go. It aggregates 40+ upstream AI providers (OpenAI, Claude, Gemini, Azure, AWS Bedrock, etc.) behind a unified API, with user management, billing, rate limiting, and an admin dashboard.
