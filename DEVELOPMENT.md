@@ -997,6 +997,7 @@ curl -X DELETE \
 | `/api/task/:task_id/detail` | `GET` → `GetDashboardTaskDetail` | 登录用户仅本人；管理员可查全站 | 路径参数 `task_id`；返回 `{success,data}`，data 包含本地 task_id/id、status/progress、模型、时间、duration/seconds、delivery_status、失败原因及可用时本地签名 result_url；非管理员不返回 platform；只读已保存的最新轮询状态，不创建视频或触发付费请求；响应禁止缓存 | 完成 |
 | `/api/task/:task_id/request` | `GET` → `GetDashboardTaskRequest` | 登录用户仅本人；管理员可查全站 | 路径参数 `task_id`；返回 `{success,data:{task_id,request_body,truncated}}`；凭据脱敏、图片/音频/视频 URL 和上传文件引用显示 `[MEDIA]`；历史未留存请求体返回 null | 完成 |
 | `/v1/tasks/:key` | `GET` → `GetTask` | 沿用任务鉴权及归属校验 | 普通用户结果不再包含 platform，其他任务状态字段保持不变 | 完成 |
+| `/v1/tasks/:key/artifacts/:artifact_key/content` | `GET/HEAD` → `TaskArtifactContent` | 任务日志成品读取/视频下载 | 高熵 access capability；视频下载可附加 download=video，服务端仅对已确认视频覆盖随机 .mp4 Content-Disposition；Range/HEAD 原始媒体响应保持 | 登录用户本人、管理员或有效 capability |
 
 ### Relay 兼容 API
 
@@ -1109,7 +1110,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 | POST | `/v1/images/edits` | `RelayTaskPluginEndpoint` | 插件/原生图片编辑 | JSON/multipart 图像编辑请求 | OpenAI Images 格式 | API Key，模型/插件分发 |
 | POST | `/v1/videos`、`/v1/video/generations` | `RelayTaskPluginEndpoint` → `RelayTask` | 视频提交 | 模型、prompt、duration/seconds、图像/视频素材 | 视频任务 ID/状态 | API Key；插件模型/时长校验和预扣 |
 | GET | `/v1/videos/:task_id`、`/v1/video/generations/:task_id` | `RelayTaskFetch` | 视频轮询 | `task_id` | 视频状态及结果 | API Key、任务所有权 |
-| GET/HEAD | `/v1/videos/:task_id/content` | `VideoProxy` | 视频成果读取 | `task_id` | 视频/成果代理响应 | API Key 或 Dashboard 用户，保留所有权检查 |
+| GET/HEAD | `/v1/videos/:task_id/content` | `VideoProxy` | 视频成果读取/下载 | `task_id`；可选 `download=video` | 视频/成果代理响应；视频下载时使用随机 .mp4 文件名 | API Key 或 Dashboard 用户，保留所有权检查 |
 
 `/suno`、`/kling/v1`、`/jimeng` 等供应商专用路由由启用的内置插件元数据动态注册，替代旧固定 Go 路由。平台任务统一保存、轮询和结算；工厂插件覆盖版本由 root 管理。旧 `/api/user/token` 单令牌生成入口由新多 PAT 管理取代，已有旧 PAT 在迁移日起保留 30 天过渡，期限存入 `LegacyAccessTokenRetireAt`，新 PAT 仅存哈希。旧 CSV 地址没有改为 NDJSON。
 
@@ -1498,7 +1499,8 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 
 - `UsageLogsTable` 自定义行必须使用共享表格的 `helpers.getCellClassName`，让成品表头及每行单元格都保持右侧 sticky、不透明背景；待处理或无成品时显示「暂无内容」。共享固定列最新阴影采用独立 `::before` 渐变和主题边界线，固定单元格允许阴影外绘，避免 Chromium/Safari 折叠表格本体 box-shadow 裁剪差异；内部静态文字仍截断，明暗主题分别使用 .18/.5 黑色渐变。
 - 长任务 ID 限宽并单行省略，悬停显示完整 ID，复制按钮不挤出单元格。继续复用共享 `CodeBlock`，补齐 JSON 解析器，结果和请求参数支持语法着色、格式化和长链接自动换行；新增「打开成品链接」入口。
-- 现有 `GET/HEAD /v1/tasks/:key/artifacts/:artifact_key/content`（`controller.TaskArtifactContent`）及视频代理响应的 CSP 允许 `media-src 'self'`，用于浏览器直接打开媒体及 Range 播放；继续 sandbox、禁用脚本与嗅探。路由、请求参数、权限和视频响应契约不变。
+- 现有 `GET/HEAD /v1/tasks/:key/artifacts/:artifact_key/content`（`controller.TaskArtifactContent`）及视频代理响应的 CSP 允许 `media-src 'self'`，用于浏览器直接打开媒体及 Range 播放；继续 sandbox、禁用脚本与嗅探。路由、权限和视频响应契约不变；仅新增可选的下载标记。
+- 任务日志视频卡片的下载链接仅为视频请求附加 download=video 标记；签名 access 仍由既有鉴权中间件校验并从内部请求查询中剥离。视频代理在该标记且已确认媒体类型为视频时覆盖上游 Content-Disposition，使用每次卡片随机生成的 .mp4 文件名；播放、图片/音频/文件下载、媒体字节、Range、HEAD 和权限不变。
 - 成品 capability 没有时间到期字段；本轮未增加任何视频过期或清理逻辑。本地 `.env` 持久化随机 `SESSION_SECRET`/`CRYPTO_SECRET`（0600、Git 忽略、不记录值），避免以后重启因随机签名密钥变化使链接失效；此前密钥生成的旧链接需重新打开任务结果获取。配置变更遵循 OWASP Authentication / Session Management Cheat Sheets 的随机性及秘密保护指导，不声明全站 ASVS 合规。
 - 验证：三个前端测试文件 16 项通过，目标 Go 媒体代理测试通过，typecheck、前端构建通过。Chrome 使用模拟 API 数据加载真实构建页面，横滚前后成品列右边界均为 1255px，成功、失败及空内容均可见；JSON 实际呈现多种 token 颜色。真实任务读接口可获取签名正确的链接，但本机 VPN 将 `suanliai.top` 解析为 `198.18.0.8`，触发 SSRF 防护；待切换真实 DNS 后验证播放，不通过关闭安全检查掩盖该环境问题。
 
@@ -1536,6 +1538,12 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 - 最终验证：`go test ./service ./router ./controller -run 'Test(PersistTaskMedia|MediaDataURL|ValidateUserMediaURL|MediaAssetContent|ProxyTaskMedia|SetTaskRouter|InvoiceAPI)' -count=1 -v` 三包通过、无Skip（media-final-tests-20261015.log）；`python3 /tmp/julong-media-verify-20261015/run_matrix_final.py` 再验三库8/8无Skip，matrix-final.log。根Go构建成功，最终PID15826于05:13:29监听3000，状态成功/首页6资源hash一致/匿名素材列表401；已有成品Range206、1024字节MP4、最终CSP正确（未输出私密签名URL）。本轮未跑全量Go测试，不宣称全站验收。
 
 ## 变更日志
+
+### 2026-10-15 任务日志视频下载文件名（B10）
+
+- 任务日志“查看视频”弹窗的下载按钮不再使用 artifact key 作为文件名：前端为视频卡片生成生命周期内稳定的随机文件名并固定 .mp4 后缀，同时在下载链接上增加受既有签名 URL 保护的 download=video 标记。图片、音频和普通文件仍使用原有下载行为。
+- controller.TaskArtifactContent 只在已确认 artifact 类型为 video 时允许该标记触发下载响应；controller.VideoProxy 的视频路径保留同样能力。代理继续流式转发原始字节，保留 Range/HEAD/CSP/鉴权；仅在下载上下文覆盖上游 Content-Disposition，避免上游文件名覆盖随机 .mp4 文件名。不存在下载标记时仍按播放响应处理。
+- 回归：视频任务组件下载属性 8/8；控制器随机 MP4 Content-Disposition、Range 与 data URL GET/HEAD 定向测试通过；未修改数据库、计费或视频内容生命周期。
 
 ### 2026-10-15 模型文档模板（B08，验证结果见 PROJECT_PROGRESS.md）
 

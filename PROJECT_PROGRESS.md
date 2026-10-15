@@ -4,7 +4,7 @@
 > 详细 API、路由、配置和数据模型以 [DEVELOPMENT.md](./DEVELOPMENT.md) 为技术登记入口。
 > 代码与实际命令输出优先于旧文档、历史回复和截图；“代码已写”“本地可用”“已提交”“已上线”必须分开。
 
-最后更新：2026-10-15 10:31:46（Asia/Shanghai）
+最后更新：2026-10-15 17:10:00（Asia/Shanghai）
 项目根目录：`/Users/xujs/.docker_dir/new-api`
 
 ## 1. 新对话接续入口（必须先读）
@@ -218,6 +218,14 @@ B08：MD/DOCX 后端、管理 UI、模型绑定与广场调用文档已实现。
 ### 文档模板标签显示与 Git 交付接续 — 2026-10-15 08:30（Asia/Shanghai）
 
 用户截图指出文档模板没有与“模型/供应商/部署”呈现为同组标签。源码此前已注册该段，但标签允许换行、顺序夹在供应商与部署之间；运行服务亦早于当前 `web/dist`。现顺序调整为模型→供应商→部署→文档模板，标签栏单行并在窄屏内部横向滚动。新加section顺序测试；模板管理/选择器/顺序共14/14，`tsgo -b`、目标lint/format通过，Rsbuild构建和根Go构建成功。本地PID49923监听3000，`/api/status success=true`，返回最新bundle哈希。未取得管理员登录态，未声明已登录交互点测。Git分批提交：`298b2cf33`、`dfb2b1425`、`734a26746`；push至origin分支尝试2次均因网络无法连接github.com:443失败，已按规则留待下一任务；未推upstream。
+
+### B10：任务日志视频下载文件名改进（2026-10-15，已完成本地验证并交付）
+
+- 用户目标：任务日志“查看视频”弹窗的下载按钮使用随机文件名，下载格式固定为 .mp4。
+- 实现：视频成品卡片在自身生命周期内生成随机文件名并固定 .mp4 后缀，下载 URL 增加 download=video 标记；后端只在已确认视频类型且标记有效时覆盖上游 Content-Disposition，避免供应商文件名覆盖随机名称。图片、音频和普通文件下载行为保持不变；媒体字节、播放、Range、HEAD、鉴权、数据库和计费不变。
+- 验证：视频任务组件定向测试 8/8，任务日志相关两文件 15/15；控制器媒体代理/随机 MP4 Content-Disposition/Range/data URL GET-HEAD 定向测试通过；typecheck、目标 oxlint、oxfmt、git diff --check、前端生产构建、根 Go 构建均通过。
+- 本地运行：重建并启动新 Go 二进制，PID 54247 监听 3000；GET /api/status 返回 success=true、版本 v1.0.0-julong.1。未修改用户数据，未生产部署。
+- Git：本批提交并推送至 origin/main 的结果在本批末尾补记；既有 controller/media_asset.go.bak、web/pnpm-lock.yaml、web/src/features/usage-logs/components/media-assets-table.tsx.bak 未跟踪文件排除。
 
 ### B09：素材管理 UI、筛选与重新构建（2026-10-15，本地已激活，功能已推送）
 

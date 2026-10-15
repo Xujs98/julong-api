@@ -102,6 +102,28 @@ function artifactTypeLabel(type: TaskArtifactType): string {
   }
 }
 
+function randomVideoDownloadFilename(): string {
+  const randomUUID = globalThis.crypto?.randomUUID?.()
+  if (randomUUID) return [randomUUID, '.mp4'].join('')
+
+  const randomValues = new Uint32Array(4)
+  globalThis.crypto?.getRandomValues?.(randomValues)
+  const randomPart = Array.from(randomValues, (value) =>
+    value.toString(16).padStart(8, '0')
+  ).join('')
+  return [
+    randomPart ||
+      [Date.now().toString(36), Math.random().toString(36).slice(2)].join('-'),
+    '.mp4',
+  ].join('')
+}
+
+function videoDownloadUrl(contentUrl: string): string {
+  const url = new URL(contentUrl)
+  url.searchParams.set('download', 'video')
+  return url.toString()
+}
+
 // Task lists no longer carry the persisted snapshot, so the legacy Suno clip
 // list is fetched through the artifacts endpoint when the preview opens.
 function LegacyAudioPreview(props: { taskId: string }) {
@@ -217,6 +239,7 @@ function TaskArtifactCard(props: {
   const { t } = useTranslation()
   const [mediaFailed, setMediaFailed] = useState(false)
   const [mediaRevision, setMediaRevision] = useState(0)
+  const [videoDownloadFilename] = useState(randomVideoDownloadFilename)
   const icon = artifactIcon(props.artifact.type)
   const isVisualArtifact =
     props.artifact.type === 'image' || props.artifact.type === 'video'
@@ -287,8 +310,16 @@ function TaskArtifactCard(props: {
           nativeButton={false}
           render={
             <a
-              href={props.artifact.content_url}
-              download={props.artifact.key}
+              href={
+                props.artifact.type === 'video'
+                  ? videoDownloadUrl(props.artifact.content_url)
+                  : props.artifact.content_url
+              }
+              download={
+                props.artifact.type === 'video'
+                  ? videoDownloadFilename
+                  : props.artifact.key
+              }
               target='_blank'
               rel='noopener noreferrer'
             />

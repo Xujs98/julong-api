@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
@@ -571,6 +572,30 @@ func TestProxyTaskMediaPassesThroughUnsatisfiedRange(t *testing.T) {
 	assert.Equal(t, http.StatusRequestedRangeNotSatisfiable, recorder.Code)
 	assert.Equal(t, "bytes */10", recorder.Header().Get("Content-Range"))
 	assert.Equal(t, "private, no-store", recorder.Header().Get("Cache-Control"))
+}
+
+func TestProxyTaskMediaUsesRandomMP4DispositionForDownloads(t *testing.T) {
+	task := setupGenericTaskTest(t)
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "video/mp4")
+		w.Header().Set("Content-Disposition", "attachment; filename=\"provider-name.mp4\"")
+		_, _ = w.Write([]byte("video"))
+	}))
+	defer upstream.Close()
+
+	allowPrivateTaskMediaTest(t)
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodGet, "/content?download=video", nil)
+	c.Set(taskMediaDownloadContextKey, true)
+
+	require.NoError(t, proxyTaskMedia(c, task, &relaychannel.TaskContentRequest{
+		URL: upstream.URL, Method: http.MethodGet,
+	}))
+	assert.Equal(t, http.StatusOK, recorder.Code)
+	assert.Equal(t, "video", recorder.Body.String())
+	assert.Regexp(t, regexp.MustCompile("^attachment; filename=\\\"[0-9a-f]{32}\\.mp4\\\"$"), recorder.Header().Get("Content-Disposition"))
 }
 
 func TestTaskMediaResponseHeaderTimeoutDoesNotTruncateBody(t *testing.T) {

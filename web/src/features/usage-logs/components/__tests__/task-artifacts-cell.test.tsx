@@ -100,6 +100,38 @@ test('successful video tasks offer a view video button', () => {
   expect(screen.getByRole('button', { name: 'View video' })).toBeVisible()
 })
 
+test('video downloads use a random mp4 filename and download route', async () => {
+  vi.spyOn(api, 'get').mockResolvedValue({
+    data: {
+      success: true,
+      data: {
+        task_id: 'task-public',
+        artifacts: [
+          {
+            key: 'video-main',
+            type: 'video',
+            mime_type: 'video/mp4',
+            content_url: [
+              'https://gateway.example/v1/tasks/task-public/artifacts/video-main/content?access=',
+              'a'.repeat(43),
+            ].join(''),
+          },
+        ],
+      },
+    },
+  })
+
+  renderCell(taskLog({ action: 'text_to_video' }))
+  fireEvent.click(screen.getByRole('button', { name: 'View video' }))
+
+  await screen.findByText('video/mp4')
+  const download = screen.getByRole('button', { name: 'Download' })
+  expect(download).toHaveAttribute('download')
+  expect(download.getAttribute('download')).toMatch(/^[A-Za-z0-9-]+\.mp4$/)
+  expect(download.getAttribute('href')).toContain('download=video')
+  expect(download.getAttribute('href')).toContain('access=')
+})
+
 test('failed tasks show a red failure button that opens the reason', async () => {
   renderCell(
     taskLog({ status: 'FAILURE', fail_reason: 'Unsupported reference image' })

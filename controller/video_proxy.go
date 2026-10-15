@@ -3,7 +3,9 @@ package controller
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -30,6 +32,8 @@ var errTaskMediaRequestRejected = errors.New("task media request rejected")
 
 var taskMediaResponseHeaderTimeout = 60 * time.Second
 var taskMediaDataURLMaxEncodedBytes = 64 << 20
+
+const taskMediaDownloadContextKey = "task_media_download"
 
 type taskMediaProxyError struct {
 	status  int
@@ -61,6 +65,7 @@ func videoProxyError(c *gin.Context, status int, errType, message string) {
 }
 
 func VideoProxy(c *gin.Context) {
+	c.Set(taskMediaDownloadContextKey, true)
 	taskID := c.Param("task_id")
 	if taskID == "" {
 		videoProxyError(c, http.StatusBadRequest, "invalid_request_error", "task_id is required")
@@ -284,6 +289,9 @@ func proxyTaskMedia(c *gin.Context, task *model.Task, descriptor *relaychannel.T
 	switch resp.StatusCode {
 	case http.StatusOK, http.StatusPartialContent, http.StatusNotModified, http.StatusRequestedRangeNotSatisfiable:
 		copyTaskMediaResponseHeaders(c.Writer.Header(), resp.Header)
+		if taskMediaDownloadRequested(c) {
+			setTaskMediaDownloadHeader(c.Writer.Header())
+		}
 		setTaskMediaResponseSecurityHeaders(c.Writer.Header())
 		c.Status(resp.StatusCode)
 		c.Writer.WriteHeaderNow()
@@ -319,6 +327,13 @@ func proxyTaskMedia(c *gin.Context, task *model.Task, descriptor *relaychannel.T
 			message: fmt.Sprintf("Artifact upstream returned status %d", resp.StatusCode),
 		}
 	}
+}
+
+func taskMediaDownloadRequested(c *gin.Context) bool {
+	if c == nil || c.Query("download") != "video" {
+		return false
+	}
+	return c.GetBool(taskMediaDownloadContextKey)
 }
 
 type taskMediaHTTPResult struct {
@@ -541,6 +556,14 @@ func copyTaskMediaResponseHeaders(destination, source http.Header) {
 	}
 }
 
+func setTaskMediaDownloadHeader(header http.Header) {
+	filenameBytes := make([]byte, 16)
+	if _, err := rand.Read(filenameBytes); err != nil {
+		filenameBytes = []byte(fmt.Sprintf("%x", time.Now().UnixNano()))
+	}
+	header.Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s.mp4\"", hex.EncodeToString(filenameBytes)))
+}
+
 func setTaskMediaResponseSecurityHeaders(header http.Header) {
 	header.Set("Cache-Control", "private, no-store")
 	// Native browser media documents load the same URL again for playback/Range.
@@ -606,6 +629,9 @@ func writeVideoDataURL(c *gin.Context, dataURL string) error {
 
 	c.Writer.Header().Set("Content-Type", mimeType)
 	c.Writer.Header().Set("Content-Length", strconv.FormatInt(contentLength, 10))
+	if taskMediaDownloadRequested(c) {
+		setTaskMediaDownloadHeader(c.Writer.Header())
+	}
 	setTaskMediaResponseSecurityHeaders(c.Writer.Header())
 	c.Writer.WriteHeader(http.StatusOK)
 	if c.Request.Method == http.MethodHead {
