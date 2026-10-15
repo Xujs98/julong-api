@@ -85,7 +85,11 @@ func validateSiteLogo(data []byte) (string, error) {
 }
 
 func persistSiteLogo(data []byte, ext string) (string, error) {
-	dir := siteAssetStorageDir()
+	return persistSiteImage(data, ext, siteAssetStorageDir(), "logo-")
+}
+
+// persistSiteImage atomically stores a validated image with a random filename.
+func persistSiteImage(data []byte, ext, dir, prefix string) (string, error) {
 	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return "", err
 	}
@@ -94,8 +98,8 @@ func persistSiteLogo(data []byte, ext string) (string, error) {
 	if _, err := rand.Read(random); err != nil {
 		return "", err
 	}
-	filename := "logo-" + hex.EncodeToString(random) + "." + ext
-	temporary, err := os.CreateTemp(dir, "logo-upload-*")
+	filename := prefix + hex.EncodeToString(random) + "." + ext
+	temporary, err := os.CreateTemp(dir, prefix+"upload-*")
 	if err != nil {
 		return "", err
 	}

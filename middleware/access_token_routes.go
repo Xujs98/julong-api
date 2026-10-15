@@ -307,6 +307,7 @@ var accessTokenRouteRules = map[string]accessTokenRouteRule{
 	"GET /api/error-reports/":                           accessTokenScopeRule("ops:read"),
 	"GET /api/error-reports/:id":                        accessTokenScopeRule("ops:read"),
 	"POST /api/error-reports":                           accessTokenAnyRule,
+	"GET /api/support-contacts/qrcode/:filename":        accessTokenAnyRule,
 	"GET /api/support-contacts":                         accessTokenScopeRule("profile:read"),
 	"PUT /api/support-contacts":                         accessTokenScopeRule(service.AccessTokenScopeOf(authz.SystemSettingsSupportContactsWrite)),
 	"POST /api/site-assets/logo":                        accessTokenScopeRule(service.AccessTokenScopeOf(authz.SystemSettingsPermission("site.system-info"))),

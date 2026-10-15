@@ -43,7 +43,7 @@
 | 签到额度预览 | 已实现 | 计费与支付中的签到奖励输入框显示格式化额度预览。 |
 | 生图日志与异步生图 | 已实现 | 开启生图日志后，`async: true` 立即创建 `pending` 日志并返回任务 ID，支持 API Key 轮询、状态更新、图片读取和后台 JSON 详情；关闭日志时退回同步且不存图。 |
 | 系统设置权限 | 已实现 | root 可按一级菜单及二级设置页面逐项授权管理员（本次新增请求策略授权项，保留原授权项兼容）；菜单、路由、通用配置键和专用 API 均执行权限校验。 |
-| 客服联系 | 已实现 | 概览页展示联系客服弹窗；root 可授权指定管理员维护多条 QQ、微信和手机联系方式。 |
+| 客服联系 | 已实现 | 已登录顶部搜索框与公告图标之间展示客服入口；root 可授权管理员维护 QQ、微信、手机、QQ群、微信群，群二维码支持选择、预览、删除并随配置保存。 |
 | 站点徽标上传 | 已实现 | 系统信息支持 PNG/JPG/WebP 本地选择、保存前预览、移除和保存后应用；Docker 文件持久化在 `/data/site-assets`。 |
 | 文档纪律 | 新增 | 以后每次代码改动都必须同步维护本文档。 |
 
@@ -201,7 +201,7 @@ docker compose up -d
 | `MEDIA_ASSET_STORAGE_DIR` | `service/media_asset.go` | 覆盖 Base64 视频输入素材目录 | 默认 `data/media-assets`；Docker `WORKDIR /data` 下为持久化卷 `/data/data/media-assets`。公网素材只保存原 URL，不下载内容。 |
 | `ImageGenerationStorage*` | `service/image_object_storage.go`、`controller/image_object_storage.go`、`log-settings-section.tsx` | 异步生图 MinIO/S3 私有对象存储与生命周期 | 在“系统设置 → 运维 → 日志维护 → 记录生图日志”中配置；包含启用、Endpoint、Bucket、Region、Access/Secret Key、HTTPS、Path Style、对象前缀和图片保留天数。Secret Key 不回传前端，留空保存/测试沿用已存密钥。默认 Bucket `julong-media`、前缀 `generated/images`、保留 `30` 天；`ImageGenerationStorageRetentionDays=0` 表示永久保留，范围 `0-3650`。`ImageGenerationStorageLastCleanupAt` 保存最近一次成功的过期清理或全量清空任务完成时间。全量清空严格限制在当前 Bucket 的配置前缀内。 |
 | `async` 生图请求参数 | `dto/openai_image.go`、`controller/image_generation_task.go` | 将同步 `/v1/images/generations` 包装为本地异步任务 | 默认 `false`；仅在 `ImageGenerationLogEnabled=true` 时生效；转发上游前删除；有效异步模式与 `stream: true` 互斥。 |
-| `SupportContacts` | `common/constants.go`、`model/option.go` | 客服联系方式 JSON 数组 | 每项包含 `type`（qq/wechat/phone）、`label`、`value`；最多 30 条。 |
+| `SupportContacts` | `common/constants.go`、`model/option.go` | 客服联系方式 JSON 数组 | 每项包含 `id`、`type`（qq/wechat/phone/qq_group/wechat_group）、`label`、`value` 及可选 `qr_code_url`；最多 30 条，二维码只接受本站已保存地址。 |
 | `SubscriptionExpiryReminderEnabled` | `model/option.go`、`service/subscription_expiry_email.go`、`email-alert-settings.tsx` | 系统级订阅到期邮件提醒开关 | 默认 `false`；开启且 SMTP 已配置后，`subscription_expiry_email` 系统任务每小时扫描，在有效订阅到期前 7 天、3 天、1 天各发送一次；与其余自动提醒统一由 `operations.email-templates` 权限管理。 |
 | `LowBalanceEmailEnabled` / `LowBalanceEmailThreshold` / `LowBalanceEmailRechargeURL` | `service/email_settings.go`、`service/quota.go`、`email-alert-settings.tsx` | 用户钱包或订阅额度不足邮件 | 默认关闭；系统阈值默认沿用 `QuotaRemindThreshold`，用户个人通知阈值优先；充值 URL 留空时回退钱包页。只控制 Email，Webhook/Bark/Gotify 保持用户原配置。 |
 | `AccountQuotaEmailEnabled` / `AccountQuotaEmailThreshold` / `AccountQuotaEmailRecipientUserIDs` | `service/email_settings.go`、`controller/channel-billing.go`、`model/channel.go` | 渠道账号余额不足提醒 | 默认关闭、阈值默认 `5`；渠道余额首次查询已低于阈值或从阈值上方跌破时发送，持续低余额不重复发送；收件人只能选择状态正常且有邮箱的管理员/root，空列表回退全部 root。 |
@@ -798,8 +798,14 @@ curl 'https://api.julongkj.top/v1/images/generations/img_xxx/images/0/presign?ex
 
 | 方法 | 路径 | 函数 | 用途 | 请求/响应 | 权限 | 状态 |
 | --- | --- | --- | --- | --- | --- | --- |
-| GET | `/api/support-contacts` | `controller.GetSupportContacts` | 获取概览页客服联系方式 | 响应 `SupportContact[]` | 登录用户 | 完成 |
-| PUT | `/api/support-contacts` | `controller.UpdateSupportContacts` | 保存多条 QQ/微信/手机联系方式 | 请求 `{contacts:[{type,label,value}]}`；非法类型、空值、超长或超过 30 条时报错 | root 或拥有 `system_settings.content.support` 的管理员 | 完成 |
+| GET | `/api/support-contacts` | `controller.GetSupportContacts` | 获取顶部客服弹窗联系方式 | 响应 `SupportContact[]` | 登录用户 | 完成 |
+| PUT | `/api/support-contacts` | `controller.UpdateSupportContacts` | 保存普通/群客服联系方式及二维码 | 请求 `{contacts:[{type,label,value}]}`；非法类型、空值、超长或超过 30 条时报错 | root 或拥有 `system_settings.content.support` 的管理员 | 完成 |
+
+- PUT 兼容原 JSON `{contacts:[{id,type,label,value,qr_code_url?}]}`，新增 multipart：`contacts` 为数组 JSON，`qrcode_<id>` 为图片；类型 qq/wechat/phone/qq_group/wechat_group，联系方式必填，最多30条、ID唯一；每图5 MB/4096像素，总请求16 MB。响应仍为 `{success,data:SupportContact[]}`，每条含可选 `qr_code_url`。
+- 二维码图片接口：`GET /api/support-contacts/qrcode/:filename` → `controller.GetSupportQRCode`。公开读取不可猜的随机图片路径；仅接受 `qr-<32位十六进制>.(png|jpg|webp)`，返回图片二进制/实际 Content-Type、nosniff、no-store，无效或已删除返回404。普通用户只能读取联系方式，保存仍复用原 AdminAuth + system_settings.content.support，PAT 权限不变。
+- 上传不新增独立 POST/DELETE：选择文件先在浏览器预览，点击保存后通过原 PUT 一次保存文字和图片。删除二维码/整条联系、切换普通类型同样在保存后生效；失败保留旧配置并清理新文件，成功替换清理旧文件。仅群类型可带新文件，PNG/JPEG/WebP 检测 MIME、尺寸及完整图片解码，拒绝 SVG/外部 URL/未保存路径。
+- 持久化：复用 `SITE_ASSET_STORAGE_DIR`，二维码放在其 `support/` 子目录（Docker 默认 `/data/site-assets/support`）。必须随数据卷备份；多实例需要共享该目录。配置仍使用既有 SupportContacts Option，不增加表/字段/迁移。
+- 前端：AppHeader 在 Search 与 NotificationPopover 之间复用 SupportContactButton compact，点击才加载且重新取最新配置；登录后可见，匿名不调用受保护列表。弹窗展示名称、联系方式、复制操作和群二维码大图，普通 QQ 继续唤起聊天。管理页复用 SettingsSection/Dialog/Input/Select/CopyButton；新增 SupportQRCodeField 仅承载群文件草稿和预览，没有引入新的通用上传框架。
 
 ### 邮件群发 API
 
@@ -1658,3 +1664,10 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 - [ ] 前端改动已运行 `bun run typecheck`。
 - [ ] 已运行 `git diff --check`。
 - [ ] 如果 Go 路由/controller/model 行为变更且用户正在本地调试，已重启本地后端。
+
+
+### 2026-10-16 客服群二维码与顶部入口（B13）
+
+- 支持 QQ群/微信群，保留显示名称、联系方式；群二维码可选择、预览、删除，保存后生效。顶部入口位于搜索右侧、公告左侧。
+- 定向前端9例通过：上传/预览/保存、删除保留文字、两种群类型与切换清理、失败加载禁用保存、失败保存保留草稿、按需获取、空/错误状态、键盘入口、真实AppHeader排序。最终静态检查/构建/重启和Git状态见 PROJECT_PROGRESS.md B13。
+- Go控制器在专用SQLite/MySQL/PostgreSQL库验证旧联系方式兼容、两类群保存、图片读取、替换/删除、非法URL/文件/重复ID、失败回滚；不更改实际用户配置，不做生产发布。验证日志 /tmp/julong-support-20261016/。历史徽标测试有既有审计表缺失日志，不宣称全量测试通过。

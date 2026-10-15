@@ -4,7 +4,7 @@
 > 详细 API、路由、配置和数据模型以 [DEVELOPMENT.md](./DEVELOPMENT.md) 为技术登记入口。
 > 代码与实际命令输出优先于旧文档、历史回复和截图；“代码已写”“本地可用”“已提交”“已上线”必须分开。
 
-最后更新：2026-10-15 23:08:00（Asia/Shanghai）
+最后更新：2026-10-16 00:13（Asia/Shanghai）
 项目根目录：`/Users/xujs/.docker_dir/new-api`
 
 ## 1. 新对话接续入口（必须先读）
@@ -22,15 +22,15 @@
 
 | 项目 | 状态（截至最后更新时间） | 依据与边界 |
 | --- | --- | --- |
-| 当前分支 / HEAD | main / b252d658d（B10功能提交） | origin/main已推送B09功能提交，不处于merge；pnpm-lock和.bak排除交付 |
+| 当前分支 / HEAD | main / 88b438c7e（B13提交前） | B11/B12已交付；B13功能及验证完成待Git交付，不处于merge，三个既有未跟踪文件保留 |
 | 上游整合 | main已包含此前功能分支提交 | 实际git和远端对比已纠正旧“尚待合并”快照，保留历史批次记录 |
 | 用户 GitHub 仓库 | origin = https://github.com/Xujs98/julong-api.git | upstream = https://github.com/QuantumNous/new-api.git，仅跟踪上游；不得把用户改动推到 upstream |
-| 本地服务 | 最新前端嵌入新Go产物，PID85506监听3000 | /api/status成功，6个首页JS/CSS与web/dist一致；B09已激活，真实管理员浏览器登录未实测 |
+| 本地服务 | B13最新前端嵌入Go产物，PID48103监听3000 | /api/status成功、6个首页JS/CSS与web/dist一致；真实管理员浏览器登录未实测 |
 | 模型广场按秒/按次价格 | 当前代码已实现，历史交付有验证记录 | 两项都有价格同时显示；只配一项只显示该项；模型名及分辨率价格区规则一致 |
 | 视频输入素材 | 已完成本地实现/定向回归、三库复验、浏览器预览和视频直链、最终重启 | SQLite3.50.4/MySQL5.7.44/PostgreSQL16.15最终矩阵8/8无Skip；图片及嵌入视频/音频正常、素材视频直链可播放；Safari/原生音频直链/线上公网未实测 |
 | 成品列阴影与滚轮 | 已完成（本地）；17项通过，Chromium已验证并激活；Safari待人工复核 | 独立复核10/10，主任务4文件17/17；Chromium明暗阴影、全列固定、滚轮/splitHeader已验；首页资源与dist一致，Safari无连接未实测 |
 | 项目进度入口 | 已完成（文档本地） | 本文 + AGENTS.md 必读入口；持续按批次更新 |
-| Git 提交 / 线上发布 | B09功能8e9a702ce已推送origin/main | 不推upstream；api.julongkj.top未部署 |
+| Git 提交 / 线上发布 | B11/B12已推送origin/main；B13交付见文末 | 不推upstream；api.julongkj.top未部署 |
 
 ## 3. 状态口径
 
@@ -281,3 +281,24 @@ B08：MD/DOCX 后端、管理 UI、模型绑定与广场调用文档已实现。
 - 已清理：Go 编译缓存、测试缓存和 fuzz 缓存，执行 go clean -cache -testcache -fuzzcache；检查确认项目内没有 web/.cache、web/.rsbuild-cache、web/node_modules/.cache、.turbo 等前端构建缓存目录。
 - 明确保留：当前服务使用的 /tmp/julong-model-toggle-20261015/new-api、web/dist、Go 模块缓存、源码、数据库和既有未跟踪备份文件均未修改；没有停止服务，也没有删除旧验证日志或备份。
 - 验证：Go 构建缓存清理后约 8 KB；PID 17798 仍监听 3000；GET /api/status 返回 success=true、版本 v1.0.0-julong.1。本轮未重启、未重新构建、未改用户数据。
+
+
+### B13：客服群二维码与顶部入口（2026-10-16，进行中）
+
+- 目标：客服配置增加 QQ群/微信群，保留显示名称及联系方式，二维码选择后可预览/删除；搜索右侧、公告左侧显示客服图标。
+- 接续核对：main/88b438c7e，origin为Xujs98/julong-api，三个既有未跟踪文件保留。此前摘要为方案，尚无本批业务改动。
+- 实现方案：复用客服管理/弹窗、共享 Dialog/CopyButton；二维码和联系方式一起保存（兼容原JSON PUT，新增multipart PUT），避免未保存的上传产生孤立文件；随机本地文件存储，保存失败回滚，成功替换/移除清理旧文件。
+- 验证/构建/重启/Git交付待执行；不查询生产、不继续已暂停的其它任务。
+
+
+### B13 验证与本地激活（2026-10-16）
+
+- 实现：QQ群/微信群 + 二维码选择、预览、删除，保留显示名称/联系方式；顶部Search右侧、NotificationPopover左侧复用紧凑客服按钮。修改通过保存统一生效，失败不清除草稿；旧普通QQ/微信/手机兼容。
+- 文件安全/生命周期：5 MB每图、4096像素、总请求16 MB；验证真实PNG/JPEG/WebP和完整解码；随机文件名、原子写入；仅引用既有本站二维码URL，拒绝外部URL/路径穿越；后续验证或数据库失败回滚新文件，成功替换/移除清理旧文件。位置为SITE_ASSET_STORAGE_DIR/support，无数据库表/字段迁移。
+- 后端：python3 /tmp/julong-support-20261016/run-matrix.py 内部运行 go test ./controller -run 'Test(SupportContact|SiteLogo|ValidateSiteLogo)' -count=1 -v；SQLite3.50.4、MySQL5.7.44、PostgreSQL16.15 三库群二维码生命周期通过，无Skip。含旧联系方式、两种群、保留字段、读取、替换、删除、非法输入、重复ID、解码截断、文件及数据库失败回滚。原徽标测试有既有audit_logs缺表日志，测试通过不代表审计功能验证。
+- 路由：go test ./router ./middleware -run 'Test(AccessTokenRouteRulesCoverEveryDashboardRoute|AccessTokenCatalogCoversEveryPermission|UserAuthAppliesAccessTokenRouteRules)' -count=1 通过。PUT继续沿用UserAuth/AdminAuth/客服配置权限，GET图片公开随机路径，没放开联系方式列表。
+- 前端：3文件9/9 Vitest通过，含真实AppHeader入口排序和键盘操作；bun run typecheck、8文件oxlint/oxfmt、bun run i18n:sync、bun run build通过。i18n脚本按规范同步七语言；另三处既有键仅排序归位，没有改历史翻译。
+- 构建/重启：根 go build -ldflags "-X github.com/QuantumNous/new-api/common.Version=v1.0.0-julong.1" 成功；旧PID17798正常停止，新PID48103运行 /tmp/julong-support-20261016/new-api，监听3000。健康success=true，首页6资源SHA256与web/dist一致，匿名客服列表401，非法二维码404，activation.json留证。
+- 复用审核：共享Dialog、CopyButton、SettingsSection、Input/Select及原客服弹窗；新SupportQRCodeField只是群文件草稿组件。后台数据加载失败禁止保存，避免把错误当空列表覆盖；已登录才显示客服按钮。
+- 边界：未取得真实管理员浏览器登录态；组件交互和HTTP已测，真实浏览器端到端/手机扫码/生产未验证。无全量Go测试或生产部署声明。不继续用户已暂停的其它任务。
+- DEVELOPMENT.md同步API合同、持久化目录、配置、组件与验证。Git提交/推送待执行；仅本轮文件，原.bak/pnpm-lock不纳入。

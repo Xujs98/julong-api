@@ -291,6 +291,7 @@ func SetApiRouter(router *gin.Engine) {
 			imageGenerationLogsRoute.GET("/:id/task", controller.GetImageGenerationLogTask)
 			imageGenerationLogsRoute.GET("/:id/images/:index", controller.GetImageGenerationLogImage)
 		}
+		apiRouter.GET("/support-contacts/qrcode/:filename", controller.GetSupportQRCode)
 		supportContactsRoute := apiRouter.Group("/support-contacts")
 		supportContactsRoute.Use(middleware.UserAuth())
 		{

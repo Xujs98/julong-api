@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { api } from '@/lib/api'
+import { requireServerSuccess } from '@/lib/server-error-message'
 
 import type {
   ConfirmPaymentComplianceResponse,
@@ -34,27 +35,46 @@ import type {
   UpstreamRatiosResponse,
 } from './types'
 
-export type SupportContactType = 'qq' | 'wechat' | 'phone'
+export type SupportContactType =
+  | 'qq'
+  | 'wechat'
+  | 'phone'
+  | 'qq_group'
+  | 'wechat_group'
 export interface SupportContact {
   id: string
   type: SupportContactType
   label: string
   value: string
+  qr_code_url?: string
 }
 
 export async function getSupportContacts() {
   const res = await api.get<{ success: boolean; data: SupportContact[] }>(
     '/api/support-contacts'
   )
-  return res.data
+  return requireServerSuccess(res.data)
 }
 
-export async function updateSupportContacts(contacts: SupportContact[]) {
+export async function updateSupportContacts(
+  contacts: SupportContact[],
+  files: Record<string, File> = {}
+) {
+  let body: FormData | { contacts: SupportContact[] } = { contacts }
+  if (Object.keys(files).length > 0) {
+    body = new FormData()
+    body.append('contacts', JSON.stringify(contacts))
+    for (const contact of contacts) {
+      if (files[contact.id]) {
+        body.append(`qrcode_${contact.id}`, files[contact.id])
+      }
+    }
+  }
   const res = await api.put<{ success: boolean; data: SupportContact[] }>(
     '/api/support-contacts',
-    { contacts }
+    body
   )
-  return res.data
+  return requireServerSuccess(res.data)
 }
 
 export async function getSystemOptions(section?: string) {
