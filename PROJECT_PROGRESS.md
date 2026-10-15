@@ -22,7 +22,7 @@
 
 | 项目 | 状态（截至最后更新时间） | 依据与边界 |
 | --- | --- | --- |
-| 当前分支 / HEAD | main / f0870f9d1（B09提交前） | origin/main已核实同SHA；B09待本轮提交，不处于merge；pnpm-lock和.bak排除交付 |
+| 当前分支 / HEAD | main / 8e9a702ce（B09功能提交） | origin/main已推送B09功能提交，不处于merge；pnpm-lock和.bak排除交付 |
 | 上游整合 | main已包含此前功能分支提交 | 实际git和远端对比已纠正旧“尚待合并”快照，保留历史批次记录 |
 | 用户 GitHub 仓库 | origin = https://github.com/Xujs98/julong-api.git | upstream = https://github.com/QuantumNous/new-api.git，仅跟踪上游；不得把用户改动推到 upstream |
 | 本地服务 | 最新前端嵌入新Go产物，PID85506监听3000 | /api/status成功，6个首页JS/CSS与web/dist一致；B09已激活，真实管理员浏览器登录未实测 |
@@ -30,7 +30,7 @@
 | 视频输入素材 | 已完成本地实现/定向回归、三库复验、浏览器预览和视频直链、最终重启 | SQLite3.50.4/MySQL5.7.44/PostgreSQL16.15最终矩阵8/8无Skip；图片及嵌入视频/音频正常、素材视频直链可播放；Safari/原生音频直链/线上公网未实测 |
 | 成品列阴影与滚轮 | 已完成（本地）；17项通过，Chromium已验证并激活；Safari待人工复核 | 独立复核10/10，主任务4文件17/17；Chromium明暗阴影、全列固定、滚轮/splitHeader已验；首页资源与dist一致，Safari无连接未实测 |
 | 项目进度入口 | 已完成（文档本地） | 本文 + AGENTS.md 必读入口；持续按批次更新 |
-| Git 提交 / 线上发布 | 历史批次已在origin/main；B09待本轮提交/推送 | 不推upstream；api.julongkj.top未部署 |
+| Git 提交 / 线上发布 | B09功能8e9a702ce已推送origin/main | 不推upstream；api.julongkj.top未部署 |
 
 ## 3. 状态口径
 
@@ -219,7 +219,7 @@ B08：MD/DOCX 后端、管理 UI、模型绑定与广场调用文档已实现。
 
 用户截图指出文档模板没有与“模型/供应商/部署”呈现为同组标签。源码此前已注册该段，但标签允许换行、顺序夹在供应商与部署之间；运行服务亦早于当前 `web/dist`。现顺序调整为模型→供应商→部署→文档模板，标签栏单行并在窄屏内部横向滚动。新加section顺序测试；模板管理/选择器/顺序共14/14，`tsgo -b`、目标lint/format通过，Rsbuild构建和根Go构建成功。本地PID49923监听3000，`/api/status success=true`，返回最新bundle哈希。未取得管理员登录态，未声明已登录交互点测。Git分批提交：`298b2cf33`、`dfb2b1425`、`734a26746`；push至origin分支尝试2次均因网络无法连接github.com:443失败，已按规则留待下一任务；未推upstream。
 
-### B09：素材管理 UI、筛选与重新构建（2026-10-15，本地已激活，Git交付收尾）
+### B09：素材管理 UI、筛选与重新构建（2026-10-15，本地已激活，功能已推送）
 
 - 用户目标：素材管理时侧栏“任务日志”仍选中；管理员独立用户列；时间/用户名筛选；详情弹窗不溢出；重新构建 Go 并启动项目。
 - 接续核对：实际 main / f0870f9d1，未处于 merge；origin 已核实为 Xujs98/julong-api。之前代理有 9 个业务/翻译文件改动，尚无本批验证/构建；旧进度快照的功能分支/PID已过时，不据其覆盖代码。既有未跟踪 pnpm-lock.yaml 和 .bak 保留，不纳入交付。
@@ -238,3 +238,10 @@ B08：MD/DOCX 后端、管理 UI、模型绑定与广场调用文档已实现。
 ### B09验证收尾
 
 完整两文件实际重跑：17通过/2失败（Security & Access旧期望），无Skip；素材4例全部通过。定向13通过/6按名称过滤不运行。数据库最终重跑21/21无Skip、版本原始输出已记录，controller/router/service三包通过。最终typecheck、目标lint/format、git diff --check通过；PID85506持续健康。临时浏览器布局夹具完成验证后关闭，不改真实用户或认证配置。
+
+### B09 Git交付 — 2026-10-15 10:34:03（Asia/Shanghai）
+
+- 功能及文档提交8e9a702ce（fix: improve media asset filters and preview layout）已成功推送origin/main，首次push成功；目标仅Xujs98/julong-api，未推upstream、未force。
+- 本地PID85506继续监听3000，健康检查通过，最新前端已在Go产物中；浏览器临时4325夹具已停止并关闭，无真实用户数据改动。生产未部署。
+- 工作区仅保留本批接续前已有未跟踪controller/media_asset.go.bak、web/pnpm-lock.yaml、media-assets-table.tsx.bak，不纳入提交。测试边界与已知旧失败见上文，不能称全量通过。
+- 下一步：在已有登录态的浏览器刷新素材页；生产发布另行操作。

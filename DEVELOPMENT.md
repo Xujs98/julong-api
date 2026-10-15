@@ -1521,7 +1521,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 - 前端：素材4例和相关侧栏/审计9例通过（定向13/13；其余6例过滤跳过，不作为通过）。完整两文件运行另有2项既有Security & Access期望失败（当前项目侧栏已无该入口，含发票入口）；记录失败，不扩大修改无关导航。typecheck、5文件oxlint/oxfmt、Rsbuild生产构建、根go build通过；未跑全量Go测试。
 - 浏览器：隔离4325夹具导入真实素材组件和新生产CSS（无真实用户/鉴权绕过），验证独立列、搜索空结果/重置、查看列菜单；600×2400高图+长URL详情为768×690、scrollWidth=clientWidth=768，媒体完整缩放且标题/关闭/复制均可见。3000项目仅到登录页，未冒称真实管理员会话点测；Safari未测。
 - 本地运行：重新构建前端后go build嵌入，旧go-run PID79538/79606已停止；新二进制 ~/.codex/tmp/julong-api-runtime/new-api.media-ui-20261015，PID85506监听3000，GET /api/status success=true、version=v1.0.0-julong.1，首页6个JS/CSS与web/dist逐字节一致；匿名素材API401。SQLite备份及构建/测试/激活证据在/tmp/julong-media-ui-rebuild-20261015/，运行日志在~/.codex/tmp/julong-api-runtime/media-ui-server-20261015.log。
-- Git：只提交本批实现/回归和两份开发进度文档，排除既有pnpm-lock及.bak；提交/推送结果见PROJECT_PROGRESS.md。本地启动不等于生产部署，api.julongkj.top未更新。
+- Git：只提交本批实现/回归和两份开发进度文档，排除既有pnpm-lock及.bak；功能提交8e9a702ce已首次成功推送origin/main，未推upstream/force；交付记录见PROJECT_PROGRESS.md。本地启动不等于生产部署，api.julongkj.top未更新。
 
 ### 输入素材验收与媒体内容修复（2026-10-15 续验）
 
