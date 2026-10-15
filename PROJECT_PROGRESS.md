@@ -4,7 +4,7 @@
 > 详细 API、路由、配置和数据模型以 [DEVELOPMENT.md](./DEVELOPMENT.md) 为技术登记入口。
 > 代码与实际命令输出优先于旧文档、历史回复和截图；“代码已写”“本地可用”“已提交”“已上线”必须分开。
 
-最后更新：2026-10-15 17:10:00（Asia/Shanghai）
+最后更新：2026-10-15 23:08:00（Asia/Shanghai）
 项目根目录：`/Users/xujs/.docker_dir/new-api`
 
 ## 1. 新对话接续入口（必须先读）
@@ -274,3 +274,10 @@ B08：MD/DOCX 后端、管理 UI、模型绑定与广场调用文档已实现。
 - 本地验证和重启已完成；当前 PID 17798 监听 3000，旧 PID 54247 已停止。
 - 模型开关、测试和文档修改已提交为 8a281bc28，并成功推送 origin/main；既有 controller/media_asset.go.bak、web/pnpm-lock.yaml、web/src/features/usage-logs/components/media-assets-table.tsx.bak 未纳入。
 - 未进行线上业务查询或生产部署；本地健康检查不等同线上发布。
+
+### B12：安全清理本地构建缓存（2026-10-15，已完成）
+
+- 用户目标：检查并安全清理项目构建产生的缓存碎片。
+- 已清理：Go 编译缓存、测试缓存和 fuzz 缓存，执行 go clean -cache -testcache -fuzzcache；检查确认项目内没有 web/.cache、web/.rsbuild-cache、web/node_modules/.cache、.turbo 等前端构建缓存目录。
+- 明确保留：当前服务使用的 /tmp/julong-model-toggle-20261015/new-api、web/dist、Go 模块缓存、源码、数据库和既有未跟踪备份文件均未修改；没有停止服务，也没有删除旧验证日志或备份。
+- 验证：Go 构建缓存清理后约 8 KB；PID 17798 仍监听 3000；GET /api/status 返回 success=true、版本 v1.0.0-julong.1。本轮未重启、未重新构建、未改用户数据。
