@@ -132,6 +132,7 @@ function ModelMutateDrawerContent(props: ModelMutateDrawerProps) {
     defaultValues: transformModelToFormDefaults({
       model_name: '',
       status: 1,
+      enabled: 1,
       sync_official: 1,
       name_rule: 0,
     } as Model),
@@ -182,6 +183,7 @@ function ModelMutateDrawerContent(props: ModelMutateDrawerProps) {
           : {
               model_name: currentRow?.model_name ?? '',
               status: 1,
+              enabled: 1,
               sync_official: 1,
               name_rule: 0,
             }) as Model
@@ -323,6 +325,30 @@ function ModelMutateDrawerContent(props: ModelMutateDrawerProps) {
                       <h3 className='text-sm font-semibold'>
                         {t('Basic Information')}
                       </h3>
+
+                      <FormField
+                        control={form.control}
+                        name='enabled'
+                        render={({ field }) => (
+                          <FormItem className={sideDrawerSwitchItemClassName()}>
+                            <div className='flex flex-col gap-0.5'>
+                              <FormLabel className='text-base'>
+                                {t('Allow API access')}
+                              </FormLabel>
+                              <FormDescription>
+                                {t('When disabled, users cannot use this model. Enabled by default.')}
+                              </FormDescription>
+                            </div>
+                            <FormControl>
+                              <Switch
+                                checked={field.value}
+                                onCheckedChange={field.onChange}
+                                disabled={isSubmitting}
+                              />
+                            </FormControl>
+                          </FormItem>
+                        )}
+                      />
 
                       <FormField
                         control={form.control}

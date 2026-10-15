@@ -124,7 +124,11 @@ describe('model pricing entry', () => {
           {
             model_name: 'channel-only',
             expected_version: 'v1',
-            pricing: { ModelPrice: 0, 'billing_setting.billing_mode': 'ratio' },
+            pricing: {
+              ModelPrice: 0,
+              'billing_setting.billing_mode': 'ratio',
+              'billing_setting.per_request_subscription_allowed': false,
+            },
             reset: false,
           },
         ],
@@ -403,7 +407,9 @@ describe('metadata editing', () => {
     expect(screen.getByRole('combobox', { name: 'Vendor' })).toHaveValue(
       'Existing vendor'
     )
+    expect(screen.getByRole('switch', { name: 'Allow API access' })).toBeChecked()
     const user = userEvent.setup()
+    await user.click(screen.getByRole('switch', { name: 'Allow API access' }))
     expect(screen.getByText('Gemini.Color')).toBeVisible()
     await user.click(screen.getByRole('button', { name: 'Custom model icon' }))
     const icon = screen.getByRole('combobox', { name: 'Icon' })
@@ -434,6 +440,7 @@ describe('metadata editing', () => {
     expect(put.mock.calls.every(([url]) => url === '/api/models/')).toBe(true)
     expect(put.mock.calls[0][1]).toMatchObject({
       description: 'Updated metadata',
+      enabled: 0,
       icon: '',
       model_name: 'example-model',
       vendor_id: 4,
@@ -527,7 +534,11 @@ describe('metadata editing', () => {
           {
             model_name: 'example-model',
             expected_version: 'v1',
-            pricing: { ModelPrice: 0, 'billing_setting.billing_mode': 'ratio' },
+            pricing: {
+              ModelPrice: 0,
+              'billing_setting.billing_mode': 'ratio',
+              'billing_setting.per_request_subscription_allowed': false,
+            },
             reset: false,
           },
         ],
@@ -550,7 +561,11 @@ describe('metadata editing', () => {
           {
             model_name: 'example-model',
             expected_version: 'v2',
-            pricing: { ModelPrice: 0, 'billing_setting.billing_mode': 'ratio' },
+            pricing: {
+              ModelPrice: 0,
+              'billing_setting.billing_mode': 'ratio',
+              'billing_setting.per_request_subscription_allowed': false,
+            },
             reset: false,
           },
         ],

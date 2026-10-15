@@ -7912,6 +7912,8 @@
     "Zhipu": "智谱",
     "Zhipu GLM": "智谱GLM",
     "Zhipu V4": "智谱 V4",
-    "Zoom": "缩放"
+    "Zoom": "缩放",
+    "Allow API access": "允许 API 访问",
+    "When disabled, users cannot use this model. Enabled by default.": "关闭后，用户无法使用此模型，默认开启。"
   }
 }

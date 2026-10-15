@@ -114,6 +114,10 @@ func CreateModelMeta(c *gin.Context) {
 		common.ApiErrorT(c, "Model name cannot be empty")
 		return
 	}
+	if m.Enabled != nil && *m.Enabled != 0 && *m.Enabled != 1 {
+		common.ApiErrorMsg(c, "invalid model availability")
+		return
+	}
 	if err := model.ValidateMetadataValues(model.MetadataValues{Endpoints: m.Endpoints, Status: m.Status, NameRule: m.NameRule}); err != nil {
 		common.ApiError(c, err)
 		return
@@ -147,6 +151,10 @@ func UpdateModelMeta(c *gin.Context) {
 	}
 	if m.Id == 0 {
 		common.ApiErrorT(c, "Missing model ID")
+		return
+	}
+	if m.Enabled != nil && *m.Enabled != 0 && *m.Enabled != 1 {
+		common.ApiErrorMsg(c, "invalid model availability")
 		return
 	}
 

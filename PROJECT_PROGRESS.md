@@ -253,3 +253,24 @@ B08：MD/DOCX 后端、管理 UI、模型绑定与广场调用文档已实现。
 - 本地PID85506继续监听3000，健康检查通过，最新前端已在Go产物中；浏览器临时4325夹具已停止并关闭，无真实用户数据改动。生产未部署。
 - 工作区仅保留本批接续前已有未跟踪controller/media_asset.go.bak、web/pnpm-lock.yaml、media-assets-table.tsx.bak，不纳入提交。测试边界与已知旧失败见上文，不能称全量通过。
 - 下一步：在已有登录态的浏览器刷新素材页；生产发布另行操作。
+
+
+### B11：模型 API 使用开关（2026-10-15，已完成本地验证，提交待执行）
+
+- 用户目标：模型管理→模型→编辑增加模型开关，默认开启，关闭后服务端禁止用户调用。
+- 接续核对：main / f58e64561，未处于 merge；现有模型开关初稿尚未通过完整验证；PID54247仍是B10旧产物。仅接续本批代码，保留三个既有未跟踪 .bak/pnpm-lock 文件，不纳入提交。
+- 当前工作：默认值/保存/匹配、HTTP及Responses WebSocket请求拦截、普通用户模型过滤和三库新建/升级验证均已完成；模型广场 status 保持独立。
+- 验证：前端生产构建、根 Go 构建、定向测试、三库 8/8 矩阵、typecheck、i18n sync、git diff --check 均已实际通过；尚未提交/推送。
+
+
+### B11 收尾检查点（2026-10-15，验证、重建与本地重启已完成，提交待执行）
+
+- 模型开关已实现：模型编辑页默认开启；后端字段 enabled 兼容旧 NULL，关闭后拒绝普通 HTTP、视频 remix、Responses WebSocket，并过滤普通用户模型列表；模型广场 status 保持独立。
+- 实际验证：SQLite 3.50.4、MySQL 5.7.44、PostgreSQL 16.15 fresh/legacy upgrade 与重复 AutoMigrate 矩阵 8/8 无 Skip；controller/relay 定向 Go 测试通过；前端 metadata-editing.test.tsx 8/8、bun run typecheck、bun run i18n:sync 通过。
+- 已完成：前端 Rsbuild 生产构建；根 Go 构建输出 /tmp/julong-model-toggle-20261015/new-api；停止旧 PID 54247 并启动新 PID 17798；GET http://localhost:3000/api/status 返回 success: true、版本 v1.0.0-julong.1。三项既有未跟踪 .bak/pnpm-lock 文件不纳入。
+
+### B11 Git 交付检查点（2026-10-15 22:04:25，Asia/Shanghai）
+
+- 本地验证和重启已完成；当前 PID 17798 监听 3000，旧 PID 54247 已停止。
+- 尚未提交/推送：下一步仅提交本批模型开关、测试和文档修改，排除既有 controller/media_asset.go.bak、web/pnpm-lock.yaml、web/src/features/usage-logs/components/media-assets-table.tsx.bak。
+- 未进行线上查询或生产部署；本地健康检查不等同线上发布。

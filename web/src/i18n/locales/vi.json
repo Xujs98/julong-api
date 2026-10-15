@@ -7912,6 +7912,8 @@
     "Zhipu": "Zhipu",
     "Zhipu GLM": "Zhipu GLM",
     "Zhipu V4": "Zhipu V4",
-    "Zoom": "Zoom"
+    "Zoom": "Zoom",
+    "Allow API access": "Cho phép truy cập API",
+    "When disabled, users cannot use this model. Enabled by default.": "Khi tắt, người dùng không thể sử dụng mô hình này. Mặc định bật."
   }
 }

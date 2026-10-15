@@ -50,6 +50,18 @@ func Distribute() func(c *gin.Context) {
 			abortWithOpenAiMessage(c, invalidRequestStatus(err), i18n.T(c, i18n.MsgDistributorInvalidRequest, map[string]any{"Error": err.Error()}))
 			return
 		}
+		modelUseRequest := shouldSelectChannel || strings.HasSuffix(c.Request.URL.Path, "/remix")
+		if modelRequest.Model != "" && modelUseRequest {
+			enabled, lookupErr := model.IsModelEnabled(modelRequest.Model)
+			if lookupErr != nil {
+				abortWithOpenAiMessage(c, http.StatusInternalServerError, lookupErr.Error())
+				return
+			}
+			if !enabled {
+				abortWithOpenAiMessage(c, http.StatusForbidden, i18n.T(c, i18n.MsgDistributorModelDisabled, map[string]any{"Model": modelRequest.Model}))
+				return
+			}
+		}
 		_, pinned, _ := constraints.ResolvedPin()
 		if !pinned {
 			// Select a channel for the user
@@ -390,6 +402,7 @@ func getModelRequest(c *gin.Context) (*ModelRequest, bool, error) {
 		relayMode := relayconstant.RelayModeVideoSubmit
 		c.Set("relay_mode", relayMode)
 		shouldSelectChannel = false
+		modelRequest.Model = lookupTaskOriginModelName(c)
 	} else if strings.Contains(c.Request.URL.Path, "/v1/videos") {
 		//curl https://api.openai.com/v1/videos \
 		//  -H "Authorization: Bearer $OPENAI_API_KEY" \
@@ -528,8 +541,14 @@ func getTaskOriginModelName(c *gin.Context) string {
 	if !common.GetContextKeyBool(c, constant.ContextKeyTokenModelLimitEnabled) {
 		return ""
 	}
+	return lookupTaskOriginModelName(c)
+}
 
+func lookupTaskOriginModelName(c *gin.Context) string {
 	taskId := c.Param("task_id")
+	if taskId == "" {
+		taskId = c.Param("video_id")
+	}
 	if taskId == "" {
 		return ""
 	}

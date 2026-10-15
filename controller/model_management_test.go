@@ -15,6 +15,8 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/i18n"
+	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	"github.com/QuantumNous/new-api/pkg/jsplugin"
@@ -1665,6 +1667,153 @@ export function parseTaskResult(){return {};}
 			require.NoError(t, err)
 			assert.Empty(t, final.Entries[0].Configured)
 			assert.Equal(t, "{}", final.Options[billing_setting.PluginBillingExprOption])
+		})
+	}
+}
+
+// availabilityLegacyModel is the persisted models schema before the API switch.
+type availabilityLegacyModel struct {
+	Id                 int
+	ModelName          string         `gorm:"size:128;not null;uniqueIndex:uk_model_name_delete_at,priority:1"`
+	Description        string         `gorm:"type:text"`
+	Icon               string         `gorm:"type:varchar(128)"`
+	Tags               string         `gorm:"type:varchar(255)"`
+	VendorID           int            `gorm:"index"`
+	Endpoints          string         `gorm:"type:text"`
+	DocumentTemplateID int            `gorm:"index"`
+	Status             int            `gorm:"default:1"`
+	SyncOfficial       int            `gorm:"default:1"`
+	CreatedTime        int64          `gorm:"bigint"`
+	UpdatedTime        int64          `gorm:"bigint"`
+	DeletedAt          gorm.DeletedAt `gorm:"index;uniqueIndex:uk_model_name_delete_at,priority:2"`
+	NameRule           int            `gorm:"default:0"`
+}
+
+func (availabilityLegacyModel) TableName() string { return "models" }
+
+func TestModelAvailabilitySwitchDatabaseMatrix(t *testing.T) {
+	require.NoError(t, i18n.Init())
+	for _, dialect := range []struct{ kind, env string }{{"sqlite", ""}, {"mysql", "TEST_MYSQL_DSN"}, {"postgres", "TEST_POSTGRES_DSN"}} {
+		t.Run(dialect.kind, func(t *testing.T) {
+			if dialect.env != "" && os.Getenv(dialect.env) == "" {
+				t.Skip("set " + dialect.env + " to run this database")
+			}
+			for _, upgrade := range []bool{false, true} {
+				t.Run(fmt.Sprintf("upgrade_%t", upgrade), func(t *testing.T) {
+					db := modelManagementDB(t, dialect.kind, os.Getenv(dialect.env))
+					if upgrade {
+						require.NoError(t, db.Migrator().DropTable(&model.Model{}))
+						require.NoError(t, db.AutoMigrate(&availabilityLegacyModel{}))
+						legacy := availabilityLegacyModel{ModelName: "legacy-enabled", Description: "preserved metadata", Status: 1, SyncOfficial: 1, CreatedTime: 123, UpdatedTime: 456}
+						require.NoError(t, db.Create(&legacy).Error)
+						for range 2 {
+							require.NoError(t, db.AutoMigrate(&model.Model{}))
+						}
+						var loaded model.Model
+						require.NoError(t, db.First(&loaded, legacy.Id).Error)
+						assert.Equal(t, legacy.Description, loaded.Description)
+						assert.Equal(t, legacy.CreatedTime, loaded.CreatedTime)
+						assert.Equal(t, legacy.UpdatedTime, loaded.UpdatedTime)
+						enabled, err := model.IsModelEnabled(legacy.ModelName)
+						require.NoError(t, err)
+						assert.True(t, enabled)
+						assert.True(t, db.Migrator().HasIndex(&model.Model{}, "uk_model_name_delete_at"))
+					} else {
+						for range 2 {
+							require.NoError(t, db.AutoMigrate(&model.Model{}))
+						}
+					}
+					var response struct {
+						Success bool
+						Data    model.Model
+					}
+					recorder := modelManagementRequest(t, CreateModelMeta, http.MethodPost, "/api/models/", map[string]any{"model_name": "availability-model", "status": 0, "sync_official": 1}, &response)
+					require.True(t, response.Success, recorder.Body.String())
+					created := response.Data
+					require.NotNil(t, created.Enabled)
+					assert.Equal(t, 1, *created.Enabled)
+					// API use is independent from catalog visibility.
+					enabled, err := model.IsModelEnabled(created.ModelName)
+					require.NoError(t, err)
+					assert.True(t, enabled)
+					created.Enabled = common.GetPointer(0)
+					recorder = modelManagementRequest(t, UpdateModelMeta, http.MethodPut, "/api/models/", created, &response)
+					require.True(t, response.Success, recorder.Body.String())
+					var loaded model.Model
+					require.NoError(t, db.First(&loaded, created.Id).Error)
+					require.NotNil(t, loaded.Enabled)
+					assert.Zero(t, *loaded.Enabled)
+					for range 2 {
+						require.NoError(t, db.AutoMigrate(&model.Model{}))
+					}
+					require.NoError(t, db.First(&loaded, created.Id).Error)
+					assert.Zero(t, *loaded.Enabled)
+					loaded.Enabled = nil
+					recorder = modelManagementRequest(t, UpdateModelMeta, http.MethodPut, "/api/models/", loaded, &response)
+					require.True(t, response.Success, recorder.Body.String())
+					require.NoError(t, db.First(&loaded, created.Id).Error)
+					require.NotNil(t, loaded.Enabled)
+					assert.Zero(t, *loaded.Enabled, "old clients omitting enabled must not re-enable models")
+					for _, name := range []string{created.ModelName, created.ModelName + "@thinking:on"} {
+						enabled, err := model.IsModelEnabled(name)
+						require.NoError(t, err)
+						assert.False(t, enabled, name)
+					}
+					// Actual middleware rejects before selecting a channel or contacting upstream.
+					engine := gin.New()
+					engine.POST("/v1/chat/completions", middleware.Distribute(), func(c *gin.Context) { t.Error("disabled model reached relay"); c.Status(204) })
+					result := httptest.NewRecorder()
+					req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"model":"availability-model","messages":[]}`))
+					req.Header.Set("Content-Type", "application/json")
+					req.Header.Set("Accept-Language", "en")
+					engine.ServeHTTP(result, req)
+					assert.Equal(t, http.StatusForbidden, result.Code, result.Body.String())
+					assert.Contains(t, result.Body.String(), "currently disabled")
+					loaded.Enabled = common.GetPointer(1)
+					recorder = modelManagementRequest(t, UpdateModelMeta, http.MethodPut, "/api/models/", loaded, &response)
+					require.True(t, response.Success, recorder.Body.String())
+					enabled, err = model.IsModelEnabled(created.ModelName)
+					require.NoError(t, err)
+					assert.True(t, enabled)
+					for _, body := range []map[string]any{
+						{"model_name": "invalid-availability", "enabled": 2},
+						{"id": created.Id, "model_name": created.ModelName, "enabled": -1},
+					} {
+						handler, method := CreateModelMeta, http.MethodPost
+						if body["id"] != nil {
+							handler, method = UpdateModelMeta, http.MethodPut
+						}
+						recorder = modelManagementRequest(t, handler, method, "/api/models/", body, &response)
+						assert.False(t, response.Success, recorder.Body.String())
+					}
+					// Exact overrides prefix; prefix overrides suffix; suffix overrides contains.
+					// Same-rule overlap consistently selects the oldest rule.
+					rows := []model.Model{
+						{ModelName: "policy-", NameRule: model.NameRulePrefix, Enabled: common.GetPointer(0)},
+						{ModelName: "policy-overlap-", NameRule: model.NameRulePrefix, Enabled: common.GetPointer(1)},
+						{ModelName: "policy-exact", Enabled: common.GetPointer(1)},
+						{ModelName: "-tail", NameRule: model.NameRuleSuffix, Enabled: common.GetPointer(1)},
+						{ModelName: "middle", NameRule: model.NameRuleContains, Enabled: common.GetPointer(0)},
+					}
+					for i := range rows {
+						require.NoError(t, rows[i].Insert())
+					}
+					for _, tc := range []struct {
+						name    string
+						enabled bool
+					}{
+						{"policy-exact", true}, {"policy-child-tail", false}, {"policy-overlap-child", false},
+						{"middle-tail", true}, {"x-middle-x", false}, {"unmanaged-channel-model", true},
+					} {
+						enabled, err := model.IsModelEnabled(tc.name)
+						require.NoError(t, err)
+						assert.Equal(t, tc.enabled, enabled, tc.name)
+						filtered, err := model.FilterEnabledModelNames([]string{tc.name})
+						require.NoError(t, err)
+						assert.Equal(t, tc.enabled, len(filtered) == 1, tc.name)
+					}
+				})
+			}
 		})
 	}
 }

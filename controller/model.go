@@ -262,6 +262,12 @@ func ListModels(c *gin.Context, modelType int) {
 		userModelNames = append(userModelNames, modelName)
 	}
 
+	userModelNames, err = model.FilterEnabledModelNames(userModelNames)
+	if err != nil {
+		common.ApiErrorStatus(c, http.StatusInternalServerError, err)
+		return
+	}
+
 	ownerByModel := map[string]string{}
 	if len(ownerGroups) > 0 {
 		ownerByModel = getPreferredModelOwners(userModelNames, ownerGroups)

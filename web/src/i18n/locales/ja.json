@@ -7912,6 +7912,8 @@
     "Zhipu": "Zhipu",
     "Zhipu GLM": "Zhipu GLM",
     "Zhipu V4": "Zhipu V 4",
-    "Zoom": "ズーム"
+    "Zoom": "ズーム",
+    "Allow API access": "APIアクセスを許可",
+    "When disabled, users cannot use this model. Enabled by default.": "無効にすると、ユーザーはこのモデルを使用できません。デフォルトは有効です。"
   }
 }

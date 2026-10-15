@@ -120,6 +120,8 @@ func TestSelectResponsesWSChannelHonorsPinsAndFilters(t *testing.T) {
 // The WebSocket relay must admit the same model names as the HTTP distributor
 // when a token restricts models (reasoning suffixes and @modifiers included).
 func TestCheckResponsesWSModelAccessMatchesHTTPTokenLimits(t *testing.T) {
+	database := setupRelayChannelDB(t)
+	require.NoError(t, database.AutoMigrate(&model.Model{}))
 	for _, tc := range []struct {
 		model  string
 		status int
@@ -144,6 +146,26 @@ func TestCheckResponsesWSModelAccessMatchesHTTPTokenLimits(t *testing.T) {
 			assert.False(t, service.ShouldRetryRelayError(c, apiErr, 2))
 		})
 	}
+}
+
+func TestResponsesWSDisabledModelIsRejectedOnEveryEvent(t *testing.T) {
+	database := setupRelayChannelDB(t)
+	require.NoError(t, database.AutoMigrate(&model.Model{}))
+	require.NoError(t, i18n.Init())
+	metadata := model.Model{ModelName: "ws-switch-model", Enabled: common.GetPointer(1)}
+	require.NoError(t, database.Create(&metadata).Error)
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(http.MethodGet, "/v1/responses", nil)
+	assert.Nil(t, checkResponsesWSModelAccess(c, metadata.ModelName))
+	require.NoError(t, database.Model(&metadata).Update("enabled", 0).Error)
+	for _, name := range []string{metadata.ModelName, metadata.ModelName + "@thinking:on"} {
+		apiErr := checkResponsesWSModelAccess(c, name)
+		require.NotNil(t, apiErr)
+		assert.Equal(t, http.StatusForbidden, apiErr.StatusCode)
+		assert.False(t, service.ShouldRetryRelayError(c, apiErr, 2))
+	}
+	require.NoError(t, database.Model(&metadata).Update("enabled", 1).Error)
+	assert.Nil(t, checkResponsesWSModelAccess(c, metadata.ModelName))
 }
 
 func TestSelectResponsesWSChannelAcceptsNativeResponsesChannelTypes(t *testing.T) {

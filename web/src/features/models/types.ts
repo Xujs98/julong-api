@@ -49,6 +49,7 @@ export interface Model {
   endpoints?: string
   supported_endpoints?: string[]
   status: number
+  enabled?: number
   sync_official: number
   created_time: number
   updated_time: number
@@ -277,6 +278,7 @@ export const modelFormSchema = z.object({
   document_template_id: z.number().int().nonnegative().default(0),
   name_rule: z.number().min(0).max(3).default(0),
   status: z.boolean().default(true),
+  enabled: z.boolean().default(true),
   sync_official: z.boolean().default(true),
 })
 

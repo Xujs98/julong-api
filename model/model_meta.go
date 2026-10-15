@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/setting/ratio_setting"
 
 	"gorm.io/gorm"
 )
@@ -43,6 +44,7 @@ type Model struct {
 	DocumentTemplateID int            `json:"document_template_id" gorm:"index"`
 	SupportedEndpoints []string       `json:"supported_endpoints,omitempty" gorm:"-"`
 	Status             int            `json:"status" gorm:"default:1"`
+	Enabled            *int           `json:"enabled" gorm:"default:1"`
 	SyncOfficial       int            `json:"sync_official" gorm:"default:1"`
 	CreatedTime        int64          `json:"created_time" gorm:"bigint"`
 	UpdatedTime        int64          `json:"updated_time" gorm:"bigint"`
@@ -76,11 +78,17 @@ func (mi *Model) MatchesName(name string) bool {
 }
 
 // resolveModelMetadata preserves catalog precedence: exact, prefix, suffix,
-// then contains. The first matching record within a rule type wins.
+// then contains. The oldest record within a rule type wins, independent of query order.
 func resolveModelMetadata(records []Model, names []string) map[string]*Model {
+	sort.SliceStable(records, func(i, j int) bool {
+		return records[i].Id < records[j].Id
+	})
 	resolved := make(map[string]*Model)
 	for i := range records {
 		if records[i].NameRule == NameRuleExact {
+			if _, exists := resolved[records[i].ModelName]; exists {
+				continue
+			}
 			resolved[records[i].ModelName] = &records[i]
 		}
 	}
@@ -104,7 +112,7 @@ func resolveModelMetadata(records []Model, names []string) map[string]*Model {
 // to live routes, then aggregates concrete models for metadata rule rows.
 func FillModelSquareStates(rows []*Model, configured map[string][]int, connections []ModelConnection) error {
 	var metadata []Model
-	if err := DB.Find(&metadata).Error; err != nil {
+	if err := DB.Order("id ASC").Find(&metadata).Error; err != nil {
 		return err
 	}
 	nameSet := make(map[string]struct{}, len(configured))
@@ -245,11 +253,15 @@ func (mi *Model) Insert() error {
 		now := common.GetTimestamp()
 		mi.CreatedTime, mi.UpdatedTime = now, now
 		status, syncOfficial := mi.Status, mi.SyncOfficial
+		if mi.Enabled == nil {
+			enabled := 1
+			mi.Enabled = &enabled
+		}
 		if err := tx.Create(mi).Error; err != nil {
 			return err
 		}
 		mi.Status, mi.SyncOfficial = status, syncOfficial
-		return tx.Model(&Model{}).Where("id = ?", mi.Id).Updates(map[string]any{"status": status, "sync_official": syncOfficial}).Error
+		return tx.Model(&Model{}).Where("id = ?", mi.Id).Updates(map[string]any{"status": status, "sync_official": syncOfficial, "enabled": mi.Enabled}).Error
 	})
 }
 
@@ -271,9 +283,63 @@ func (mi *Model) Update() error {
 			return err
 		}
 		mi.UpdatedTime = common.GetTimestamp()
-		return tx.Model(&Model{}).Where("id = ?", mi.Id).
-			Select("model_name", "description", "icon", "tags", "vendor_id", "endpoints", "document_template_id", "status", "sync_official", "name_rule", "updated_time").Updates(mi).Error
+		fields := []string{"model_name", "description", "icon", "tags", "vendor_id", "endpoints", "document_template_id", "status", "sync_official", "name_rule", "updated_time"}
+		if mi.Enabled != nil {
+			fields = append(fields, "enabled")
+		}
+		return tx.Model(&Model{}).Where("id = ?", mi.Id).Select(fields).Updates(mi).Error
 	})
+}
+
+// IsModelEnabled applies metadata matching precedence to API requests.
+// Models without metadata remain available through their channel configuration.
+func IsModelEnabled(modelName string) (bool, error) {
+	modelName = strings.TrimSpace(modelName)
+	if modelName == "" || DB == nil {
+		return true, nil
+	}
+	names := []string{modelName, ratio_setting.RoutingMatchModelName(modelName)}
+	var metadata []Model
+	if err := DB.Select("id", "model_name", "name_rule", "enabled").
+		Where("name_rule <> ? OR model_name IN ?", NameRuleExact, names).Find(&metadata).Error; err != nil {
+		return false, err
+	}
+	resolved := resolveModelMetadata(metadata, names)
+	for _, name := range names {
+		if policy := resolved[name]; policy != nil && policy.Enabled != nil && *policy.Enabled == 0 {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
+// FilterEnabledModelNames preserves channel order and excludes disabled models,
+// including modifier variants of a disabled routing model.
+func FilterEnabledModelNames(modelNames []string) ([]string, error) {
+	if len(modelNames) == 0 || DB == nil {
+		return modelNames, nil
+	}
+	names := make([]string, 0, 2*len(modelNames))
+	for _, name := range modelNames {
+		names = append(names, name, ratio_setting.RoutingMatchModelName(name))
+	}
+	var metadata []Model
+	if err := DB.Select("id", "model_name", "name_rule", "enabled").Find(&metadata).Error; err != nil {
+		return nil, err
+	}
+	resolved := resolveModelMetadata(metadata, names)
+	filtered := make([]string, 0, len(modelNames))
+	for _, name := range modelNames {
+		policy, basePolicy := resolved[name], resolved[ratio_setting.RoutingMatchModelName(name)]
+		if policy != nil && policy.Enabled != nil && *policy.Enabled == 0 {
+			continue
+		}
+		if basePolicy != nil && basePolicy.Enabled != nil && *basePolicy.Enabled == 0 {
+			continue
+		}
+		filtered = append(filtered, name)
+	}
+	return filtered, nil
 }
 
 func (mi *Model) Delete() error {
