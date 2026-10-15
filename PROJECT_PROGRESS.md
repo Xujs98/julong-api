@@ -4,7 +4,7 @@
 > 详细 API、路由、配置和数据模型以 [DEVELOPMENT.md](./DEVELOPMENT.md) 为技术登记入口。
 > 代码与实际命令输出优先于旧文档、历史回复和截图；“代码已写”“本地可用”“已提交”“已上线”必须分开。
 
-最后更新：2026-10-15 07:45:00（Asia/Shanghai）
+最后更新：2026-10-15 10:31:46（Asia/Shanghai）
 项目根目录：`/Users/xujs/.docker_dir/new-api`
 
 ## 1. 新对话接续入口（必须先读）
@@ -22,15 +22,15 @@
 
 | 项目 | 状态（截至最后更新时间） | 依据与边界 |
 | --- | --- | --- |
-| 当前分支 / HEAD | `codex/upstream-sync-20261013` / `efa2da356` | 本地分支跟踪 `origin/codex/upstream-sync-20261013`；仅剩未跟踪 `web/pnpm-lock.yaml`，不属于本批功能 |
-| 上游整合 | 已包含在待合并分支，当前可快进至主分支 | `f99b63cfc` parents=`7d3fba2f4` + `ef60ef27f`；`origin/main...HEAD = 0 374`，主分支是当前 HEAD 祖先，无冲突路径；尚未推送到 main |
+| 当前分支 / HEAD | main / f0870f9d1（B09提交前） | origin/main已核实同SHA；B09待本轮提交，不处于merge；pnpm-lock和.bak排除交付 |
+| 上游整合 | main已包含此前功能分支提交 | 实际git和远端对比已纠正旧“尚待合并”快照，保留历史批次记录 |
 | 用户 GitHub 仓库 | origin = https://github.com/Xujs98/julong-api.git | upstream = https://github.com/QuantumNous/new-api.git，仅跟踪上游；不得把用户改动推到 upstream |
-| 本地服务 | 最新前端已重新构建并嵌入，PID49923监听3000，健康检查通过 | `GET /api/status success=true`；路由 `/models/document-templates` 返回首页回退及 `/static/js/index.5f11f9b712.js`；页面需管理员登录后验证真实管理交互 |
+| 本地服务 | 最新前端嵌入新Go产物，PID85506监听3000 | /api/status成功，6个首页JS/CSS与web/dist一致；B09已激活，真实管理员浏览器登录未实测 |
 | 模型广场按秒/按次价格 | 当前代码已实现，历史交付有验证记录 | 两项都有价格同时显示；只配一项只显示该项；模型名及分辨率价格区规则一致 |
 | 视频输入素材 | 已完成本地实现/定向回归、三库复验、浏览器预览和视频直链、最终重启 | SQLite3.50.4/MySQL5.7.44/PostgreSQL16.15最终矩阵8/8无Skip；图片及嵌入视频/音频正常、素材视频直链可播放；Safari/原生音频直链/线上公网未实测 |
 | 成品列阴影与滚轮 | 已完成（本地）；17项通过，Chromium已验证并激活；Safari待人工复核 | 独立复核10/10，主任务4文件17/17；Chromium明暗阴影、全列固定、滚轮/splitHeader已验；首页资源与dist一致，Safari无连接未实测 |
 | 项目进度入口 | 已完成（文档本地） | 本文 + AGENTS.md 必读入口；持续按批次更新 |
-| Git 提交 / 线上发布 | 分批提交已推至用户仓库功能分支；正在检查合并到 `main` | `origin/codex/upstream-sync-20261013` 指向 `efa2da356`；推送已成功。线上 `api.julongkj.top` 未部署/验证 |
+| Git 提交 / 线上发布 | 历史批次已在origin/main；B09待本轮提交/推送 | 不推upstream；api.julongkj.top未部署 |
 
 ## 3. 状态口径
 
@@ -144,8 +144,8 @@
 
 | 优先级 | 事项 | 下一步 | 禁止误报 |
 | --- | --- | --- | --- |
-| 待合并 | `codex/upstream-sync-20261013` → `origin/main` | 远端 main 是当前 HEAD 祖先（0/374），可 fast-forward；再次检查 main SHA 后推送；不 force-push |
-| 待合并 | B08：模型文档模板及全部获授权历史工作 | 代码、验证、进度/技术文档及本地重启完成 | 后端定向通过不等于全量 Go 测试通过；历史三库矩阵不冒充本轮实测；未登录未声称已点测；本地运行不等于线上发布 |
+| 已核实 | 此前功能分支已在main | 本轮main及origin/main均为f0870f9d1，历史待合并项已关闭 | 不据旧快照重复合并或覆盖现有工作 |
+| B09交付 | 素材管理UI/筛选与重建 | 本地验证/Go重启已完成，提交推送结果见B09最终检查点 | 不把全量侧栏旧失败/过滤Skip写成通过，不宣称生产部署 |
 | 已完成（本地） | B06：成品列阴影/滚轮 | Chromium真实组件验证和17项回归、构建重启均完成；Safari可用后人工复核 | 未宣称Safari已实测，旧实现不等于新增滚轮完成 |
 | 已本地验证 | B03：成品直链播放 | Range/嵌入播放/直接签名URL已验；线上及第三方工具部署后再验 | 单个已有视频成功不代表全部上游永久可用 |
 | 已完成（本地）/上线待验 | B04：素材/线上文档 | 最终三库8/8、回归、文档、浏览器图片/嵌入媒体/视频直链和重启已完成；部署配置公网地址后验上游访问 | Safari和原生音频直链未实测，不把本地成功等同线上付费端到端，不混淆素材与成品 |
@@ -218,3 +218,23 @@ B08：MD/DOCX 后端、管理 UI、模型绑定与广场调用文档已实现。
 ### 文档模板标签显示与 Git 交付接续 — 2026-10-15 08:30（Asia/Shanghai）
 
 用户截图指出文档模板没有与“模型/供应商/部署”呈现为同组标签。源码此前已注册该段，但标签允许换行、顺序夹在供应商与部署之间；运行服务亦早于当前 `web/dist`。现顺序调整为模型→供应商→部署→文档模板，标签栏单行并在窄屏内部横向滚动。新加section顺序测试；模板管理/选择器/顺序共14/14，`tsgo -b`、目标lint/format通过，Rsbuild构建和根Go构建成功。本地PID49923监听3000，`/api/status success=true`，返回最新bundle哈希。未取得管理员登录态，未声明已登录交互点测。Git分批提交：`298b2cf33`、`dfb2b1425`、`734a26746`；push至origin分支尝试2次均因网络无法连接github.com:443失败，已按规则留待下一任务；未推upstream。
+
+### B09：素材管理 UI、筛选与重新构建（2026-10-15，本地已激活，Git交付收尾）
+
+- 用户目标：素材管理时侧栏“任务日志”仍选中；管理员独立用户列；时间/用户名筛选；详情弹窗不溢出；重新构建 Go 并启动项目。
+- 接续核对：实际 main / f0870f9d1，未处于 merge；origin 已核实为 Xujs98/julong-api。之前代理有 9 个业务/翻译文件改动，尚无本批验证/构建；旧进度快照的功能分支/PID已过时，不据其覆盖代码。既有未跟踪 pnpm-lock.yaml 和 .bak 保留，不纳入交付。
+- 正在修正：侧栏 assets 未登记 activeUrls；筛选草稿不应立即请求；旧翻译误写到 translation 外；弹窗需要复用共享 Dialog 并限制媒体高度。现 PID79606 是 09:56 启动的 go run 旧产物。
+- 验证、构建、重启、提交/推送均待本轮实际执行，不宣称通过或上线。
+
+### B09本地验证与重建检查点 — 2026-10-15 10:31:46（Asia/Shanghai）
+
+- 完成：素材侧栏归属、独立用户列、时间/用户名搜索重置、列显隐、共享响应式预览；管理员仅本人由后端强制隔离。旧代理的翻译位置错误已撤销，七语言复用原键。
+- Go：根go build -ldflags "-X github.com/QuantumNous/new-api/common.Version=v1.0.0-julong.1" -o /tmp/julong-media-ui-rebuild-20261015/new-api . 通过；前端VITE_REACT_APP_VERSION=v1.0.0-julong.1 bun run build通过；旧79538/79606已停止，PID85506监听3000。状态成功、6资源与dist一致、匿名素材401，/tmp/julong-media-ui-rebuild-20261015/activation.json留证。
+- 三库：SQLite3.50.4、MySQL5.7.44、PostgreSQL16.15，专用临时库每库7例21/21无Skip；素材service/router定向亦通过。run_matrix.py内部命令和原始日志同目录；没有改schema/驱动/计费，不需迁移变更矩阵。
+- 前端：素材4项+侧栏媒体/审计9项定向13/13，6项被过滤Skip；完整两文件另有2个Security & Access无关旧期望失败，明确未通过，不删测试掩盖。typecheck、5文件目标oxlint/oxfmt通过，全量Go未运行。
+- 浏览器隔离真实组件夹具验证独立列/搜索/重置/列菜单和600×2400高图长URL预览；对话框768×690且scrollWidth=clientWidth，标题/复制/关闭均在视口。没有真实管理员登录态，不声称已登录页面点测；Safari/生产未测。
+- DEVELOPMENT.md同批同步API新参数、页面组件、验证和变更日志。仅提交本批业务/集中回归及文档；既有pnpm-lock及.bak保留未纳入。Git交付待执行，不宣称生产上线。
+
+### B09验证收尾
+
+完整两文件实际重跑：17通过/2失败（Security & Access旧期望），无Skip；素材4例全部通过。定向13通过/6按名称过滤不运行。数据库最终重跑21/21无Skip、版本原始输出已记录，controller/router/service三包通过。最终typecheck、目标lint/format、git diff --check通过；PID85506持续健康。临时浏览器布局夹具完成验证后关闭，不改真实用户或认证配置。

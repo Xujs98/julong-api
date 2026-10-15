@@ -25,7 +25,7 @@
 | 后端 Gin API | 进行中 | 保留上游核心功能，并叠加 Julong 二开功能。本地后端通常监听 `:3000`。 |
 | 默认前端 UI | 进行中 | React 19 + Rsbuild + TanStack Router，代码在 `web`。本地开发服务通常是 `:5173`。 |
 | Classic 前端 | 已移除 | 跟随上游架构调整，只保留 `web/` 单一前端。 |
-| 上游同步 | 功能分支已推送，正在按用户授权合并到用户仓库主分支 | 2026-10-13 合并 `QuantumNous/new-api@ef60ef27f36e418143fa4abf0c9025ba6f17fba7`（发行版 `v1.0.0-rc.44` 及后续主线提交）。`origin/main` 是当前功能分支 HEAD 的祖先，比较 `0/374`，可 fast-forward；尚未执行。未推 QuantumNous upstream，未线上部署。详见 `PROJECT_PROGRESS.md`。 |
+| 上游同步 | 主分支已包含既有功能分支提交（本轮核对） | 2026-10-13 合并 `QuantumNous/new-api@ef60ef27f36e418143fa4abf0c9025ba6f17fba7`（发行版 `v1.0.0-rc.44` 及后续主线提交）。`origin/main` 本轮核实已为 f0870f9d1，main 已包含原功能分支全部提交（原0/374待快进状态已关闭）。未推 QuantumNous upstream，未线上部署。详见 `PROJECT_PROGRESS.md`。 |
 | Docker 部署 | 进行中 | `docker-compose.yml` 使用 `qq1371446705/julong-api:latest`，包含 Postgres、Redis，宿主端口 `3388`。 |
 | 代理功能 | 已实现，仍需持续 QA | 代理折扣、代理生成兑换码、代理所属用户、代理充值链接、退款日志等。 |
 | 错误反馈工单 | 已实现 | 500 页面跳转 `/error-report`，管理员/root 在 `/error-reports` 查看。 |
@@ -991,7 +991,7 @@ curl -X DELETE \
 | `/api/deployments` | settings、test、CRUD、硬件/地区/副本辅助、日志/容器详情 | 管理员/root | IONet/模型部署管理 | 完成 |
 | `/api/mj` | `GET /`、`GET /self` | 管理员或用户 | Midjourney 任务日志 | 完成 |
 | `/api/task` | `GET /`、`GET /self` | 管理员或用户 | 通用异步任务日志 | 完成 |
-| `/api/media-assets` | `GET` → `ListMediaAssets` | 须登录；普通用户仅本人、管理员全部 | 参数 `page`（默认1）、`page_size`（默认50，最大200）；返回 `{success,data:{items,total,page,page_size}}`，每项含 asset_id/user_id/username/source_type/media_type/mime_type/url/size/created_at/expires_at，不返回本地文件路径 | 完成 |
+| `/api/media-assets` | `GET` → `ListMediaAssets` | 须登录；普通用户仅本人、管理员全部 | 参数 `page`（默认1）、`page_size`（默认50，最大200）、start_time/end_time（可选Unix秒，创建时间闭区间）、username（管理员全站视图按用户名包含匹配）、view_scope（self仅本人；管理员默认全站，普通用户不能扩大范围）；返回 `{success,data:{items,total,page,page_size}}`，每项含 asset_id/user_id/username/source_type/media_type/mime_type/url/size/created_at/expires_at，不返回本地文件路径 | 完成 |
 | `/api/media-assets/:asset_id` | `DELETE` → `DeleteMediaAsset` | 仅管理员，普通用户403 | 路径参数 asset_id；删除文件及元数据，公网素材只删元数据；成功 `{success:true}`，不存在404 | 完成 |
 | `/api/media-assets/:asset_id/content` | `GET/HEAD` → `MediaAssetContent` | 高熵素材链接公开读取，供上游抓取 | 路径参数 asset_id，可传 Range/条件请求头；成功200或206原始媒体字节，HEAD无正文，已过期410、删除/未知/外部公网记录404；只此内容路径排除API gzip，保留原始 Content-Length/Content-Range；no-store/nosniff/sandbox，CSP仅允许同源媒体。不是生成视频的过期接口 | 完成 |
 | `/api/task/:task_id/detail` | `GET` → `GetDashboardTaskDetail` | 登录用户仅本人；管理员可查全站 | 路径参数 `task_id`；返回 `{success,data}`，data 包含本地 task_id/id、status/progress、模型、时间、duration/seconds、delivery_status、失败原因及可用时本地签名 result_url；非管理员不返回 platform；只读已保存的最新轮询状态，不创建视频或触发付费请求；响应禁止缓存 | 完成 |
@@ -1222,7 +1222,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 | `/keys` | `_authenticated/keys/index.tsx` | API Keys | 用户 | 完成 |
 | `/ledger` | `_authenticated/ledger/index.tsx` | 运营账本：日期查询、六项汇总、可点击配置的预估倍率、CSV 下载、秒级日期时间记录增改和 10 秒确认单项/批量删除 | Root 或 `ledger.read`；写入按钮及预估倍率设置需 `ledger.write`，删除控件需 `ledger.delete` | 完成 |
 | `/usage-logs/*` | `_authenticated/usage-logs/*` | 使用日志/任务日志/绘图日志 | 用户/管理员视图不同 | 完成 |
-| `/usage-logs/assets` | `_authenticated/usage-logs/$section.tsx` + `media-assets-table.tsx` | 视频输入素材列表、预览、复制 URL、删除 | 用户查看本人；管理员查看全部并可手动删除 | 完成 |
+| `/usage-logs/assets` | `_authenticated/usage-logs/$section.tsx` + `media-assets-table.tsx` | 视频输入素材列表、提交时间范围/用户名筛选、列显隐、预览、复制 URL、删除 | 用户查看本人；管理员全站视图显示独立用户列，支持切换仅本人；可手动删除 | 完成 |
 | `/wallet` | `_authenticated/wallet/index.tsx` | 钱包、充值、兑换码 | 用户 | 完成 |
 | `/invoices` | `_authenticated/invoices/index.tsx` | 自助发票：仅勾选已启用来源，多选金额达到门槛后打开申请表；填写普通/专用票、粘贴识别、公司名/税号/接收邮箱/备注，上传与预览 1-3 张支付截图。邮箱默认绑定值且可更改；管理员查看开票资料和私有截图，保留原审核、交付、取消、撤回功能 | 用户；管理列表仅管理员/root | 完成 |
 | `/profile` | `_authenticated/profile/index.tsx` | 个人资料/安全 | 用户 | 完成 |
@@ -1274,7 +1274,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 | `keys` | `index.tsx`、`custom-endpoints.tsx`、`api-keys-table.tsx`、`api-keys-columns.tsx`、`api-keys-mutate-drawer.tsx`、`api-key-group-combobox.tsx`、mutate/delete dialogs | 用户 API key 管理；自定义端点区保留高度，列表占用页面剩余高度并复用共享表格的纵向滚动，桌面固定表头，桌面/移动端分页始终在页脚；令牌分组下拉框和列表倍率统一读取 `/api/user/self/groups`，可配置展示真实特殊倍率或基础定价分组倍率 | `/api/token*`、`/api/user/self/groups` | 完成 |
 | `ledger` | `index.tsx`、`api.ts`、`types.ts`、`ledger-summary-cards.tsx`、`ledger-estimate-ratio-dialog.tsx`、`ledger-entry-dialog.tsx`、`ledger-export-menu.tsx`、`ledger-delete-dialog.tsx` | 账本日期筛选、统一预估倍率设置、六项汇总卡片、秒级日期时间、分页表格、权限感知的新增/编辑/单项与批量删除、10 秒确认和四种 CSV 下载范围 | `/api/ledger*`；复用使用日志日期范围选择器、用户权限矩阵和全站额度/货币格式 | 完成 |
 | `usage-logs` | `usage-logs-table.tsx`、`usage-logs-export-menu.tsx`、`cost-breakdown-tooltip.tsx`、普通/绘图/生图/任务 columns、倍率审计 libs | 普通消费日志、绘图、生图和媒体任务日志；下载菜单支持本页、今日、自定义时间和全部 CSV。用户和管理员均展示模型倍率调整后的 Token；管理员/root 悬浮 Tokens 查看真实 Token，悬浮费用查看原始费用及分组特殊倍率/模型倍率收益。原有普通用户倍率展示逻辑保持不变 | `/api/log*`、`/api/log/export`、`/api/log/self/export`、`/api/mj`、`/api/image-generation-logs*`、`/api/task` | 完成 |
-| `media-assets-table.tsx` | `usage-logs/components/media-assets-table.tsx` | Base64/公网图片、视频、音频的彩色分类，提交/过期时间，详情预览、复制 URL；管理员可删除；复用 StaticDataTable、CopyButton、ConfirmDialog | `/api/media-assets` | 完成 |
+| `media-assets-table.tsx` | `usage-logs/components/media-assets-table.tsx` | Base64/公网图片、视频、音频的彩色分类，独立用户列（管理员全站视图）、提交/过期时间；复用 LogsFilterToolbar/CompactDateTimeRangePicker 按提交时间和用户名搜索/重置，查看菜单控制列显隐；详情复用共享 Dialog + 固定URL复制栏，图片/视频限制55dvh及容器宽度；管理员可删除；沿用 StaticDataTable、CopyButton、ConfirmDialog | `/api/media-assets` | 完成 |
 | `wallet` | recharge cards、subscription cards、affiliate rewards、redemption hook | 钱包充值、兑换码、订阅 | `/api/user/topup*`、`/api/subscription*`、支付 API | 完成 |
 | `invoices` | `index.tsx`、`api.ts`、`types.ts`、`apply-invoice-dialog.tsx`、`invoice-payment-proofs.tsx`、`lib/invoice-application.ts`、`eligible-credits-table.tsx`、`applications-table.tsx`、`cancel-invoice-dialog.tsx`、`manage-invoice-dialog.tsx`、`complete-invoice-dialog.tsx`、`withdraw-invoice-dialog.tsx` | 用户多选符合配置来源的额度记录，通过申请表填写普通/专用票、公司、税号、可编辑接收邮箱和备注；本地解析粘贴资料，地址/电话/银行信息保留到备注；1-3 张付款截图选择、预览与私有查看；查看历史；待确认申请可二次确认后取消，已完成申请可下载交付附件。管理员/root 可打开全部状态申请查看开票资料、私有支付截图和卡片式账单来源明细，来源请求 ID 一键复制且长文本完整换行；选择已完成后在详情内上传附件、确认发送邮件并保存邮件模板设置，最终保存时发送；已完成详情可二次确认撤回，删除错误附件并恢复待确认 | `/api/user/invoice*`；React Query、Card、Checkbox、Dialog、AlertDialog、Clipboard、Blob 下载、multipart、i18n | 完成 |
 | `redemption-codes` | `redemptions-generated-dialog.tsx`、`data-table-bulk-actions.tsx`、`redemptions-multi-delete-dialog.tsx`、表格和编辑弹窗 | 管理员/代理兑换码管理；刚生成的兑换码支持仅复制代码、复制名称和代码、一键下载；多选支持仅复制代码、下载和管理员 5 秒确认批量删除 | `/api/redemption*`、`POST /api/redemption/batch`、`/api/user/agent/topup-link` | 完成 |
@@ -1510,6 +1510,19 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 - 本轮 4 个测试文件 17 项通过，typecheck/目标 lint/format/build、Go build 通过；Chromium 真实组件夹具确认明暗阴影可见、成功/失败/暂无内容占位、列内滚轮与 splitHeader，x/right 保持稳定。Safari 当前工具无连接，未实测。后端已重启 PID 5915，状态成功、首页 6 个资源与最新构建 SHA256 一致。
 - 用户切换 VPN DNS 后，本轮确认 suanliai.top 使用真实 IP；已有视频内容链接重启前后均返回 206/video/mp4，Range 0-1023/11173528，MP4 头正确。Chromium 中嵌入播放以及直接打开同一成品 URL 均 readyState=4、1280×720、时长14.08秒、无媒体错误，点击播放后 paused=false、currentTime 增长。未生成新付费任务。
 
+### 素材管理筛选与 Go 重新构建（2026-10-15，B09）
+
+- 修复侧栏“任务日志”选中状态：use-sidebar-data.activeUrls/configUrls 纳入 /usage-logs/assets，use-sidebar-config 将该路由归属 console.task；绘图/生图/任务原映射保留。
+- 管理员全站视图独立“用户”列，沿用头像、敏感信息开关及用户详情入口；素材列只放来源/媒体类型。普通用户和“仅本人”视图不展示其他用户名，查询缓存按用户/视图隔离。
+- 时间/用户名筛选先编辑草稿，点击搜索或Enter才提交URL并重新请求；默认今天至当前时间后一小时，重置恢复默认时间/清用户名。前端毫秒转换Unix秒；数据库使用GORM子查询，用户名无匹配返回空，避免之前的Pluck错误被当成空结果或生成超大IN参数列表；分页total基于同一过滤条件。view_scope=self服务端强制本人，不改变现有管理员删除权限。
+- “查看”复用 DataTableViewOptions 与真实列显隐状态，而非空菜单。详情复用共享 components/dialog.tsx（已具备响应式宽度、标题/关闭及滚动），不新增通用弹窗。媒体object-contain并限制55dvh/容器宽度，URL在不收缩的footer中截断显示，复制保留完整内容。
+- 继续使用七语言已有“Filter by username”等键；撤销之前代理误写到translation外的重复键及无关转义变动，未新增文案或改受保护归属信息。
+- 验证：controller/media_asset_test.go 同一回归集真实SQLite3.50.4/MySQL5.7.44/PostgreSQL16.15，每库7例（时间边界/组合用户名/空结果/分页与total/旧API/普通用户隔离/管理员仅本人）共21/21，无Skip；service素材回归及router真实Range/HEAD回归通过。命令：python3 /tmp/julong-media-ui-rebuild-20261015/run_matrix.py（专用临时库，内部 go test ./controller ./router ./service -run 'Test(MediaAssetListFiltersDatabaseMatrix|MediaAssetContent|PersistTaskMedia|MediaDataURL|ValidateUserMediaURL)' -count=1 -v）。本轮只改查询，不改schema/迁移/驱动/计费。
+- 前端：素材4例和相关侧栏/审计9例通过（定向13/13；其余6例过滤跳过，不作为通过）。完整两文件运行另有2项既有Security & Access期望失败（当前项目侧栏已无该入口，含发票入口）；记录失败，不扩大修改无关导航。typecheck、5文件oxlint/oxfmt、Rsbuild生产构建、根go build通过；未跑全量Go测试。
+- 浏览器：隔离4325夹具导入真实素材组件和新生产CSS（无真实用户/鉴权绕过），验证独立列、搜索空结果/重置、查看列菜单；600×2400高图+长URL详情为768×690、scrollWidth=clientWidth=768，媒体完整缩放且标题/关闭/复制均可见。3000项目仅到登录页，未冒称真实管理员会话点测；Safari未测。
+- 本地运行：重新构建前端后go build嵌入，旧go-run PID79538/79606已停止；新二进制 ~/.codex/tmp/julong-api-runtime/new-api.media-ui-20261015，PID85506监听3000，GET /api/status success=true、version=v1.0.0-julong.1，首页6个JS/CSS与web/dist逐字节一致；匿名素材API401。SQLite备份及构建/测试/激活证据在/tmp/julong-media-ui-rebuild-20261015/，运行日志在~/.codex/tmp/julong-api-runtime/media-ui-server-20261015.log。
+- Git：只提交本批实现/回归和两份开发进度文档，排除既有pnpm-lock及.bak；提交/推送结果见PROJECT_PROGRESS.md。本地启动不等于生产部署，api.julongkj.top未更新。
+
 ### 输入素材验收与媒体内容修复（2026-10-15 续验）
 
 - 真实路由中的 API gzip 曾将素材 Range 的原始字节再次压缩，HEAD 也产生 gzip 正文；`router/api-router.go` 仅排除 `/api/media-assets/[^/]+/content`，普通 API JSON 仍压缩。`controller/media_asset.go` 允许 `media-src 'self'`，供原生视频/音频页面重新请求自身媒体，继续 sandbox、禁止脚本/其他内容和 MIME 嗅探。没有更改素材权限、模型计费、数据库结构或生成成品生命周期。
@@ -1536,6 +1549,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 
 | 日期 | 变更 | 更新文件/API/模型 | 验证 |
 | --- | --- | --- | --- |
+| 2026-10-15 | B09：素材管理侧栏选中、独立用户列、提交时间/用户名筛选、列显隐及响应式预览；重建前端和Go后启动 | 素材controller/model/UI、sidebar hooks、集中回归、DEVELOPMENT.md/PROJECT_PROGRESS.md | 三库21/21、相关UI13/13、typecheck/目标lint/format/build通过；完整侧栏有2项无关旧期望失败；PID85506/健康/6资源一致，未生产部署 |
 | 2026-10-15 | 修复素材gzip Range/HEAD、原生媒体sandbox源匹配、非素材字段误判及解码前Base64单文件/总量限制；补完整API合同和验收证据 | `router/api-router.go`、素材控制器/服务与现有测试、`controller/video_proxy.go`、`controller/task_generic_test.go`、`router/media_asset_router_test.go`、DEVELOPMENT.md、PROJECT_PROGRESS.md | 三包定向回归无Skip、最终三库8/8、素材前端2/2；Chromium图片/嵌入媒体/素材视频直链通过；根Go构建和PID15826最终重启、健康/6资源hash/匿名401/既有视频206通过。未改schema/计费/生成视频生命周期，未上线。 |
 | 2026-10-15 | 将通用视频接口文档适配为本站线上接入文档，补全 Base64 输入素材托管/保留期、face 默认值、成品签名地址与带鉴权地址区别、Python 轮询和流式下载及部署边界 | 根 `全站通用视频接口文档.md`、`视频生成使用指南.md`、PROJECT_PROGRESS.md | 对照当前算力插件、宿主渲染、素材服务/控制器和任务签名 URL 实现，语法/路径/敏感凭证与空白检查；文档不宣称线上部署 |
 | 2026-10-15 | 成品列左侧阴影使用独立渐变，修复 Chromium 折叠表格阴影差异；成品列内滚轮控制横向，其余滚动行为不变 | 共享 DataTableView/DataTablePage、column-pinning、use-horizontal-wheel-scroll、任务日志、CSS、回归测试、PROJECT_PROGRESS.md | 17/17 前端回归、typecheck/目标 lint/format、前端和Go构建通过；Chromium 真实组件验证；PID 5915 重启与6资源 hash验证。Safari 未实测，无API/DB/价格变更。 |

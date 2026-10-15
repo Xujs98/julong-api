@@ -126,11 +126,16 @@ export function useSidebarData(): SidebarData {
           {
             title: t('Task Logs'),
             url: '/usage-logs/task',
-            activeUrls: ['/usage-logs/drawing', '/usage-logs/image'],
+            activeUrls: [
+              '/usage-logs/drawing',
+              '/usage-logs/image',
+              '/usage-logs/assets',
+            ],
             configUrls: [
               '/usage-logs/drawing',
               '/usage-logs/image',
               '/usage-logs/task',
+              '/usage-logs/assets',
             ],
             icon: ListTodo,
           },

@@ -34,13 +34,16 @@ func mediaAssetResponse(asset model.MediaAsset) gin.H {
 func ListMediaAssets(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	limit, _ := strconv.Atoi(c.DefaultQuery("page_size", "50"))
+	startTime, _ := strconv.ParseInt(c.Query("start_time"), 10, 64)
+	endTime, _ := strconv.ParseInt(c.Query("end_time"), 10, 64)
+	username := c.Query("username")
 	if page < 1 {
 		page = 1
 	}
 	if limit < 1 || limit > 200 {
 		limit = 50
 	}
-	assets, total, err := model.ListMediaAssets(c.GetInt("id"), mediaAssetAdmin(c), (page-1)*limit, limit)
+	assets, total, err := model.ListMediaAssets(c.GetInt("id"), mediaAssetAdmin(c) && c.Query("view_scope") != "self", (page-1)*limit, limit, startTime, endTime, username)
 	if err != nil {
 		common.ApiError(c, err)
 		return

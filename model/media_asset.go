@@ -48,10 +48,19 @@ func (asset *MediaAsset) BeforeCreate(_ *gorm.DB) error {
 	return nil
 }
 
-func ListMediaAssets(userID int, admin bool, offset, limit int) ([]MediaAsset, int64, error) {
+func ListMediaAssets(userID int, admin bool, offset, limit int, startTime, endTime int64, username string) ([]MediaAsset, int64, error) {
 	query := DB.Model(&MediaAsset{})
 	if !admin {
 		query = query.Where("user_id = ?", userID)
+	} else if username != "" {
+		users := DB.Model(&User{}).Select("id").Where("username LIKE ?", "%"+username+"%")
+		query = query.Where("user_id IN (?)", users)
+	}
+	if startTime > 0 {
+		query = query.Where("created_at >= ?", startTime)
+	}
+	if endTime > 0 {
+		query = query.Where("created_at <= ?", endTime)
 	}
 	var total int64
 	if err := query.Count(&total).Error; err != nil {

@@ -180,3 +180,26 @@ describe('audit log sidebar entry', () => {
     expect(titles).toContain('Audit Logs')
   })
 })
+
+describe('media assets task navigation', () => {
+  it('keeps Task Logs selected on assets including filtered URLs', () => {
+    const { result } = sidebarFor()
+    const items = result.current.flatMap((group) => group.items)
+    expect(
+      items
+        .filter((item) =>
+          checkIsActive('/usage-logs/assets?username=alice', item)
+        )
+        .map((item) => item.title)
+    ).toEqual(['Task Logs'])
+  })
+
+  it('hides the task entry when all task sections are disabled', () => {
+    const { result } = sidebarFor({
+      console: { enabled: true, task: false, midjourney: false },
+    })
+    expect(
+      result.current.flatMap((group) => group.items).map((item) => item.title)
+    ).not.toContain('Task Logs')
+  })
+})
