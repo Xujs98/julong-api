@@ -272,5 +272,5 @@ B08：MD/DOCX 后端、管理 UI、模型绑定与广场调用文档已实现。
 ### B11 Git 交付检查点（2026-10-15 22:04:25，Asia/Shanghai）
 
 - 本地验证和重启已完成；当前 PID 17798 监听 3000，旧 PID 54247 已停止。
-- 尚未提交/推送：下一步仅提交本批模型开关、测试和文档修改，排除既有 controller/media_asset.go.bak、web/pnpm-lock.yaml、web/src/features/usage-logs/components/media-assets-table.tsx.bak。
-- 未进行线上查询或生产部署；本地健康检查不等同线上发布。
+- 模型开关、测试和文档修改已提交为 8a281bc28，并成功推送 origin/main；既有 controller/media_asset.go.bak、web/pnpm-lock.yaml、web/src/features/usage-logs/components/media-assets-table.tsx.bak 未纳入。
+- 未进行线上业务查询或生产部署；本地健康检查不等同线上发布。
