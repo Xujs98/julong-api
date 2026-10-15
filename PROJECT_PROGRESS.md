@@ -22,7 +22,7 @@
 
 | 项目 | 状态（截至最后更新时间） | 依据与边界 |
 | --- | --- | --- |
-| 当前分支 / HEAD | main / 88b438c7e（B13提交前） | B11/B12已交付；B13功能及验证完成待Git交付，不处于merge，三个既有未跟踪文件保留 |
+| 当前分支 / HEAD | main / 0e347030e（B13功能提交） | B11/B12/B13已推送origin/main，不处于merge，三个既有未跟踪文件保留 |
 | 上游整合 | main已包含此前功能分支提交 | 实际git和远端对比已纠正旧“尚待合并”快照，保留历史批次记录 |
 | 用户 GitHub 仓库 | origin = https://github.com/Xujs98/julong-api.git | upstream = https://github.com/QuantumNous/new-api.git，仅跟踪上游；不得把用户改动推到 upstream |
 | 本地服务 | B13最新前端嵌入Go产物，PID48103监听3000 | /api/status成功、6个首页JS/CSS与web/dist一致；真实管理员浏览器登录未实测 |
@@ -30,7 +30,7 @@
 | 视频输入素材 | 已完成本地实现/定向回归、三库复验、浏览器预览和视频直链、最终重启 | SQLite3.50.4/MySQL5.7.44/PostgreSQL16.15最终矩阵8/8无Skip；图片及嵌入视频/音频正常、素材视频直链可播放；Safari/原生音频直链/线上公网未实测 |
 | 成品列阴影与滚轮 | 已完成（本地）；17项通过，Chromium已验证并激活；Safari待人工复核 | 独立复核10/10，主任务4文件17/17；Chromium明暗阴影、全列固定、滚轮/splitHeader已验；首页资源与dist一致，Safari无连接未实测 |
 | 项目进度入口 | 已完成（文档本地） | 本文 + AGENTS.md 必读入口；持续按批次更新 |
-| Git 提交 / 线上发布 | B11/B12已推送origin/main；B13交付见文末 | 不推upstream；api.julongkj.top未部署 |
+| Git 提交 / 线上发布 | B13功能0e347030e已推送origin/main | 不推upstream；api.julongkj.top未部署 |
 
 ## 3. 状态口径
 
@@ -302,3 +302,9 @@ B08：MD/DOCX 后端、管理 UI、模型绑定与广场调用文档已实现。
 - 复用审核：共享Dialog、CopyButton、SettingsSection、Input/Select及原客服弹窗；新SupportQRCodeField只是群文件草稿组件。后台数据加载失败禁止保存，避免把错误当空列表覆盖；已登录才显示客服按钮。
 - 边界：未取得真实管理员浏览器登录态；组件交互和HTTP已测，真实浏览器端到端/手机扫码/生产未验证。无全量Go测试或生产部署声明。不继续用户已暂停的其它任务。
 - DEVELOPMENT.md同步API合同、持久化目录、配置、组件与验证。Git提交/推送待执行；仅本轮文件，原.bak/pnpm-lock不纳入。
+
+
+### B13 Git交付（2026-10-16）
+
+- 功能/测试/文档提交0e347030e已成功推送origin/main，首次push成功；未推upstream、未force。PID48103本地健康；api.julongkj.top未部署。
+- 最终工作区只保留原有未跟踪controller/media_asset.go.bak、web/pnpm-lock.yaml、media-assets-table.tsx.bak；未修改或提交这些文件。此交付记录随后单独同步。
