@@ -22,7 +22,7 @@
 
 | 项目 | 状态（截至最后更新时间） | 依据与边界 |
 | --- | --- | --- |
-| 当前分支 / HEAD | main / 8e9a702ce（B09功能提交） | origin/main已推送B09功能提交，不处于merge；pnpm-lock和.bak排除交付 |
+| 当前分支 / HEAD | main / b252d658d（B10功能提交） | origin/main已推送B09功能提交，不处于merge；pnpm-lock和.bak排除交付 |
 | 上游整合 | main已包含此前功能分支提交 | 实际git和远端对比已纠正旧“尚待合并”快照，保留历史批次记录 |
 | 用户 GitHub 仓库 | origin = https://github.com/Xujs98/julong-api.git | upstream = https://github.com/QuantumNous/new-api.git，仅跟踪上游；不得把用户改动推到 upstream |
 | 本地服务 | 最新前端嵌入新Go产物，PID85506监听3000 | /api/status成功，6个首页JS/CSS与web/dist一致；B09已激活，真实管理员浏览器登录未实测 |
@@ -225,7 +225,7 @@ B08：MD/DOCX 后端、管理 UI、模型绑定与广场调用文档已实现。
 - 实现：视频成品卡片在自身生命周期内生成随机文件名并固定 .mp4 后缀，下载 URL 增加 download=video 标记；后端只在已确认视频类型且标记有效时覆盖上游 Content-Disposition，避免供应商文件名覆盖随机名称。图片、音频和普通文件下载行为保持不变；媒体字节、播放、Range、HEAD、鉴权、数据库和计费不变。
 - 验证：视频任务组件定向测试 8/8，任务日志相关两文件 15/15；控制器媒体代理/随机 MP4 Content-Disposition/Range/data URL GET-HEAD 定向测试通过；typecheck、目标 oxlint、oxfmt、git diff --check、前端生产构建、根 Go 构建均通过。
 - 本地运行：重建并启动新 Go 二进制，PID 54247 监听 3000；GET /api/status 返回 success=true、版本 v1.0.0-julong.1。未修改用户数据，未生产部署。
-- Git：本批提交并推送至 origin/main 的结果在本批末尾补记；既有 controller/media_asset.go.bak、web/pnpm-lock.yaml、web/src/features/usage-logs/components/media-assets-table.tsx.bak 未跟踪文件排除。
+- Git：提交 b252d658d（fix: randomize task video download filenames）已成功推送至 origin/main；未推送 upstream、未 force-push。既有 controller/media_asset.go.bak、web/pnpm-lock.yaml、web/src/features/usage-logs/components/media-assets-table.tsx.bak 未跟踪文件排除。
 
 ### B09：素材管理 UI、筛选与重新构建（2026-10-15，本地已激活，功能已推送）
 
