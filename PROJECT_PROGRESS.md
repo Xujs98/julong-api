@@ -4,7 +4,7 @@
 > 详细 API、路由、配置和数据模型以 [DEVELOPMENT.md](./DEVELOPMENT.md) 为技术登记入口。
 > 代码与实际命令输出优先于旧文档、历史回复和截图；“代码已写”“本地可用”“已提交”“已上线”必须分开。
 
-最后更新：2026-10-16 19:17（Asia/Shanghai）
+最后更新：2026-10-16 19:22（Asia/Shanghai）
 项目根目录：`/Users/xujs/.docker_dir/new-api`
 
 ## 1. 新对话接续入口（必须先读）
@@ -22,7 +22,7 @@
 
 | 项目 | 状态（截至最后更新时间） | 依据与边界 |
 | --- | --- | --- |
-| 当前分支 / HEAD | main / bdba71e34（B15本地已完成；Git交付待执行） | B14已实现、验证、本地激活并推送；既有未跟踪内容保留；既有未跟踪文件保留 |
+| 当前分支 / HEAD | main / B15功能8a672a54f（交付记录提交随后保存；实际HEAD以git为准） | B15已实现、定向验证、本地激活并推送；四项既有未跟踪内容保留 |
 | 上游整合 | main已包含此前功能分支提交 | 实际git和远端对比已纠正旧“尚待合并”快照，保留历史批次记录 |
 | 用户 GitHub 仓库 | origin = https://github.com/Xujs98/julong-api.git | upstream = https://github.com/QuantumNous/new-api.git，仅跟踪上游；不得把用户改动推到 upstream |
 | 本地服务 | B15最新前端嵌入Go产物，PID32714监听3000 | /api/status成功、6个首页JS/CSS与web/dist一致、匿名黑名单管理401；真实管理员浏览器登录未实测 |
@@ -30,9 +30,9 @@
 | 视频输入素材 | 已完成本地实现/定向回归、三库复验、浏览器预览和视频直链、最终重启 | SQLite3.50.4/MySQL5.7.44/PostgreSQL16.15最终矩阵8/8无Skip；图片及嵌入视频/音频正常、素材视频直链可播放；Safari/原生音频直链/线上公网未实测 |
 | 成品列阴影与滚轮 | 已完成（本地）；17项通过，Chromium已验证并激活；Safari待人工复核 | 独立复核10/10，主任务4文件17/17；Chromium明暗阴影、全列固定、滚轮/splitHeader已验；首页资源与dist一致，Safari无连接未实测 |
 | 管理员日志与Root隐私 | B14本地已完成，已推送origin/main | 四项独立跨账户权限、Root五类日志过滤和详情保护；三库查询/会话验证、前端54项及构建/重启通过；全量测试及真实登录浏览器未验收 |
-| 禁用账户全站防护 | B15本地已完成，待Git交付 | 全站IP/可信身份拦截、自动追封、SSRF页独立入站名单、登录IP记录；三库与登录追加回归通过，人机验证需真实密钥，未上线 |
+| 禁用账户全站防护 | B15本地已完成，功能已推origin/main | 全站IP/可信身份拦截、自动追封、SSRF页独立入站名单、登录IP记录；三库与登录追加回归通过，人机验证需真实密钥，未上线 |
 | 项目进度入口 | 已完成（文档本地） | 本文 + AGENTS.md 必读入口；持续按批次更新 |
-| Git 提交 / 线上发布 | B14功能8c9403bae已推送origin/main | 不推upstream；api.julongkj.top未部署 |
+| Git 提交 / 线上发布 | B15功能8a672a54f已推送origin/main | 不推upstream；api.julongkj.top未部署 |
 
 ## 3. 状态口径
 
@@ -371,3 +371,10 @@ B08：MD/DOCX 后端、管理 UI、模型绑定与广场调用文档已实现。
 - 本地旧PID24268已正常停止，新PID32714监听3000，/api/status success=true，首页6项JS/CSS SHA256与web/dist一致，新管理接口匿名拒绝。证据/tmp/julong-site-ban-20261016/activation.json。未部署api.julongkj.top，不将本地重启当作线上防御生效。
 - DEVELOPMENT.md同步GET/PUT接口参数/响应/权限、禁用及IP统计变化、Cookie语义、组件复用、SSRF出入站分离、共享IP/匿名识别/CDN缓存边界和验证码开启方式；稳定ASVS联网核实与真实浏览器/线上验证码验收仍有限制。
 - Git交付待执行：仅B15范围，保留并排除controller/media_asset.go.bak、site-assets/、web/pnpm-lock.yaml、web/src/features/usage-logs/components/media-assets-table.tsx.bak；目的地仅origin/main，禁止force/upstream。
+
+### B15 Git交付与最终移交（2026-10-16 19:22，Asia/Shanghai）
+
+- 功能与同步文档提交8a672a54fe1cf361967d799e8b3f1c7c0a79e146，首次推送origin/main成功，git ls-remote核对远端main SHA一致。本段和DEVELOPMENT.md交付回执作为独立文档提交随后保存并推送；不使用upstream或force。
+- 本地PID32714监听3000，健康/最新嵌入资源/匿名管理拒绝已验证；最终10组、三库和前端4项等证据见上。已知controller 5项基线overlay失败、真实浏览器/验证码/ASVS联网核实局限保留，不宣称全站无风险或全量测试通过。api.julongkj.top未部署。
+- 26个B15文件范围审核并提交；四项历史未跟踪文件/目录保持未跟踪，未清理缓存或用户数据。本批没有查询线上目标用户、写线上配置或启用未提供密钥的验证码。
+- 后续生产发布需按实际部署流程上线，再配置真实Turnstile域名密钥、可信代理和CDN/WAF边缘策略；共享IP误封可解封，重新启用账户不会自动解封已有IP/设备。

@@ -1716,3 +1716,5 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 
 
 - B15最终验证：router-final 10组、主体matrix-v2三库9组及login-matrix三库追加登录回归全部exit0；前端4项及格式/lint/typecheck/i18n、最终前后端build通过。旧PID24268已停止、新PID32714监听3000，健康/6项资源哈希/匿名管理拒绝通过；Git交付待执行，未部署生产。详情与既有控制器5项失败边界见PROJECT_PROGRESS.md。
+
+- B15 Git交付：功能提交`8a672a54fe1cf361967d799e8b3f1c7c0a79e146`已首次成功推送`origin/main`且远端SHA已核对；此交付回执另作独立文档提交保存。本地PID32714健康，生产未部署，验证范围与限制见PROJECT_PROGRESS.md。
