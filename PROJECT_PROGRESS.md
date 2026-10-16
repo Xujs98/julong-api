@@ -4,7 +4,7 @@
 > 详细 API、路由、配置和数据模型以 [DEVELOPMENT.md](./DEVELOPMENT.md) 为技术登记入口。
 > 代码与实际命令输出优先于旧文档、历史回复和截图；“代码已写”“本地可用”“已提交”“已上线”必须分开。
 
-最后更新：2026-10-16 19:52（Asia/Shanghai）
+最后更新：2026-10-16 19:56（Asia/Shanghai）
 项目根目录：`/Users/xujs/.docker_dir/new-api`
 
 ## 1. 新对话接续入口（必须先读）
@@ -22,7 +22,7 @@
 
 | 项目 | 状态（截至最后更新时间） | 依据与边界 |
 | --- | --- | --- |
-| 当前分支 / HEAD | main / B16本地已完成，待提交（基线aa4aba641） | 使用日志权限、在线统计与Root状态隐藏已验证；四项既有未跟踪内容保留 |
+| 当前分支 / HEAD | main / B16功能043f1adc8已推送（实际HEAD以git为准） | 使用日志权限、在线统计与Root状态隐藏已验证；四项既有未跟踪内容保留 |
 | 上游整合 | main已包含此前功能分支提交 | 实际git和远端对比已纠正旧“尚待合并”快照，保留历史批次记录 |
 | 用户 GitHub 仓库 | origin = https://github.com/Xujs98/julong-api.git | upstream = https://github.com/QuantumNous/new-api.git，仅跟踪上游；不得把用户改动推到 upstream |
 | 本地服务 | B16最新前端嵌入Go产物，PID38584监听3000 | /api/status成功、6个首页JS/CSS与web/dist一致、匿名活动接口401；真实管理员浏览器登录未实测 |
@@ -31,9 +31,9 @@
 | 成品列阴影与滚轮 | 已完成（本地）；17项通过，Chromium已验证并激活；Safari待人工复核 | 独立复核10/10，主任务4文件17/17；Chromium明暗阴影、全列固定、滚轮/splitHeader已验；首页资源与dist一致，Safari无连接未实测 |
 | 管理员日志与Root隐私 | B14本地已完成，已推送origin/main | 四项独立跨账户权限、Root五类日志过滤和详情保护；三库查询/会话验证、前端54项及构建/重启通过；全量测试及真实登录浏览器未验收 |
 | 禁用账户全站防护 | B15本地已完成，功能已推origin/main | 全站IP/可信身份拦截、自动追封、SSRF页独立入站名单、登录IP记录；三库与登录追加回归通过，人机验证需真实密钥，未上线 |
-| 使用日志权限与在线统计 | B16已完成（本地），Git待交付 | 独立使用日志权限与Root隐私、日活/在线卡片、状态角标/筛选；三库、前端17项、构建/重启通过；Root不统计且不返回状态 |
+| 使用日志权限与在线统计 | B16已完成（本地），功能已推origin/main | 独立使用日志权限与Root隐私、日活/在线卡片、状态角标/筛选；三库、前端17项、构建/重启通过；Root不统计且不返回状态 |
 | 项目进度入口 | 已完成（文档本地） | 本文 + AGENTS.md 必读入口；持续按批次更新 |
-| Git 提交 / 线上发布 | B16待范围提交并推origin/main；B15已推送 | 不推upstream；api.julongkj.top未部署 |
+| Git 提交 / 线上发布 | B16功能043f1adc8已推origin/main；此回执另存 | 不推upstream；api.julongkj.top未部署 |
 
 ## 3. 状态口径
 
@@ -406,3 +406,11 @@ B08：MD/DOCX 后端、管理 UI、模型绑定与广场调用文档已实现。
 - 已使用SQLite backup API安全备份并quick_check通过（临时目录文件权限0600），正常停止旧PID32714，新PID38584运行/tmp/julong-presence-20261016/new-api并监听3000。健康success=true，版本v1.0.0-julong.1，6项首页资源与dist SHA256一致；两个新增活动接口匿名401。activation.json留证；未重复重启、未改生产环境。
 - 本轮收尾已成功读取OWASP官方ASVS页面（稳定版本5.0.0）及Authorization、Authentication、Session Management Cheat Sheet；先前网络失败记录保留。按服务端逐请求授权、失败拒绝、权限变更撤销旧会话及不返回Root状态核对；未做整体ASVS认证，真实管理员浏览器、ClickHouse、生产未验证。
 - DEVELOPMENT.md已同步API合同、权限/参数/响应、组件、采集口径和验证。Git提交/推送待执行；四项既有未跟踪内容排除保留，不继续历史取消任务。
+
+
+### B16 Git交付与最终移交（2026-10-16 19:56，Asia/Shanghai）
+
+- 功能/测试/同步文档提交043f1adc862816a545a9c9339cb2b9187abe3f6a已首次成功推送origin/main，git ls-remote确认远端SHA一致。38个本批文件已范围审核；未推upstream或force。此交付回执由独立文档提交保存。
+- 本地PID38584监听3000，健康与6项嵌入资源核对通过；真实三库、前端17项与定向权限/活动测试、格式/typecheck/i18n/build结果见上一记录。Root不采集/不统计/不返回在线字段，线上未部署。
+- 四项既有未跟踪内容controller/media_asset.go.bak、site-assets/、web/pnpm-lock.yaml、web/src/features/usage-logs/components/media-assets-table.tsx.bak保持未跟踪，未删除或纳入提交。全量Go、真实管理员浏览器及ClickHouse未验收；不扩大验证结论。
+- OWASP官方页面工具本轮返回空后，已通过正常TLS的curl读取并保存ASVS/Authorization/Authentication/Session Management原文于临时验证目录，稳定版5.0.0已从官方正文核实；未关闭TLS校验，未声称整体合规。

@@ -1746,3 +1746,5 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 - B16最终验证：真实三库matrix-v1、backend-presence、authz全包exit0；前端3文件17/17、16文件oxlint/oxfmt、typecheck、i18n同步、前后端build通过。在线300秒、日活UTC+8、排除Root口径已验证；未运行全量Go，既有失败和未测真实管理员浏览器/ClickHouse边界保留。
 - B16本地激活：旧PID32714正常停止，新PID38584监听3000，/api/status与6项嵌入资源SHA256核对通过，两个新增活动接口匿名401；SQLite备份quick_check通过。Git待范围提交并推origin/main；未部署生产。
 - 安全依据补证：收尾成功读取OWASP官方ASVS项目页，当前稳定版5.0.0；已读Authorization、Authentication和Session Management Cheat Sheet，核对服务端逐请求权限、失败拒绝、权限保存撤销会话及Root数据隐藏。本批定向验证通过，不声称整体ASVS合规。官方参考：https://owasp.org/projects/asvs 、https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html 、https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html 、https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html 。
+
+- B16 Git交付：功能提交`043f1adc862816a545a9c9339cb2b9187abe3f6a`首次推送`origin/main`成功，远端SHA已核对。38个本批文件交付；本地PID38584健康，四项历史未跟踪内容保留，生产未部署。此回执由独立文档提交保存，验证和局限见PROJECT_PROGRESS.md B16。
