@@ -26,6 +26,7 @@ export type AdminCapabilities = AdminPermissionMatrix
 export const ADMIN_PERMISSION_RESOURCES = {
   AUDIT: 'audit',
   TASK_LOGS: 'task_logs',
+  USAGE_LOGS: 'usage_logs',
   PRIVACY: 'privacy',
   CHANNEL: 'channel',
   LEDGER: 'ledger',
@@ -162,7 +163,13 @@ export function canViewOtherTaskLogs(
   category: string
 ): boolean {
   if (!user || user.role < ROLE.ADMIN) return false
-  if (category === 'common') return true
+  if (category === 'common') {
+    return hasPermission(
+      user,
+      ADMIN_PERMISSION_RESOURCES.USAGE_LOGS,
+      ADMIN_PERMISSION_ACTIONS.READ
+    )
+  }
   const action = TASK_LOG_READ_ACTIONS[category]
   return (
     !!action &&
@@ -195,6 +202,7 @@ export function getLogsVisibilityKey(
     user?.id,
     user?.role,
     isRootPrivacyRestricted(user),
+    canViewOtherTaskLogs(user, 'common'),
     ...Object.keys(TASK_LOG_READ_ACTIONS).map((category) =>
       canViewOtherTaskLogs(user, category)
     ),

@@ -615,6 +615,9 @@ export const STATIC_I18N_KEYS = [
   'Updated channel status (ID: {{id}})',
   'Batch updated channel status ({{count}}/{{total}} changed)',
 
+  "View other accounts' usage logs",
+  'Hide Root usage, task and audit records and prevent opening Root user details.',
+
   // Misc
   'Cancel',
   'Status',

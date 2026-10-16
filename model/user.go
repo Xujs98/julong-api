@@ -118,6 +118,7 @@ func ApplyUserBindingUpdatesWithTx(tx *gorm.DB, userID int, updates *UserBinding
 }
 
 type UserSortOptions struct {
+	Presence  string
 	SortBy    string
 	SortOrder string
 }
@@ -166,6 +167,7 @@ func resolveUserSortOptions(sortOptions []UserSortOptions) UserSortOptions {
 // User if you add sensitive fields, don't forget to clean them in setupLogin function.
 // Otherwise, the sensitive information will be saved on local storage in plain text!
 type User struct {
+	IsOnline                     *bool                      `json:"is_online,omitempty" gorm:"-:all"`
 	Id                           int                        `json:"id"`
 	Username                     string                     `json:"username" gorm:"unique;index" validate:"max=20"`
 	Password                     string                     `json:"password" gorm:"not null;" validate:"min=8,max=20"`
@@ -522,7 +524,8 @@ func GetAllUsers(pageInfo *common.PageInfo, sortOptions ...UserSortOptions) (use
 	}()
 
 	// Get total count within transaction
-	err = tx.Unscoped().Model(&User{}).Count(&total).Error
+	query := resolveUserSortOptions(sortOptions).ApplyPresence(tx.Unscoped().Model(&User{}), time.Now().Unix())
+	err = query.Count(&total).Error
 	if err != nil {
 		tx.Rollback()
 		return nil, 0, err
@@ -530,7 +533,7 @@ func GetAllUsers(pageInfo *common.PageInfo, sortOptions ...UserSortOptions) (use
 
 	// Get paginated users within same transaction
 	order := resolveUserSortOptions(sortOptions)
-	err = order.Apply(tx.Unscoped()).Limit(pageInfo.GetPageSize()).Offset(pageInfo.GetStartIdx()).Omit("password", "access_token").Find(&users).Error
+	err = order.Apply(query).Limit(pageInfo.GetPageSize()).Offset(pageInfo.GetStartIdx()).Omit("password", "access_token").Find(&users).Error
 	if err != nil {
 		tx.Rollback()
 		return nil, 0, err
@@ -617,10 +620,13 @@ func applyUserSearchFilters(query *gorm.DB, keyword string, group string, role *
 	return query.Where("tag_id = ?", *tagId), riskReports, nil
 }
 
-func GetUserQuotaSummary(keyword string, group string, role *int, status *int, tagId *int) (*UserQuotaSummary, error) {
+func GetUserQuotaSummary(keyword string, group string, role *int, status *int, tagId *int, presence ...string) (*UserQuotaSummary, error) {
 	query, _, err := applyUserSearchFilters(DB.Unscoped().Model(&User{}), keyword, group, role, status, tagId, time.Now().Unix())
 	if err != nil {
 		return nil, err
+	}
+	if len(presence) > 0 {
+		query = (UserSortOptions{Presence: presence[0]}).ApplyPresence(query, time.Now().Unix())
 	}
 	settings, err := GetUserQuotaSummarySettings()
 	if err != nil {
@@ -660,6 +666,7 @@ func SearchUsers(keyword string, group string, role *int, status *int, tagId *in
 	}
 
 	// 获取总数
+	query = resolveUserSortOptions(sortOptions).ApplyPresence(query, riskGeneratedAt)
 	err = query.Count(&total).Error
 	if err != nil {
 		tx.Rollback()

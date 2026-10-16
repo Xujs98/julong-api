@@ -208,7 +208,7 @@ docker compose up -d
 | `ChannelAnomalyEmailEnabled` / `ChannelAnomalyEmailRecipientUserIDs` | `service/email_settings.go`、`service/channel.go` | 渠道异常自动关闭提醒 | 默认关闭；仅 `DisableChannel` 自动封禁成功后发送，管理员手动关闭渠道不发送；收件人规则同账号额度提醒。 |
 | `DashboardReportEmail*` | `common/constants.go`、`service/dashboard_report_email.go`、`email-alert-settings.tsx` | 数据看板定时报表 | 包含总开关、管理员/root 收件人和 `DashboardReportEmailSchedules` JSON；最多 20 条日报/周报/月报规则，每条最多 12 个 `HH:mm` 时间，调度历史保存 90 天用于幂等。报表读取真实消费、额度、请求、Token、活跃用户/模型/渠道/分组、用户统计、Top 模型和分组分析。 |
 | `RiskUserEmail*` | `common/constants.go`、`service/risk_user_email.go`、`email-alert-settings.tsx` | 风险用户邮件提醒 | 默认关闭；`RiskUserEmailLevels` 可多选 `medium/high`，收件人仅允许有效管理员/root。系统只通知新进入或风险等级升级的用户，状态保存在 `RiskUserEmailDispatchState`；测试接口发送当前真实评估数据。 |
-| `UserPresenceEmail*` / `UserPresenceOfflineMinutes` | `common/constants.go`、`service/user_presence_email.go`、`middleware/auth.go`、`email-alert-settings.tsx` | 用户上线/下线邮件提醒 | 默认关闭；可多选 `online/offline`、最多 500 个启用用户和最多 100 个有效管理员/root 收件人。成功登录、已认证后台活动和 API Key 调用均同步刷新活动时间，每实例每用户最多 30 秒写库一次，邮件异步发送；默认 5 分钟无活动判定下线，可配置 1-1440 分钟。 |
+| `UserPresenceEmail*` / `UserPresenceOfflineMinutes` | `common/constants.go`、`service/user_presence_email.go`、`middleware/auth.go`、`email-alert-settings.tsx` | 用户上线/下线邮件提醒 | 默认关闭；可多选 `online/offline`、最多 500 个启用用户和最多 100 个有效管理员/root 收件人。成功登录、已认证后台活动和 API Key 调用均同步刷新启用非 Root 用户的活动时间，不依赖邮件开关/监控名单，每实例每用户最多 30 秒写库一次；邮件仅按监控配置异步发送；默认 5 分钟无活动判定下线，可配置 1-1440 分钟。 |
 | `UserQuotaSummaryExcludedUserIDs` | `common/constants.go`、`model/user_quota_summary.go`、`user-quota-summary-control.tsx` | 用户页“剩余总配额”不统计用户名单 | 默认 `[]`；管理员/root 可在用户筛选栏“不统计用户”弹窗中多选普通用户、管理员、root 或已删除用户。名单全局持久化，被排除用户仍显示在列表中，只从剩余总配额和匹配人数中移除。 |
 | `EmailTemplates` | `service/email_template.go`、`controller/email_template.go`、`email-template-settings-section.tsx` | 自定义系统邮件模板 JSON | 中文兼容旧键 `{event:{subject,content}}`，英文使用 `{event::en:{subject,content}}`，无需迁移。12 个事件包含原有通知、验证、订阅、余额、渠道、报表、风控、在线状态、额度调整，以及电子发票交付 `invoice.delivered`；每个事件提供 `zh/en` 图片式卡片 UI。主题最长 255 字节且禁止换行，HTML 最长 200000 字节，只允许事件声明占位符。 |
 | `Logo` | `model/option.go`、`controller/site_asset.go`、`system-info-section.tsx` | 站点徽标 URL | 可继续填写 HTTP/HTTPS 或根路径 URL；本地上传成功后保存为 `/api/site-assets/logo/<随机文件名>`。只有通用 Option 保存成功才会正式应用，新地址通过 `/api/status.logo` 下发，替换/清空时自动删除旧的本地徽标。 |
@@ -347,9 +347,9 @@ curl http://localhost:3000/api/error-reports \
 
 | 方法 | 路径 | Handler | 用途 | 参数/请求体 | 响应 | 状态 |
 | --- | --- | --- | --- | --- | --- | --- |
-| GET | `/api/user/` | `controller.GetAllUsers` | 分页用户列表 | `p`, `page_size` | `PageInfo<User[]>` | 完成 |
-| GET | `/api/user/search` | `controller.SearchUsers` | 搜索用户 | `keyword`, `group`, `role`, `status`, `tag`（可多选）, `p`, `page_size` | `PageInfo<User[]>`，包含自定义标签和按风险报告计算的内置风险标签 | 完成 |
-| GET | `/api/user/quota-summary` | `controller.GetUserQuotaSummary` | 汇总全部或当前筛选用户的剩余总配额 | `keyword`, `group`, `role`, `status`, `tag_id`；筛选语义与用户搜索一致，并排除全局不统计用户名单 | `{total_quota:int64,user_count:int64}` | 完成；默认含列表可见的已删除用户，选择普通状态时排除已删除用户 |
+| GET | `/api/user/` | `controller.GetAllUsers` | 分页用户列表 | `p`, `page_size`, `presence=online\|offline` | `PageInfo<User[]>`，非 Root 增加 `is_online:boolean`，Root 省略 | 管理员/root；在线筛选及计数均排除 Root |
+| GET | `/api/user/search` | `controller.SearchUsers` | 搜索用户 | `keyword`, `group`, `role`, `status`（原数值或 `online\|offline`）, `presence`, `tag`（可多选）, `p`, `page_size` | `PageInfo<User[]>`，包含自定义标签和按风险报告计算的内置风险标签 | 完成 |
+| GET | `/api/user/quota-summary` | `controller.GetUserQuotaSummary` | 汇总全部或当前筛选用户的剩余总配额 | `keyword`, `group`, `role`, `status`（含 `online\|offline`）, `presence`, `tag_id`；筛选语义与用户搜索一致，并排除全局不统计用户名单 | `{total_quota:int64,user_count:int64}` | 完成；默认含列表可见的已删除用户，选择普通状态时排除已删除用户 |
 | GET | `/api/user/quota-summary/settings` | `controller.GetUserQuotaSummarySettings` | 获取剩余总配额统计范围 | 无 | `{excluded_user_ids:number[]}` | 完成 |
 | PUT | `/api/user/quota-summary/settings` | `controller.UpdateUserQuotaSummarySettings` | 保存不统计用户名单 | `{excluded_user_ids:number[]}`；最多 5000 个有效用户 ID | `{excluded_user_ids:number[]}` | 完成；去重排序并写管理审计 |
 | GET | `/api/user/quota-summary/users` | `controller.SearchUserQuotaSummaryOptions` | 搜索可排除用户 | `keyword`, `p`, `page_size` | 全部角色及已删除用户的最小信息分页 | 完成 |
@@ -367,7 +367,7 @@ curl http://localhost:3000/api/error-reports \
 | PUT | `/api/user/invoice/applications/:id` | `controller.AdminUpdateInvoiceApplication` | 更新发票申请处理状态和内部备注 | path `id`；`{status:pending\|processing\|rejected\|non_reusable,admin_note}`，备注最多 500 字符；`completed` 必须走专用附件接口 | `InvoiceApplication`；`rejected` 释放来源并冷冻且成为终态，`non_reusable` 不释放来源并成为终态 | 完成；管理员/root，写管理审计 |
 | POST | `/api/user/invoice/applications/:id/complete` | `controller.AdminCompleteInvoiceApplication` | 发送带电子发票附件的模板邮件并完成申请 | multipart：`locale=zh\|en`、`admin_note`、`attachment`；附件限 PDF/OFD/XML/PNG/JPG 且最大 10 MB | 邮件成功后在同一事务持久化附件 BLOB 并写入 `completed/completed_at`；失败保持原状态；15 分钟发送锁阻止并发重复发送 | 完成；管理员/root，写管理审计 |
 | POST | `/api/user/invoice/applications/:id/withdraw` | `controller.AdminWithdrawCompletedInvoiceApplication` | 撤回已完成的发票申请以修正错误附件 | path 正整数 `id` | 仅 `completed` 可撤回；事务内删除附件、清空完成时间并恢复 `pending`，来源账单继续占用，已发送邮件不会被召回 | 完成；管理员/root，写管理审计 |
-| GET | `/api/user/:id` | `controller.GetUser` | 可编辑用户详情 | path `id` | `User`（包含 `last_login_at`、`last_login_ip`） | 完成；管理员/root，同级/更高角色受限 |
+| GET | `/api/user/:id` | `controller.GetUser` | 可编辑用户详情 | path `id` | `User`（包含 `last_login_at`、`last_login_ip`、非 Root 的 `is_online:boolean`；Root 省略在线字段） | 完成；管理员/root，同级/更高角色受限 |
 | POST | `/api/user/` | `controller.CreateUser` | 创建用户 | `UserFormData`；管理员/root 可通过 `binding_updates` 设置邮箱、GitHub、Discord、OIDC、WeChat、Telegram、LinuxDO 绑定，空字符串清除 | `User` | 完成 |
 | PUT | `/api/user/` | `controller.UpdateUser` | 更新用户及管理员权限 | `UserFormData & {id,admin_permissions?}`；权限变更仅Root、须一次性 `admin.user.update` 安全凭据；绑定信息仍仅按传入 `binding_updates` 更新 | partial `User`；权限矩阵事务提交时递增目标AuthVersion，提交后撤销旧会话和发布权限缓存变更 | 完成 |
 | DELETE | `/api/user/:id` | `controller.DeleteUser` | 删除用户 | path `id` | success | 完成 |
@@ -1182,7 +1182,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 | `UserSubscription` | `model/subscription.go` | 用户有效订阅 | user/plan/quota/period/status，以及生图日志权限和条数快照字段 | 创建订阅时从套餐复制权益；多个有效订阅任一为 0 则无限，否则取最大条数。 | 活跃 |
 | `SubscriptionPreConsumeRecord` | `model/subscription.go` | 订阅预扣记录 | subscription/request/pre/post quota 字段 | 请求结算使用。 | 活跃 |
 | `Option` | `model/option.go` | 运行时设置 | `key`、`value` | `EmailTemplates` 保存 12 类双语模板；数据报表规则/90 日幂等历史、风险邮件等级/通知状态、上线事件/监控用户/管理员收件人/下线阈值、全局风险开关和模型 Token 倍率 JSON 均复用 Option。`UpdateOptionsBulk` 在单事务中保存关联配置并在成功后统一更新内存。 | 活跃 |
-| `UserPresence` | `model/user_presence.go` | 被监控用户的在线状态 | `user_id` 主键；`is_online`、`last_activity_at` 索引、`last_source`、`last_ip`、`last_user_agent`、`last_changed_at`、`updated_at` | 登录、后台请求和 API Key 请求仅在鉴权成功后同步记录，邮件异步发送；每实例每用户 30 秒写入节流。状态以条件更新实现离线→在线和超时→离线去重，兼容 SQLite/MySQL/PostgreSQL。 | 活跃 |
+| `UserPresence` | `model/user_presence.go` | 全站非 Root 用户活动与邮件监控状态 | `user_id` 主键；`is_online`、`last_activity_at` 索引、`last_source`、`last_ip`、`last_user_agent`、`last_changed_at`、`updated_at` | 登录、后台请求和 API Key 请求仅在鉴权成功后同步记录，邮件异步发送；每实例每用户 30 秒写入节流。状态以条件更新实现离线→在线和超时→离线去重，兼容 SQLite/MySQL/PostgreSQL。 | 活跃 |
 | `Setup` | `model/setup.go` | 安装/初始化状态 | setup timestamp/status | `/api/setup`。 | 活跃 |
 | `PasskeyCredential` | `model/passkey.go` | WebAuthn 凭据 | user/credential 字段 | Passkey 登录。 | 活跃 |
 | `TwoFA` / `TwoFABackupCode` | `model/twofa.go` | 2FA 密钥和备份码 | user secret/status/codes | 2FA 登录和管理员重置。 | 活跃 |
@@ -1205,7 +1205,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 - 新增持久化模型时，必须同时加入 `model/main.go` 的 `migrateDB()` 和 `migrateDBFast()`。
 - `LedgerEntry` 已同时加入标准和快速 AutoMigrate。升级启动会自动创建 `ledger_entries` 及平台、类型、账本日期时间、创建人和软删除索引；金额使用 GORM `decimal(20,6)`，兼容 SQLite、MySQL、PostgreSQL，无需手工 SQL。预估倍率以 `LedgerEstimateRatio` 保存到既有 `options` 表，默认 `1x`，不增加配置表。该迁移不修改用户额度、使用日志或既有计费数据，部署前仍应备份主库。
 - `EmailCampaign`、`EmailDelivery` 已同时加入标准和快速 AutoMigrate。升级启动会自动创建 `email_campaigns`、`email_deliveries` 及索引，不修改用户、订阅、余额和既有日志；SQLite、MySQL、PostgreSQL 均使用 GORM 兼容类型，无需手工 SQL。部署前仍应备份主库。
-- `UserPresence` 已同时加入标准和快速 AutoMigrate。升级启动自动创建 `user_presences`，只保存被监控用户的状态与最后活动元数据，不修改 `users`、令牌、额度或日志表；部署前仍应备份主库。
+- `UserPresence` 已同时加入标准和快速 AutoMigrate。升级启动自动创建 `user_presences`，保存已认证的启用非 Root 用户的最后活动元数据（独立于邮件开关与监控名单），不修改 `users`、令牌、额度或日志表；部署前仍应备份主库。
 - `InvoiceApplication`、`InvoiceItem`、`InvoiceAttachment` 已同时加入标准和快速 AutoMigrate。升级启动自动增加邮件发送锁、释放时间和冷冻截止字段及附件表，将旧来源唯一索引迁移为 `source_request_id+released_at` 复合唯一索引；升级前已驳回但仍占用的旧明细会自动释放且不追加冷冻期，其余旧明细保持占用，不修改用户额度或历史日志，兼容 SQLite、MySQL、PostgreSQL。 本次开票资料新增四个字符串列与 `invoice_payment_proofs` 私有截图表，两种 AutoMigrate 均登记；旧申请新增字段保持空值且原金额、附件、状态及来源占用不变，截图和申请/明细同事务保存。新来源设置复用 `options`，未配置时保留全部原来源。
 - 邮件设置的 12 类双语模板、数据报表多规则/调度历史、风险邮件状态及上线/下线配置均保存到既有 `options` 表；订阅提醒发送记录继续复用 `email_deliveries` 且 `campaign_id=0`。中文模板继续使用旧事件键，英文使用 `event::en` 键；旧模板和旧单条报表频率/时间配置会自动兼容，无需手工迁移。
 - 用户运营与风控升级由主库 AutoMigrate 新增 `users.group_ratio_adjustment_enabled`、`users.group_ratio_adjustment`、`users.tag_id`、`users.risk_detection_enabled`、`user_sessions.device_id`，并创建 `user_tags`、`blocked_devices`。均使用 GORM 通用字段和索引，兼容 SQLite、MySQL、PostgreSQL；旧用户字段零值表示倍率不调整、无标签、单用户风险检测关闭。
@@ -1718,3 +1718,31 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 - B15最终验证：router-final 10组、主体matrix-v2三库9组及login-matrix三库追加登录回归全部exit0；前端4项及格式/lint/typecheck/i18n、最终前后端build通过。旧PID24268已停止、新PID32714监听3000，健康/6项资源哈希/匿名管理拒绝通过；Git交付待执行，未部署生产。详情与既有控制器5项失败边界见PROJECT_PROGRESS.md。
 
 - B15 Git交付：功能提交`8a672a54fe1cf361967d799e8b3f1c7c0a79e146`已首次成功推送`origin/main`且远端SHA已核对；此交付回执另作独立文档提交保存。本地PID32714健康，生产未部署，验证范围与限制见PROJECT_PROGRESS.md。
+
+
+### 2026-10-16 使用日志权限与在线统计（B16）
+
+- Root 更新管理员的权限矩阵新增“使用日志 / 查看其他账户使用日志”，资源 `usage_logs`、动作 `read`，默认沿用管理员跨账户行为；取消后服务端仅返回本人。`privacy.hide_root` 同时隐藏当前 Root（包括晋升前）使用日志；Root 自身保持日志全权限。权限保存继续使用现有一次性安全凭据、AuthVersion 与会话撤销流程。
+- 列表、total、分页、CSV、NDJSON 及额度/RPM/TPM 统计共用权限范围；从主库取得 Root IDs 后过滤独立日志库，错误拒绝，避免跨库 JOIN。前端按使用日志权限划分缓存，详情仅在允许时读取最近日志。
+
+| 方法 | 路径 | Handler | 参数与响应 | 权限及行为 |
+| --- | --- | --- | --- | --- |
+| GET | `/api/user/self/activity` | `controller.UserActivityHeartbeat` | 无参数；`{success:true,data:null}` | UserAuth；PAT `profile:read`；记录由原认证中间件完成，不返回任何状态；no-store |
+| GET | `/api/data/activity` | `controller.GetUserActivitySummary` | 无参数；`{daily_active_users,online_users,day_start,generated_at,online_window_seconds}` | AdminAuth；PAT `user:read`；日活按北京时间 UTC+8 当天去重；在线为最近300秒有效活动；均排除 Root/软删除；在线另排除禁用用户；no-store |
+| GET | `/api/log/` | `controller.GetAllLogs` | 既有 type/时间/model_name/username/token_name/channel/group/request_id/upstream_request_id/p/page_size；PageInfo 日志列表 | AdminAuth；跨账户须 usage_logs.read，否则仅本人；privacy.hide_root 排除 Root；同一范围用于 total/分页 |
+| GET | `/api/log/stat` | `controller.GetLogsStat` | 既有 type/时间/model_name/username/token_name/channel/group；`{quota,rpm,tpm}` | AdminAuth；同一 usage_logs.read/Root 隐私范围 |
+| GET | `/api/log/export` | `controller.ExportAllLogs` | 既有过滤及 p/page_size；CSV 与原截断响应头 | AdminAuth；同一使用日志范围，保留5000条上限和导出互斥 |
+| GET | `/api/log/export/stream` | `controller.ExportAllLogsStream` | 既有日志过滤与时间；NDJSON与完成对象 | AdminAuth；同一使用日志范围和导出互斥 |
+
+- 复用 `UserPresence`，无新增表或持久化字段；`User.is_online` 为 `gorm:-:all` 的响应字段。活动采集覆盖启用非 Root 用户；30秒写入节流。通知仍按既有邮件配置工作，展示的300秒在线窗口独立于可配置邮件下线时间。
+- 概览 `/dashboard/overview` 的原 overview 组合新增 `UserActivityCards`（管理员/root可见）；复用 StatCard、formatNumber/toIntlLocale。`/users` 复用现有“状态”筛选加入 online/offline，用户名和详情复用 StatusBadge 展示绿色在线/灰色离线角标。列表/详情/概览30秒刷新，可见的登录页面60秒心跳；后台标签不持续轮询。没有新增前端页面路由。
+- Root 对所有查看者省略在线字段；在线/离线筛选均排除 Root，防止用过滤计数推断；Root 不发送前端心跳，不采集新活动，既有记录也不进入统计/邮件用户查询。日活不回溯升级前未采集的行为；用户退出/关闭标签后最多5分钟转离线，属于最近活动估计，非物理连接人数。
+- 复用审核：现有权限矩阵、UserLogScope、用户过滤器、StatusBadge、StatCard；新业务组件只组合权限/状态和既有展示组件，没有另建通用表格/筛选/弹窗。六个新文案通过 add-missing-keys.mjs 与 i18n:sync 同步七语言，临时脚本删除。
+- 已验证：`python3 /tmp/julong-presence-20261016/run-matrix-v1.py` 内部 `go test ./controller -run '^TestAdminLogPermission' -count=1 -v`，真实 SQLite3.50.4/MySQL5.7.44/PostgreSQL16.15 独立主/日志库通过，无Skip；包含日志范围、分页、CSV/NDJSON、统计、UTC+8跨日、300秒边界、禁用/删除/从未活动及Root状态隐藏，并验证权限保存撤销旧会话/凭据重放拒绝。测试故意缺 users 表的错误拒绝用例会输出SQL错误；用户附加元数据的夹具缺表日志不视为相关功能验收。
+- 定向 `go test ./service ./service/authz ./router ./middleware -run 'Test(UserPresence|ReEnablingUserPresence|AccessTokenRouteRulesCoverEveryDashboardRoute|AccessTokenCatalogCoversEveryPermission)' -count=1 -v` exit0：service5组及router2组实际运行，authz/middleware无匹配仅编译，不算业务测试。邮件关闭仍记录、Root不记录均实测。
+- 静态检查、前端业务测试、构建/重启与Git交付结果续记PROJECT_PROGRESS.md B16；不宣称全量Go、真实管理员浏览器、ClickHouse或生产已验收。本批复用既有认证，不改变登录/密码/会话协议；OWASP官方Authorization页面本轮网络返回空，未据此编造ASVS版本或整体合规结论。
+
+
+- B16最终验证：真实三库matrix-v1、backend-presence、authz全包exit0；前端3文件17/17、16文件oxlint/oxfmt、typecheck、i18n同步、前后端build通过。在线300秒、日活UTC+8、排除Root口径已验证；未运行全量Go，既有失败和未测真实管理员浏览器/ClickHouse边界保留。
+- B16本地激活：旧PID32714正常停止，新PID38584监听3000，/api/status与6项嵌入资源SHA256核对通过，两个新增活动接口匿名401；SQLite备份quick_check通过。Git待范围提交并推origin/main；未部署生产。
+- 安全依据补证：收尾成功读取OWASP官方ASVS项目页，当前稳定版5.0.0；已读Authorization、Authentication和Session Management Cheat Sheet，核对服务端逐请求权限、失败拒绝、权限保存撤销会话及Root数据隐藏。本批定向验证通过，不声称整体ASVS合规。官方参考：https://owasp.org/projects/asvs 、https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html 、https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html 、https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html 。

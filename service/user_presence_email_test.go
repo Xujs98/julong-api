@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 
 	"github.com/stretchr/testify/assert"
@@ -136,4 +137,25 @@ func TestReEnablingUserPresenceDoesNotThrottleFirstActivity(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, presence.IsOnline)
 	assert.Equal(t, UserPresenceActivitySourceAPI, presence.LastSource)
+}
+
+func TestUserPresenceRecordsWithoutEmailsAndExcludesRoot(t *testing.T) {
+	_, users := setupEmailSettingsTest(t)
+	common.OptionMapRWMutex.Lock()
+	common.OptionMap[common.UserPresenceEmailEnabledOptionKey] = "false"
+	common.OptionMapRWMutex.Unlock()
+	ids := []int{users["common"].Id, users["admin"].Id, users["root"].Id}
+	clearUserPresenceActivityWriteThrottle(ids)
+	t.Cleanup(func() { clearUserPresenceActivityWriteThrottle(ids) })
+	for _, id := range ids {
+		RecordUserPresenceActivity(id, UserPresenceActivitySourceDashboard, "203.0.113.10", "Browser")
+	}
+	for _, key := range []string{"common", "admin"} {
+		presence, err := model.GetUserPresence(users[key].Id)
+		require.NoError(t, err)
+		assert.Positive(t, presence.LastActivityAt)
+	}
+	var count int64
+	require.NoError(t, model.DB.Model(&model.UserPresence{}).Where("user_id = ?", users["root"].Id).Count(&count).Error)
+	assert.Zero(t, count)
 }

@@ -22,6 +22,7 @@ import { describe, test } from 'vitest'
 
 import {
   canViewOtherTaskLogs,
+  getLogsVisibilityKey,
   canOpenUserDetails,
 } from '@/lib/admin-permissions'
 import { ROLE } from '@/lib/roles'
@@ -69,6 +70,30 @@ test('task categories grant cross-account views independently and Root remains u
   assert.equal(canOpenUserDetails(root, ROLE.SUPER_ADMIN), true)
   assert.equal(
     canViewOtherTaskLogs({ ...viewer, role: ROLE.USER }, 'drawing'),
+    false
+  )
+})
+
+test('usage permission is independent and invalidates cached log visibility', () => {
+  const viewer = {
+    id: 2,
+    username: 'admin',
+    role: ROLE.ADMIN,
+    permissions: { admin_permissions: { usage_logs: { read: true } } },
+  }
+  const denied = {
+    ...viewer,
+    permissions: { admin_permissions: { usage_logs: { read: false } } },
+  }
+  assert.equal(canViewOtherTaskLogs(viewer, 'common'), true)
+  assert.equal(canViewOtherTaskLogs(denied, 'common'), false)
+  assert.notEqual(getLogsVisibilityKey(viewer), getLogsVisibilityKey(denied))
+  assert.equal(
+    canViewOtherTaskLogs({ ...denied, role: ROLE.SUPER_ADMIN }, 'common'),
+    true
+  )
+  assert.equal(
+    canViewOtherTaskLogs({ ...viewer, role: ROLE.USER }, 'common'),
     false
   )
 })

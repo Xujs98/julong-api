@@ -8,6 +8,7 @@ import (
 	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/service/authz"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 
 	"github.com/gin-gonic/gin"
@@ -15,7 +16,7 @@ import (
 
 // logFilterFromQuery reads the log search shared by the log list and the log
 // export. Username and channel are read only for administrators.
-func logFilterFromQuery(c *gin.Context, admin bool) model.LogFilter {
+func logFilterFromQuery(c *gin.Context, admin bool) (model.LogFilter, error) {
 	logType, _ := strconv.Atoi(c.Query("type"))
 	startTimestamp, _ := strconv.ParseInt(c.Query("start_timestamp"), 10, 64)
 	endTimestamp, _ := strconv.ParseInt(c.Query("end_timestamp"), 10, 64)
@@ -33,7 +34,14 @@ func logFilterFromQuery(c *gin.Context, admin bool) model.LogFilter {
 		filter.Username = c.Query("username")
 		filter.Channel, _ = strconv.Atoi(c.Query("channel"))
 	}
-	return filter
+	if admin {
+		scope, err := authz.LogScope(c.GetInt("id"), c.GetInt("role"), authz.UsageLogsRead)
+		if err != nil {
+			return model.LogFilter{}, err
+		}
+		filter.Scope = scope
+	}
+	return filter, nil
 }
 
 // limitLogTimeRange returns the start of a log or dashboard search kept within
@@ -56,7 +64,13 @@ func limitLogTimeRange(startTimestamp int64, endTimestamp int64) (int64, error) 
 
 func GetAllLogs(c *gin.Context) {
 	pageInfo := common.GetPageQuery(c)
-	logs, total, err := model.GetAllLogs(logFilterFromQuery(c, true), pageInfo.GetStartIdx(), pageInfo.GetPageSize())
+	filter, err := logFilterFromQuery(c, true)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	c.Header("Cache-Control", "no-store")
+	logs, total, err := model.GetAllLogs(filter, pageInfo.GetStartIdx(), pageInfo.GetPageSize())
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -74,7 +88,11 @@ func GetAllLogs(c *gin.Context) {
 
 func GetUserLogs(c *gin.Context) {
 	pageInfo := common.GetPageQuery(c)
-	filter := logFilterFromQuery(c, false)
+	filter, err := logFilterFromQuery(c, false)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
 	if c.GetInt("role") < common.RoleAdminUser {
 		startTimestamp, err := limitLogTimeRange(filter.StartTimestamp, filter.EndTimestamp)
 		if err != nil {
@@ -113,7 +131,11 @@ func ExportUserLogsStream(c *gin.Context) {
 // one export at a time, and every export stays within the longest log time
 // range.
 func exportLogs(c *gin.Context, all bool) {
-	filter := logFilterFromQuery(c, all)
+	filter, err := logFilterFromQuery(c, all)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
 	startTimestamp, err := limitLogTimeRange(filter.StartTimestamp, filter.EndTimestamp)
 	if err != nil {
 		common.ApiError(c, err)
@@ -209,7 +231,13 @@ func GetLogsStat(c *gin.Context) {
 	modelName := c.Query("model_name")
 	channel, _ := strconv.Atoi(c.Query("channel"))
 	group := c.Query("group")
-	stat, err := model.SumUsedQuota(logType, startTimestamp, endTimestamp, modelName, username, tokenName, channel, group)
+	scope, err := authz.LogScope(c.GetInt("id"), c.GetInt("role"), authz.UsageLogsRead)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	c.Header("Cache-Control", "no-store")
+	stat, err := model.SumUsedQuota(logType, startTimestamp, endTimestamp, modelName, username, tokenName, channel, group, scope)
 	if err != nil {
 		common.ApiError(c, err)
 		return

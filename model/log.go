@@ -845,6 +845,7 @@ func RecordTaskBillingLog(params RecordTaskBillingLogParams) {
 // LogFilter is the usage-log search shared by the log list and the log export.
 // Username and Channel are administrator filters.
 type LogFilter struct {
+	Scope             UserLogScope
 	Type              int
 	StartTimestamp    int64
 	EndTimestamp      int64
@@ -858,6 +859,7 @@ type LogFilter struct {
 }
 
 func (f LogFilter) apply(tx *gorm.DB) (*gorm.DB, error) {
+	tx = f.Scope.Apply(tx)
 	var err error
 	if f.Type != LogTypeUnknown {
 		tx = tx.Where("logs.type = ?", f.Type)
@@ -1056,12 +1058,16 @@ type Stat struct {
 	Tpm   int `json:"tpm"`
 }
 
-func SumUsedQuota(logType int, startTimestamp int64, endTimestamp int64, modelName string, username string, tokenName string, channel int, group string) (stat Stat, err error) {
+func SumUsedQuota(logType int, startTimestamp int64, endTimestamp int64, modelName string, username string, tokenName string, channel int, group string, scopes ...UserLogScope) (stat Stat, err error) {
 	tx := LOG_DB.Table("logs").Select("COALESCE(sum(quota), 0) quota")
 
 	// 为rpm和tpm创建单独的查询
 	rpmTpmQuery := LOG_DB.Table("logs").Select("count(*) rpm, COALESCE(sum(prompt_tokens), 0) + COALESCE(sum(completion_tokens), 0) tpm")
 
+	if len(scopes) > 0 {
+		tx = scopes[0].Apply(tx)
+		rpmTpmQuery = scopes[0].Apply(rpmTpmQuery)
+	}
 	if tx, err = applyExplicitLogTextFilter(tx, "username", username); err != nil {
 		return stat, err
 	}

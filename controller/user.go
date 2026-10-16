@@ -375,12 +375,18 @@ func Register(c *gin.Context) {
 func GetAllUsers(c *gin.Context) {
 	pageInfo := common.GetPageQuery(c)
 	sortOptions := model.NewUserSortOptions(c.Query("sort_by"), c.Query("sort_order"))
+	sortOptions.Presence = c.Query("presence")
 	users, total, err := model.GetAllUsers(pageInfo, sortOptions)
 	if err != nil {
 		common.ApiError(c, err)
 		return
 	}
 
+	if err := model.FillUserOnlineStatus(users, time.Now().Unix()); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	c.Header("Cache-Control", "no-store")
 	pageInfo.SetTotal(int(total))
 	pageInfo.SetItems(users)
 
@@ -389,17 +395,19 @@ func GetAllUsers(c *gin.Context) {
 }
 
 type userSearchFilters struct {
-	keyword string
-	group   string
-	role    *int
-	status  *int
-	tagId   *int
+	presence string
+	keyword  string
+	group    string
+	role     *int
+	status   *int
+	tagId    *int
 }
 
 func getUserSearchFilters(c *gin.Context) userSearchFilters {
 	filters := userSearchFilters{
-		keyword: c.Query("keyword"),
-		group:   c.Query("group"),
+		keyword:  c.Query("keyword"),
+		group:    c.Query("group"),
+		presence: c.Query("presence"),
 	}
 	var role *int
 	if roleStr := c.Query("role"); roleStr != "" {
@@ -409,6 +417,9 @@ func getUserSearchFilters(c *gin.Context) userSearchFilters {
 	}
 	var status *int
 	if statusStr := c.Query("status"); statusStr != "" {
+		if statusStr == "online" || statusStr == "offline" {
+			filters.presence = statusStr
+		}
 		if parsed, err := strconv.Atoi(statusStr); err == nil {
 			status = &parsed
 		}
@@ -427,7 +438,7 @@ func getUserSearchFilters(c *gin.Context) userSearchFilters {
 
 func GetUserQuotaSummary(c *gin.Context) {
 	filters := getUserSearchFilters(c)
-	summary, err := model.GetUserQuotaSummary(filters.keyword, filters.group, filters.role, filters.status, filters.tagId)
+	summary, err := model.GetUserQuotaSummary(filters.keyword, filters.group, filters.role, filters.status, filters.tagId, filters.presence)
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -440,12 +451,18 @@ func SearchUsers(c *gin.Context) {
 	filters := getUserSearchFilters(c)
 	pageInfo := common.GetPageQuery(c)
 	sortOptions := model.NewUserSortOptions(c.Query("sort_by"), c.Query("sort_order"))
+	sortOptions.Presence = filters.presence
 	users, total, err := model.SearchUsers(filters.keyword, filters.group, filters.role, filters.status, filters.tagId, pageInfo.GetStartIdx(), pageInfo.GetPageSize(), sortOptions)
 	if err != nil {
 		common.ApiError(c, err)
 		return
 	}
 
+	if err := model.FillUserOnlineStatus(users, time.Now().Unix()); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	c.Header("Cache-Control", "no-store")
 	pageInfo.SetTotal(int(total))
 	pageInfo.SetItems(users)
 	common.ApiSuccess(c, pageInfo)
@@ -519,6 +536,11 @@ func GetUser(c *gin.Context) {
 		common.ApiErrorT(c, "No permission to access users of same or higher level")
 		return
 	}
+	if err := model.FillUserOnlineStatus([]*model.User{user}, time.Now().Unix()); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	c.Header("Cache-Control", "no-store")
 	user.AdminPermissions = authz.Capabilities(user.Id, user.Role)
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,

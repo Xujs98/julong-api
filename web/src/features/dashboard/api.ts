@@ -105,3 +105,19 @@ export async function getUptimeStatus() {
   )
   return res.data
 }
+
+export interface UserActivitySummary {
+  daily_active_users: number
+  online_users: number
+  day_start: number
+  generated_at: number
+  online_window_seconds: number
+}
+
+export async function getUserActivitySummary() {
+  const response = await api.get<{
+    success: boolean
+    data: UserActivitySummary
+  }>('/api/data/activity')
+  return response.data
+}

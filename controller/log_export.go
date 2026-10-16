@@ -37,7 +37,12 @@ func exportUsageLogs(c *gin.Context, isAdmin bool) {
 		common.ApiErrorT(c, "Log export is disabled")
 		return
 	}
-	filter := logFilterFromQuery(c, isAdmin)
+	filter, err := logFilterFromQuery(c, isAdmin)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	c.Header("Cache-Control", "no-store")
 	startTimestamp, err := limitLogTimeRange(filter.StartTimestamp, filter.EndTimestamp)
 	if err != nil {
 		common.ApiError(c, err)

@@ -75,6 +75,17 @@ function renderPermissions(viewerRole: number, allowed?: boolean) {
           data: {
             resources: [
               {
+                resource: 'usage_logs',
+                label_key: 'Usage Logs',
+                actions: [
+                  {
+                    action: 'read',
+                    label_key: "View other accounts' usage logs",
+                    description_key: "View other accounts' usage logs",
+                  },
+                ],
+              },
+              {
                 resource: 'task_logs',
                 label_key: 'Task Logs',
                 actions: taskLabels.map(([action, label_key]) => ({
@@ -111,6 +122,7 @@ function renderPermissions(viewerRole: number, allowed?: boolean) {
               {
                 key: 'admin',
                 grants: {
+                  usage_logs: { read: true },
                   audit: { read: false },
                   task_logs: taskGrants,
                   privacy: { hide_root: false },
@@ -210,6 +222,7 @@ it.each([undefined, true])(
         expect.objectContaining({
           id: 2,
           admin_permissions: {
+            usage_logs: { read: true },
             audit: { read: !allowed },
             task_logs: taskGrants,
             privacy: { hide_root: false },
@@ -280,6 +293,11 @@ it('root can revoke one task category and enable Root privacy while retaining in
   await userEvent.click(
     screen.getByRole('button', { name: "View other accounts' task logs" })
   )
+  const usage = screen.getByRole('button', {
+    name: "View other accounts' usage logs",
+  })
+  expect(usage).toHaveAttribute('aria-pressed', 'true')
+  await userEvent.click(usage)
   await userEvent.click(screen.getByRole('button', { name: privacyLabel }))
   await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
   expect(put).not.toHaveBeenCalled()
@@ -293,6 +311,7 @@ it('root can revoke one task category and enable Root privacy while retaining in
       '/api/user/',
       expect.objectContaining({
         admin_permissions: {
+          usage_logs: { read: false },
           audit: { read: false },
           task_logs: { ...taskGrants, task_read: false },
           privacy: { hide_root: true },

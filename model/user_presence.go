@@ -2,6 +2,8 @@ package model
 
 import (
 	"github.com/QuantumNous/new-api/common"
+	"gorm.io/gorm"
+	"time"
 
 	"gorm.io/gorm/clause"
 )
@@ -133,8 +135,75 @@ func ListUserPresenceUsers(userIds []int) ([]User, error) {
 	}
 	var users []User
 	err := DB.Select("id", "username", "display_name", "email", "status", "setting").
-		Where("id IN ? AND status = ? AND deleted_at IS NULL", userIds, common.UserStatusEnabled).
+		Where("id IN ? AND status = ? AND deleted_at IS NULL AND role <> ?", userIds, common.UserStatusEnabled, common.RoleRootUser).
 		Order("id ASC").
 		Find(&users).Error
 	return users, err
+}
+
+// UserOnlineWindowSeconds is independent of notification configuration.
+const UserOnlineWindowSeconds int64 = 5 * 60
+
+func (options UserSortOptions) ApplyPresence(query *gorm.DB, now int64) *gorm.DB {
+	if options.Presence != "online" && options.Presence != "offline" {
+		return query
+	}
+	recent := query.Session(&gorm.Session{NewDB: true}).Model(&UserPresence{}).Select("user_id").Where("last_activity_at > ? AND last_activity_at <= ?", now-UserOnlineWindowSeconds, now)
+	// Exclude Root from both sides, preventing state inference by filtering.
+	query = query.Where("role <> ?", common.RoleRootUser)
+	if options.Presence == "online" {
+		return query.Where("status = ? AND deleted_at IS NULL AND id IN (?)", common.UserStatusEnabled, recent)
+	}
+	return query.Where("(status <> ? OR deleted_at IS NOT NULL OR id NOT IN (?))", common.UserStatusEnabled, recent)
+}
+
+func FillUserOnlineStatus(users []*User, now int64) error {
+	ids := make([]int, 0, len(users))
+	for _, user := range users {
+		user.IsOnline = nil
+		if user.Role != common.RoleRootUser {
+			ids = append(ids, user.Id)
+		}
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	var presences []UserPresence
+	if err := DB.Select("user_id", "last_activity_at").Where("user_id IN ?", ids).Find(&presences).Error; err != nil {
+		return err
+	}
+	active := make(map[int]bool, len(presences))
+	for _, presence := range presences {
+		active[presence.UserId] = presence.LastActivityAt > now-UserOnlineWindowSeconds && presence.LastActivityAt <= now
+	}
+	for _, user := range users {
+		if user.Role == common.RoleRootUser {
+			continue
+		}
+		online := user.Status == common.UserStatusEnabled && !user.DeletedAt.Valid && active[user.Id]
+		user.IsOnline = &online
+	}
+	return nil
+}
+
+type UserActivitySummary struct {
+	DailyActiveUsers    int64 `json:"daily_active_users"`
+	OnlineUsers         int64 `json:"online_users"`
+	DayStart            int64 `json:"day_start"`
+	GeneratedAt         int64 `json:"generated_at"`
+	OnlineWindowSeconds int64 `json:"online_window_seconds"`
+}
+
+func GetUserActivitySummary(now time.Time) (*UserActivitySummary, error) {
+	local := now.In(time.FixedZone("Asia/Shanghai", 8*60*60))
+	start := time.Date(local.Year(), local.Month(), local.Day(), 0, 0, 0, 0, local.Location()).Unix()
+	result := UserActivitySummary{DayStart: start, GeneratedAt: now.Unix(), OnlineWindowSeconds: UserOnlineWindowSeconds}
+	query := DB.Model(&UserPresence{}).Joins("JOIN users ON users.id = user_presences.user_id").Where("users.role <> ? AND users.deleted_at IS NULL", common.RoleRootUser)
+	if err := query.Session(&gorm.Session{}).Where("user_presences.last_activity_at >= ? AND user_presences.last_activity_at <= ?", start, now.Unix()).Count(&result.DailyActiveUsers).Error; err != nil {
+		return nil, err
+	}
+	if err := query.Session(&gorm.Session{}).Where("users.status = ? AND user_presences.last_activity_at > ? AND user_presences.last_activity_at <= ?", common.UserStatusEnabled, now.Unix()-UserOnlineWindowSeconds, now.Unix()).Count(&result.OnlineUsers).Error; err != nil {
+		return nil, err
+	}
+	return &result, nil
 }

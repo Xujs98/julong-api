@@ -199,10 +199,7 @@ func IsUserPresenceEmailEnabled() bool {
 
 func RecordUserPresenceActivity(userId int, source, ip, userAgent string) {
 	config := currentUserPresenceRuntimeConfig()
-	if !config.Enabled || userId <= 0 {
-		return
-	}
-	if _, monitored := config.MonitoredUsers[userId]; !monitored {
+	if userId <= 0 {
 		return
 	}
 	activityAt := time.Now().Unix()
@@ -215,6 +212,14 @@ func RecordUserPresenceActivity(userId int, source, ip, userAgent string) {
 	userPresenceActivityWrites[userId] = activityAt
 	userPresenceActivityMu.Unlock()
 
+	user, err := model.GetUserCache(userId)
+	if err != nil {
+		clearUserPresenceActivityWriteThrottle([]int{userId})
+		return
+	}
+	if user.Role == common.RoleRootUser || user.Status != common.UserStatusEnabled {
+		return
+	}
 	source = truncateUserPresenceValue(strings.TrimSpace(source), userPresenceMaximumSourceLength)
 	ip = truncateUserPresenceValue(strings.TrimSpace(ip), userPresenceMaximumIPLength)
 	userAgent = truncateUserPresenceValue(strings.TrimSpace(userAgent), userPresenceMaximumUserAgentLength)
@@ -228,7 +233,10 @@ func RecordUserPresenceActivity(userId int, source, ip, userAgent string) {
 		common.SysError(fmt.Sprintf("failed to record user presence activity for user %d: %v", userId, err))
 		return
 	}
-	if !transitioned {
+	if !transitioned || !config.Enabled {
+		return
+	}
+	if _, monitored := config.MonitoredUsers[userId]; !monitored {
 		return
 	}
 	if _, enabled := config.Events[UserPresenceEventOnline]; !enabled {

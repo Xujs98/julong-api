@@ -45,6 +45,7 @@ export const userTagSchema = z.object({
 export type UserTag = z.infer<typeof userTagSchema>
 
 export const userSchema = z.object({
+  is_online: z.boolean().optional(),
   id: z.number(),
   username: z.string(),
   display_name: z.string(),

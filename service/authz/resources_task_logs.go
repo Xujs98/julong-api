@@ -6,11 +6,13 @@ import (
 )
 
 const (
-	ResourceTaskLogs = "task_logs"
-	ResourcePrivacy  = "privacy"
+	ResourceUsageLogs = "usage_logs"
+	ResourceTaskLogs  = "task_logs"
+	ResourcePrivacy   = "privacy"
 )
 
 var (
+	UsageLogsRead   = Permission{ResourceUsageLogs, "read"}
 	DrawingLogsRead = Permission{ResourceTaskLogs, "drawing_read"}
 	ImageLogsRead   = Permission{ResourceTaskLogs, "image_read"}
 	TaskLogsRead    = Permission{ResourceTaskLogs, "task_read"}
@@ -19,6 +21,10 @@ var (
 )
 
 func init() {
+	RegisterResource(ResourceDefinition{
+		Resource: ResourceUsageLogs, LabelKey: "Usage Logs",
+		Actions: []ActionDefinition{{Action: UsageLogsRead.Action, LabelKey: "View other accounts' usage logs", DescriptionKey: "View other accounts' usage logs", DefaultRoles: []string{managedRoleKey}}},
+	})
 	RegisterResource(ResourceDefinition{
 		Resource: ResourceTaskLogs, LabelKey: "Task Logs",
 		Actions: []ActionDefinition{
@@ -31,7 +37,7 @@ func init() {
 	RegisterResource(ResourceDefinition{
 		Resource: ResourcePrivacy, LabelKey: "Privacy permissions",
 		Actions: []ActionDefinition{{Action: HideRoot.Action, LabelKey: "Do not allow viewing Root accounts",
-			DescriptionKey: "Hide Root task and audit records and prevent opening Root user details."}},
+			DescriptionKey: "Hide Root usage, task and audit records and prevent opening Root user details."}},
 	})
 }
 

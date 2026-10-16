@@ -51,6 +51,7 @@ import {
 } from '../lib/user-tags'
 import type { User, UserTag } from '../types'
 import { DataTableRowActions } from './data-table-row-actions'
+import { UserOnlineBadge } from './user-online-badge'
 import { UserQuotaCell } from './user-quota-cell'
 import { useUsers } from './users-provider'
 
@@ -155,6 +156,7 @@ export function useUsersColumns(tags: UserTag[] = []): ColumnDef<User>[] {
                     {username}
                   </span>
                 )}
+                <UserOnlineBadge user={user} />
                 {user.risk_tag && (
                   <Badge
                     className='text-white'

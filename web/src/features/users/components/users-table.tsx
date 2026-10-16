@@ -195,6 +195,8 @@ export function UsersTable(props: UsersTableProps) {
       }
     },
     placeholderData: (previousData) => previousData,
+    refetchInterval: 30 * 1000,
+    refetchIntervalInBackground: false,
   })
   const quotaSummaryQuery = useQuery({
     queryKey: ['users', 'quota-summary', quotaSummaryParams, refreshTrigger],

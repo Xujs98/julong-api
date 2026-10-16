@@ -6,7 +6,9 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/i18n"
@@ -74,8 +76,8 @@ func TestAdminLogPermissionsMatrix(t *testing.T) {
 			require.NoError(t, db.Raw(query).Scan(&version).Error)
 			t.Logf("database %s %s; independent log database", dialect, version)
 			require.NoError(t, i18n.Init())
-			require.NoError(t, db.AutoMigrate(&model.User{}, &model.CasbinRule{}, &model.AuthzRole{}, &model.Task{}, &model.Midjourney{}, &model.MediaAsset{}, &model.ImageGenerationLog{}, &model.Channel{}))
-			require.NoError(t, logDB.AutoMigrate(&model.AuditLog{}))
+			require.NoError(t, db.AutoMigrate(&model.User{}, &model.CasbinRule{}, &model.AuthzRole{}, &model.Task{}, &model.Midjourney{}, &model.MediaAsset{}, &model.ImageGenerationLog{}, &model.Channel{}, &model.UserPresence{}))
+			require.NoError(t, logDB.AutoMigrate(&model.AuditLog{}, &model.Log{}))
 			require.NoError(t, authz.Init(db))
 			users := []model.User{
 				{Id: 1, Username: "scope_root", Role: common.RoleRootUser, AffCode: "scope1"},
@@ -84,9 +86,11 @@ func TestAdminLogPermissionsMatrix(t *testing.T) {
 				{Id: 4, Username: "scope_promoted_root", Role: common.RoleRootUser, AffCode: "scope4"},
 			}
 			require.NoError(t, db.Create(&users).Error)
+			require.NoError(t, db.Model(&model.User{}).Where("id > ?", 0).Update("status", common.UserStatusEnabled).Error)
 			rootFile := filepath.Join(dir, "root-image")
 			require.NoError(t, os.WriteFile(rootFile, []byte("root-file-canary"), 0600))
 			for _, u := range users {
+				require.NoError(t, logDB.Create(&model.Log{UserId: u.Id, Username: u.Username, Type: model.LogTypeConsume, CreatedAt: time.Now().Unix(), Quota: u.Id * 100, PromptTokens: u.Id, CompletionTokens: u.Id * 2}).Error)
 				require.NoError(t, db.Create(&model.Task{UserId: u.Id, TaskID: fmt.Sprintf("scope_task_%d", u.Id), Status: model.TaskStatusSubmitted, SubmitTime: int64(u.Id)}).Error)
 				require.NoError(t, db.Create(&model.Midjourney{UserId: u.Id, MjId: fmt.Sprintf("scope_mj_%d", u.Id), SubmitTime: int64(u.Id)}).Error)
 				storedPath := ""
@@ -104,6 +108,12 @@ func TestAdminLogPermissionsMatrix(t *testing.T) {
 			viewerID, viewerRole := 2, common.RoleAdminUser
 			router := gin.New()
 			router.Use(func(c *gin.Context) { c.Set("id", viewerID); c.Set("role", viewerRole); c.Next() })
+			router.GET("/api/log/", GetAllLogs)
+			router.GET("/api/log/stat", GetLogsStat)
+			router.GET("/api/log/export", ExportAllLogs)
+			router.GET("/api/log/export/stream", ExportAllLogsStream)
+			router.GET("/api/user/", GetAllUsers)
+			router.GET("/api/user/search", SearchUsers)
 			router.GET("/api/mj/", GetAllMidjourney)
 			router.GET("/api/task/", GetAllTask)
 			router.GET("/api/image-generation-logs", GetImageGenerationLogs)
@@ -126,7 +136,7 @@ func TestAdminLogPermissionsMatrix(t *testing.T) {
 				path       string
 				permission authz.Permission
 			}{
-				{"/api/mj/", authz.DrawingLogsRead}, {"/api/task/", authz.TaskLogsRead},
+				{"/api/log/", authz.UsageLogsRead}, {"/api/mj/", authz.DrawingLogsRead}, {"/api/task/", authz.TaskLogsRead},
 				{"/api/image-generation-logs", authz.ImageLogsRead}, {"/api/media-assets", authz.MediaAssetsRead}, {"/api/audit", authz.AuditRead},
 			}
 			require.NoError(t, authz.SetUserPermissions(2, authz.PermissionsMap{"audit": {"read": true}}))
@@ -203,6 +213,143 @@ func TestAdminLogPermissionsMatrix(t *testing.T) {
 				require.True(t, result.Success)
 				assert.Equal(t, 4, result.Data.Total)
 			}
+			t.Run("usage_exports_and_statistics", func(t *testing.T) {
+				for _, tc := range []struct {
+					name        string
+					viewer      int
+					role        int
+					permissions authz.PermissionsMap
+					ids         []int
+					quota       int
+				}{
+					{"default_admin", 2, common.RoleAdminUser, authz.PermissionsMap{"privacy": {"hide_root": false}}, []int{1, 2, 3, 4}, 1000},
+					{"private_admin", 2, common.RoleAdminUser, authz.PermissionsMap{"privacy": {"hide_root": true}}, []int{2, 3}, 500},
+					{"self_only", 2, common.RoleAdminUser, authz.PermissionsMap{"usage_logs": {"read": false}}, []int{2}, 200},
+					{"root", 1, common.RoleRootUser, nil, []int{1, 2, 3, 4}, 1000},
+				} {
+					t.Run(tc.name, func(t *testing.T) {
+						viewerID, viewerRole = tc.viewer, tc.role
+						if tc.permissions != nil {
+							require.NoError(t, authz.SetUserPermissions(2, tc.permissions))
+						}
+						var stat struct {
+							Success bool
+							Data    model.Stat
+						}
+						response := request(http.MethodGet, "/api/log/stat")
+						require.NoError(t, common.Unmarshal(response.Body.Bytes(), &stat))
+						require.True(t, stat.Success, response.Body.String())
+						assert.Equal(t, tc.quota, stat.Data.Quota)
+						assert.Equal(t, len(tc.ids), stat.Data.Rpm)
+						assert.Equal(t, tc.quota*3/100, stat.Data.Tpm)
+						for _, path := range []string{"/api/log/export", "/api/log/export/stream"} {
+							response = request(http.MethodGet, path)
+							require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+							assert.Equal(t, "no-store", response.Header().Get("Cache-Control"))
+							for _, u := range users {
+								allowed := false
+								for _, id := range tc.ids {
+									if id == u.Id {
+										allowed = true
+									}
+								}
+								if allowed {
+									assert.Contains(t, response.Body.String(), u.Username)
+								} else {
+									assert.NotContains(t, response.Body.String(), u.Username)
+								}
+							}
+						}
+						if tc.viewer == 2 {
+							response = request(http.MethodGet, "/api/log/?username=scope_root")
+							if len(tc.ids) < 4 {
+								assert.Contains(t, response.Body.String(), `"total":0`)
+							}
+						}
+					})
+				}
+			})
+			t.Run("presence_and_root_privacy", func(t *testing.T) {
+				viewerID, viewerRole = 1, common.RoleRootUser
+				now := time.Date(2026, time.October, 16, 16, 1, 0, 0, time.UTC) // 00:01 on Oct 17 in UTC+8
+				start := now.Unix() - 60
+				extra := []model.User{
+					{Id: 5, Username: "presence_never", AffCode: "presence5", Status: common.UserStatusEnabled},
+					{Id: 6, Username: "presence_disabled", AffCode: "presence6", Status: common.UserStatusDisabled},
+					{Id: 7, Username: "presence_deleted", AffCode: "presence7", Status: common.UserStatusEnabled, DeletedAt: gorm.DeletedAt{Time: now, Valid: true}},
+				}
+				require.NoError(t, db.Create(&extra).Error)
+				for id, at := range map[int]int64{1: now.Unix(), 2: now.Unix() - 10, 3: now.Unix() - 300, 4: now.Unix(), 6: now.Unix(), 7: now.Unix()} {
+					require.NoError(t, db.Create(&model.UserPresence{UserId: id, LastActivityAt: at, IsOnline: false}).Error)
+				}
+				summary, err := model.GetUserActivitySummary(now)
+				require.NoError(t, err)
+				assert.Equal(t, start, summary.DayStart)
+				assert.EqualValues(t, 2, summary.DailyActiveUsers)
+				assert.EqualValues(t, 1, summary.OnlineUsers)
+				for _, tc := range []struct {
+					state string
+					ids   []int
+				}{{"online", []int{2}}, {"offline", []int{3, 5, 6, 7}}} {
+					var ids []int
+					require.NoError(t, (model.UserSortOptions{Presence: tc.state}).ApplyPresence(db.Unscoped().Model(&model.User{}), now.Unix()).Pluck("id", &ids).Error)
+					assert.ElementsMatch(t, tc.ids, ids)
+				}
+				var loaded []*model.User
+				require.NoError(t, db.Unscoped().Find(&loaded).Error)
+				require.NoError(t, model.FillUserOnlineStatus(loaded, now.Unix()))
+				for _, u := range loaded {
+					if u.Role == common.RoleRootUser {
+						assert.Nil(t, u.IsOnline)
+						data, e := common.Marshal(u)
+						require.NoError(t, e)
+						assert.NotContains(t, string(data), "is_online")
+					} else {
+						require.NotNil(t, u.IsOnline)
+						assert.Equal(t, u.Id == 2, *u.IsOnline)
+					}
+				}
+				// Verify live HTTP list/search pagination and Root field omission for both viewers.
+				require.NoError(t, db.Model(&model.UserPresence{}).Where("user_id > ?", 0).Update("last_activity_at", time.Now().Unix()-600).Error)
+				require.NoError(t, db.Model(&model.UserPresence{}).Where("user_id = ?", 2).Update("last_activity_at", time.Now().Unix()).Error)
+				for _, role := range []int{common.RoleAdminUser, common.RoleRootUser} {
+					viewerID, viewerRole = 2, role
+					for _, path := range []string{"/api/user/?presence=online", "/api/user/search?status=online"} {
+						response := request(http.MethodGet, path)
+						var result struct {
+							Success bool
+							Data    struct {
+								Total int
+								Items []model.User
+							}
+						}
+						require.NoError(t, common.Unmarshal(response.Body.Bytes(), &result))
+						require.True(t, result.Success, response.Body.String())
+						assert.Equal(t, 1, result.Data.Total)
+						require.Len(t, result.Data.Items, 1)
+						assert.Equal(t, 2, result.Data.Items[0].Id)
+						require.NotNil(t, result.Data.Items[0].IsOnline)
+						assert.True(t, *result.Data.Items[0].IsOnline)
+					}
+					response := request(http.MethodGet, "/api/user/?page_size=20")
+					assert.NotContains(t, response.Body.String(), `"is_online":null`)
+					var result struct {
+						Data struct{ Items []map[string]any }
+					}
+					require.NoError(t, common.Unmarshal(response.Body.Bytes(), &result))
+					for _, u := range result.Data.Items {
+						if u["role"] == float64(common.RoleRootUser) {
+							_, exists := u["is_online"]
+							assert.False(t, exists)
+						}
+					}
+					for _, id := range []int{1, 4} {
+						response = request(http.MethodGet, fmt.Sprintf("/api/user/%d", id))
+						assert.NotContains(t, response.Body.String(), "is_online")
+					}
+				}
+				assert.True(t, strings.Contains(request(http.MethodGet, "/api/user/search?status=offline").Body.String(), `"success":true`))
+			})
 			// A failed Root lookup must not turn into an unrestricted query or detail response.
 			viewerID, viewerRole = 2, common.RoleAdminUser
 			isolated := model.DB
@@ -233,7 +380,7 @@ func TestAdminLogPermissionUpdateRevokesSessions(t *testing.T) {
 	require.NoError(t, err)
 	operation := service.VerificationOperation{Scope: service.VerificationScopeAdminUserUpdate, Context: []byte(fmt.Sprintf(`{"user_id":%d}`, target.Id))}
 	proof := issueSecurityEnrollmentProof(t, identity, operation, service.VerificationMethodPassword)
-	body := fmt.Sprintf(`{"id":%d,"username":"managed-user","group":"default","admin_permissions":{"task_logs":{"task_read":false},"privacy":{"hide_root":true}}}`, target.Id)
+	body := fmt.Sprintf(`{"id":%d,"username":"managed-user","group":"default","admin_permissions":{"usage_logs":{"read":false},"task_logs":{"task_read":false},"privacy":{"hide_root":true}}}`, target.Id)
 	response := adminUserRequest(http.MethodPut, "/api/user/", body, proof, identity, common.RoleRootUser, nil, UpdateUser)
 	var result securityEnrollmentResponse
 	require.NoError(t, common.Unmarshal(response.Body.Bytes(), &result))
@@ -242,6 +389,7 @@ func TestAdminLogPermissionUpdateRevokesSessions(t *testing.T) {
 	assert.ErrorIs(t, err, service.ErrLoginSessionRevoked)
 	assert.True(t, authz.RootHidden(target.Id, common.RoleAdminUser))
 	assert.False(t, authz.Can(target.Id, common.RoleAdminUser, authz.TaskLogsRead))
+	assert.False(t, authz.Can(target.Id, common.RoleAdminUser, authz.UsageLogsRead))
 	response = adminUserRequest(http.MethodPut, "/api/user/", body, proof, identity, common.RoleRootUser, nil, UpdateUser)
 	assert.Equal(t, http.StatusForbidden, response.Code)
 }

@@ -50,17 +50,23 @@ import {
 import type { UserSubscription } from '@/features/subscriptions/types'
 import { getAllLogs } from '@/features/usage-logs/api'
 import type { UsageLog } from '@/features/usage-logs/data/schema'
-import { canOpenUserDetails } from '@/lib/admin-permissions'
+import {
+  canOpenUserDetails,
+  canViewOtherTaskLogs,
+  getLogsVisibilityKey,
+} from '@/lib/admin-permissions'
 import {
   formatNumber,
   formatQuota,
   formatTimestampToDate,
   formatTokens,
 } from '@/lib/format'
+import { ROLE } from '@/lib/roles'
+import { requireServerSuccess } from '@/lib/server-error-message'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
 
-import { getUserQuotaIncreaseLogs, getUserUsageSummary } from '../api'
+import { getUser, getUserQuotaIncreaseLogs, getUserUsageSummary } from '../api'
 import {
   USER_ROLES,
   USER_STATUS,
@@ -71,6 +77,7 @@ import type { User } from '../types'
 import { userDetailDialogLayoutClasses } from './user-detail-layout'
 import { UserGroupRatiosCard } from './user-group-ratios-card'
 import { UserLoginAccessPanel } from './user-login-access-panel'
+import { UserOnlineBadge } from './user-online-badge'
 import { UserRequestContentPanel } from './user-request-content-panel'
 import { UserRiskPanel } from './user-risk-panel'
 import { useUsers } from './users-provider'
@@ -309,6 +316,18 @@ export function UserDetailDialog() {
     open === 'user-detail' && !!user && canOpenUserDetails(viewer, user.role)
   const userId = user?.id
   const username = user?.username
+  const canReadLogs =
+    viewer?.id === userId || canViewOtherTaskLogs(viewer, 'common')
+  const presenceQuery = useQuery({
+    queryKey: ['admin-user-online', viewer?.id, userId],
+    enabled: isOpen && Boolean(userId) && user?.role !== ROLE.SUPER_ADMIN,
+    queryFn: async () => {
+      if (!userId) return null
+      return requireServerSuccess(await getUser(userId)).data
+    },
+    refetchInterval: 30 * 1000,
+    refetchIntervalInBackground: false,
+  })
 
   const summaryQuery = useQuery({
     queryKey: ['admin-user-usage-summary', userId],
@@ -321,8 +340,13 @@ export function UserDetailDialog() {
   })
 
   const logsQuery = useQuery({
-    queryKey: ['admin-user-detail-logs', username],
-    enabled: isOpen && Boolean(username),
+    queryKey: [
+      'admin-user-detail-logs',
+      getLogsVisibilityKey(viewer),
+      username,
+      canReadLogs,
+    ],
+    enabled: isOpen && Boolean(username) && canReadLogs,
     queryFn: async () => {
       if (!username) return []
       const result = await getAllLogs({
@@ -420,6 +444,7 @@ export function UserDetailDialog() {
                 <span className='truncate text-base font-semibold'>
                   {user?.username || '-'}
                 </span>
+                <UserOnlineBadge user={presenceQuery.data ?? user} />
                 {statusConfig && (
                   <StatusBadge
                     label={t(statusConfig.labelKey)}
