@@ -25,7 +25,7 @@
 | 当前分支 / HEAD | main；B23 功能提交 `c0497299c` 与交付记录提交 `712ec7721` 已推送 | B23 可视化编辑器、概览活跃卡片和同步文档已交付；四项既有未跟踪内容保留 |
 | 上游整合 | main已包含此前功能分支提交 | 实际git和远端对比已纠正旧“尚待合并”快照，保留历史批次记录 |
 | 用户 GitHub 仓库 | origin = https://github.com/Xujs98/julong-api.git | upstream = https://github.com/QuantumNous/new-api.git，仅跟踪上游；不得把用户改动推到 upstream |
-| 本地服务 | B23最新Go产物 PID41372 监听3000 | `/api/status` 返回200且 `success=true`；首页主 JS/CSS 与最新 `web/dist` SHA256一致；真实管理员浏览器登录未实测 |
+| 本地服务 | B24复用B23最新Go产物，PID51076监听3000（2026-10-17 Asia/Shanghai实测） | `/api/status` 返回200且 `success=true`；首页主 JS/CSS 与最新 `web/dist` SHA256一致；真实管理员浏览器登录未实测 |
 | 模型广场按秒/按次价格 | 当前代码已实现，历史交付有验证记录 | 两项都有价格同时显示；只配一项只显示该项；模型名及分辨率价格区规则一致 |
 | 视频输入素材 | 已完成本地实现/定向回归、三库复验、浏览器预览和视频直链、最终重启 | SQLite3.50.4/MySQL5.7.44/PostgreSQL16.15最终矩阵8/8无Skip；图片及嵌入视频/音频正常、素材视频直链可播放；Safari/原生音频直链/线上公网未实测 |
 | 成品列阴影与滚轮 | 已完成（本地）；17项通过，Chromium已验证并激活；Safari待人工复核 | 独立复核10/10，主任务4文件17/17；Chromium明暗阴影、全列固定、滚轮/splitHeader已验；首页资源与dist一致，Safari无连接未实测 |
@@ -471,3 +471,11 @@ B08：MD/DOCX 后端、管理 UI、模型绑定与广场调用文档已实现。
 - 前端验证已完成：文本替换编辑器与概览测试 12/12；`tsgo -b`、目标文件 `oxlint`、`oxfmt --check`、`bun run i18n:sync` 和 Rsbuild 构建通过。已编译 `/tmp/julong-api-runtime/new-api-b23`，停止旧 PID29600 后以 PID41372 启动；`/api/status` HTTP 200 且 `success=true`，首页主 JS/CSS 与 `web/dist` SHA256一致。首页 HTML 含运行时注入内容，未要求与静态 `web/dist/index.html` 字节级相同。
 - 本批已提交为 `c0497299c3dc52df9d428b327db21baec1b1e601`，成功推送 `origin/main`，`git ls-remote` 返回同一 SHA；生产环境未部署，真实管理员浏览器登录未实测。
 - 本批继续保留既有未跟踪内容 `controller/media_asset.go.bak`、`site-assets/`、`web/pnpm-lock.yaml`、`web/src/features/usage-logs/components/media-assets-table.tsx.bak`，不得纳入提交。
+
+### B24：启动本地项目（2026-10-17，已启动并验证）
+
+- 用户要求启动项目。开始时3000端口无监听；复用已验证的 `/tmp/julong-api-runtime/new-api-b23`，B23之后已提交的变动仅涉及进度文档，无需重新构建。使用项目根目录 `.env` 和现有本地 SQLite 主库，未更改业务代码或配置。
+- 启动前通过 SQLite backup API 保存主库，备份权限0600且 `PRAGMA quick_check` 返回 `ok`；备份及日志目录为 `/tmp/julong-api-runtime/startup-20261017-070521/`。
+- PID51076后台运行并监听3000；localhost及127.0.0.1的 `/api/status` 均HTTP200、`success=true`、版本 `v1.0.0-julong.1`；首页HTTP200，6项JS/CSS资源均HTTP200且SHA256与当前 `web/dist` 一致。
+- 本批仅验证启动和静态资源，未重跑业务测试、三库矩阵或真实管理员浏览器交互；生产环境未部署。四项历史未跟踪内容保留，不纳入提交。
+- Git基线 `main/d1bfdb56f` 已与用户远端main核对一致；本批两份运行记录按项目规则单独提交，交付目标仅 `origin/main`，推送结果以实际Git输出为准。

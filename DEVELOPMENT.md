@@ -1839,3 +1839,9 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 - 复核浏览器访问 `localhost` 时发现请求走 `::1`；主库仍残留 1 条 `blocked_ips` 记录，因此页面继续返回 `SITE_ACCESS_DENIED`。
 - 创建修复前备份 `/tmp/julong-ip-unblock-20261016/one-api.db.before-ipv6-fix`，通过 SQLite `PRAGMA quick_check`；事务精确删除 `ip='::1'` 的 1 条记录。`127.0.0.1` 与 `::1` 均无封禁，其他封禁 IP 也已为 0。
 - 重启本地服务清除进程内封禁缓存，当前 PID `52263` 监听 `3000`。`localhost`、`127.0.0.1`、`[::1]` 首页及 `/api/status` 均返回 `200`。无业务代码变更、无生产发布。
+
+### 2026-10-17 本地项目启动（B24）
+
+- 复用已验证的B23二进制 `/tmp/julong-api-runtime/new-api-b23` 和仓库现有本地配置，以PID51076后台监听3000；访问地址为 `http://localhost:3000`。
+- SQLite启动前备份及 `quick_check=ok` 已完成；localhost/127.0.0.1健康接口HTTP200、`success=true`，首页HTTP200，6项嵌入JS/CSS与 `web/dist` SHA256一致。备份和运行日志位于 `/tmp/julong-api-runtime/startup-20261017-070521/`。
+- 无业务代码、API、数据模型或配置变更；本批未重跑业务测试，未生产部署。运行记录随 `PROJECT_PROGRESS.md` 同批提交至用户仓库，交付以Git实际结果为准。
