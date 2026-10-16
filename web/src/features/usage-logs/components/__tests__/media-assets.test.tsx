@@ -7,6 +7,7 @@ import {
   RouterProvider,
 } from '@tanstack/react-router'
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -147,7 +148,12 @@ test('regular users can preview their media without delete controls', async () =
 })
 
 test('admins have a delete action and must confirm it', async () => {
-  useAuthStore.getState().auth.setUser({ id: 1, username: 'admin', role: 10 })
+  useAuthStore.getState().auth.setUser({
+    id: 1,
+    username: 'admin',
+    role: 10,
+    permissions: { admin_permissions: { task_logs: { assets_read: true } } },
+  })
   vi.spyOn(api, 'get').mockResolvedValue({ data: response })
 
   await mount()
@@ -162,7 +168,12 @@ test('admins have a delete action and must confirm it', async () => {
 })
 
 test('admin user column is separate, search applies on demand, dates use seconds and reset clears username', async () => {
-  useAuthStore.getState().auth.setUser({ id: 1, username: 'admin', role: 10 })
+  useAuthStore.getState().auth.setUser({
+    id: 1,
+    username: 'admin',
+    role: 10,
+    permissions: { admin_permissions: { task_logs: { assets_read: true } } },
+  })
   const get = vi.spyOn(api, 'get').mockResolvedValue({ data: response })
   const router = await mount('?startTime=100000&endTime=200000')
   await waitFor(() =>
@@ -215,7 +226,12 @@ test('admin user column is separate, search applies on demand, dates use seconds
 })
 
 test('view menu controls visible columns and self scope requests only owned media', async () => {
-  useAuthStore.getState().auth.setUser({ id: 1, username: 'admin', role: 10 })
+  useAuthStore.getState().auth.setUser({
+    id: 1,
+    username: 'admin',
+    role: 10,
+    permissions: { admin_permissions: { task_logs: { assets_read: true } } },
+  })
   const get = vi.spyOn(api, 'get').mockResolvedValue({ data: response })
   await mount()
   await waitFor(() =>
@@ -241,4 +257,34 @@ test('view menu controls visible columns and self scope requests only owned medi
   expect(
     screen.queryByRole('textbox', { name: 'Filter by username' })
   ).not.toBeInTheDocument()
+})
+
+test('tightening Root privacy closes an open preview and drops cached rows before refetch completes', async () => {
+  const viewer = {
+    id: 1,
+    username: 'admin',
+    role: 10,
+    permissions: { admin_permissions: { task_logs: { assets_read: true } } },
+  }
+  useAuthStore.getState().auth.setUser(viewer)
+  const get = vi.spyOn(api, 'get').mockResolvedValue({ data: response })
+  await mount()
+  fireEvent.click(await screen.findByRole('button', { name: /Preview/ }))
+  expect(await screen.findByRole('dialog')).toBeVisible()
+  get.mockImplementation(() => new Promise(() => {}))
+  act(() =>
+    useAuthStore.getState().auth.setUser({
+      ...viewer,
+      permissions: {
+        admin_permissions: {
+          task_logs: { assets_read: true },
+          privacy: { hide_root: true },
+        },
+      },
+    })
+  )
+  await waitFor(() =>
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  )
+  expect(screen.queryByText('asset_alice')).not.toBeInTheDocument()
 })

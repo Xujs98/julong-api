@@ -582,6 +582,7 @@ export interface GetTaskLogsParams {
 }
 
 export interface GetImageGenerationLogsParams {
+  view_scope?: 'all' | 'self'
   p?: number
   page_size?: number
   model?: string

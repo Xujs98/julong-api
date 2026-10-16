@@ -103,7 +103,7 @@ function MediaIcon(props: { type: MediaAsset['media_type'] }) {
 
 export function MediaAssetsTable() {
   const search = route.useSearch()
-  const { isAdminView } = useLogsViewScope()
+  const { isAdminView, visibilityKey } = useLogsViewScope('assets')
   return (
     <MediaAssetsTableContent
       key={JSON.stringify([
@@ -111,6 +111,7 @@ export function MediaAssetsTable() {
         search.endTime,
         search.username,
         isAdminView,
+        visibilityKey,
       ])}
     />
   )
@@ -123,7 +124,7 @@ function MediaAssetsTableContent() {
   const searchParams = route.useSearch()
   const userId = useAuthStore((state) => state.auth.user?.id)
   const role = useAuthStore((state) => state.auth.user?.role ?? ROLE.USER)
-  const { isAdminView: isAdmin } = useLogsViewScope()
+  const { isAdminView: isAdmin, visibilityKey } = useLogsViewScope('assets')
   const { sensitiveVisible, setSelectedUserId, setUserInfoDialogOpen } =
     useUsageLogsContext()
   const canDelete = role >= ROLE.ADMIN
@@ -191,6 +192,7 @@ function MediaAssetsTableContent() {
     queryKey: [
       'media-assets',
       userId,
+      visibilityKey,
       isAdmin,
       pagination,
       startTime,

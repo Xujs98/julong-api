@@ -1,6 +1,6 @@
 # Julong-API 开发文档
 
-最后更新：2026-10-15
+最后更新：2026-10-16
 
 本文档是本二开项目的强制开发记录。以后新增、修改或删除任何 API、组件、数据模型、配置项、路由、数据库行为或部署行为时，必须在同一次改动中同步更新本文档，并在“变更日志”中新增记录。
 
@@ -369,7 +369,7 @@ curl http://localhost:3000/api/error-reports \
 | POST | `/api/user/invoice/applications/:id/withdraw` | `controller.AdminWithdrawCompletedInvoiceApplication` | 撤回已完成的发票申请以修正错误附件 | path 正整数 `id` | 仅 `completed` 可撤回；事务内删除附件、清空完成时间并恢复 `pending`，来源账单继续占用，已发送邮件不会被召回 | 完成；管理员/root，写管理审计 |
 | GET | `/api/user/:id` | `controller.GetUser` | 可编辑用户详情 | path `id` | `User`（包含 `last_login_at`、`last_login_ip`） | 完成；管理员/root，同级/更高角色受限 |
 | POST | `/api/user/` | `controller.CreateUser` | 创建用户 | `UserFormData`；管理员/root 可通过 `binding_updates` 设置邮箱、GitHub、Discord、OIDC、WeChat、Telegram、LinuxDO 绑定，空字符串清除 | `User` | 完成 |
-| PUT | `/api/user/` | `controller.UpdateUser` | 更新用户 | `UserFormData & {id}`；绑定信息编辑开关打开时才传入 `binding_updates`，仅更新传入字段，空字符串清除；非空值做长度与唯一性校验；普通用户资料保存不传该字段以保持绑定不变 | partial `User` | 完成 |
+| PUT | `/api/user/` | `controller.UpdateUser` | 更新用户及管理员权限 | `UserFormData & {id,admin_permissions?}`；权限变更仅Root、须一次性 `admin.user.update` 安全凭据；绑定信息仍仅按传入 `binding_updates` 更新 | partial `User`；权限矩阵事务提交时递增目标AuthVersion，提交后撤销旧会话和发布权限缓存变更 | 完成 |
 | DELETE | `/api/user/:id` | `controller.DeleteUser` | 删除用户 | path `id` | success | 完成 |
 | POST | `/api/user/manage` | `controller.ManageUser` | 晋升/降级/启用/禁用/删除/额度调整；`disable` 同时封禁全部已知登录 IP | `{id,action,...}` | partial `User` | 完成 |
 | GET | `/api/user/agent-detail/:id` | `controller.AdminGetAgentDetail` | 代理详情弹窗 | path `id` | `{agent,users,redemptions}` | 完成 |
@@ -620,10 +620,10 @@ curl 'http://localhost:3000/api/data/groups?start_timestamp=1784908800&end_times
 
 | 方法 | 路径 | Handler | 用途 | 参数 | 响应 | 权限 | 状态 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| GET | `/api/image-generation-logs` | `controller.GetImageGenerationLogs` | 分页查询成功的同步生图记录 | `p`、`page_size`、`model`、`prompt`、`channel_id`、`start_timestamp`、`end_timestamp` | `PageInfo<ImageGenerationLog[]>`，每条包含受保护的 `image_urls`；无有效订阅权益返回 403 | 普通用户需有效订阅且只能看自己的最近 N 条；管理员/root 看全部 | 完成 |
+| GET | `/api/image-generation-logs` | `controller.GetImageGenerationLogs` | 生图日志分页列表及计数 | `p,page_size,model,prompt,channel_id,start_timestamp,end_timestamp,view_scope?`；`view_scope=self`进一步限制本人 | `PageInfo<ImageGenerationLog[]>`，含受保护 `image_urls`；普通用户无有效订阅403 | 普通用户本人最近N条；管理员按 `task_logs.image_read` 跨账户，`privacy.hide_root`排除Root；Root全部 | 完成 |
 | GET | `/api/image-generation-logs/` | `controller.GetImageGenerationLogs` | 兼容尾斜杠 | 同上 | 同上 | 同上 | 完成 |
-| GET | `/api/image-generation-logs/:id/task` | `controller.GetImageGenerationLogTask` | 点击任务 ID 后读取当前状态和脱敏响应 JSON | path `id` | `{success,data: ImageGenerationTaskPayload}`；本地 base64 已替换为受保护图片 URL | 有效订阅所属用户或管理员/root | 完成 |
-| GET | `/api/image-generation-logs/:id/images/:index` | `controller.GetImageGenerationLogImage` | 鉴权读取本地落盘图片 | path `id`、`index` | 图片二进制；不存在 404、无订阅/越权/超出最近 N 条范围均为 403 | 有效订阅所属用户或管理员/root | 完成 |
+| GET | `/api/image-generation-logs/:id/task` | `controller.GetImageGenerationLogTask` | 当前状态与脱敏响应JSON | path `id` | `{success,data:ImageGenerationTaskPayload}`；本地base64替换为受保护图片URL；无权403 | 普通用户须所属与订阅可见；管理员须命中生图日志范围和Root隐私规则 | 完成 |
+| GET | `/api/image-generation-logs/:id/images/:index` | `controller.GetImageGenerationLogImage` | 鉴权读取落盘图片 | path `id,index` | 图片字节；404不存在、403无权；`Cache-Control: private, no-store` | 同生图任务详情，逐次检查日志归属、独立权限和Root隐私 | 完成 |
 
 调用示例：
 
@@ -996,15 +996,31 @@ curl -X DELETE \
 | `/api/model-documentation` | `GET` → `GetModelDocumentation` | 沿用模型广场 HeaderNavModuleAuth(pricing)；公开/登录/关闭按站点设置；PAT使用accessTokenAnyRule并保留分组身份 | `model` 为具体模型名；仅 caller 可用分组的可见模型，未绑定 `data:null`，绑定返回模板；隐藏/不可用模型404。不能按模板id公开枚举 | 完成 |
 | `/api/vendors` | `GET /`、`/search`、`/:id`、`POST`、`PUT`、`DELETE` | 管理员/root | Vendor 元数据 | 完成 |
 | `/api/deployments` | settings、test、CRUD、硬件/地区/副本辅助、日志/容器详情 | 管理员/root | IONet/模型部署管理 | 完成 |
-| `/api/mj` | `GET /`、`GET /self` | 管理员或用户 | Midjourney 任务日志 | 完成 |
-| `/api/task` | `GET /`、`GET /self` | 管理员或用户 | 通用异步任务日志 | 完成 |
-| `/api/media-assets` | `GET` → `ListMediaAssets` | 须登录；普通用户仅本人、管理员全部 | 参数 `page`（默认1）、`page_size`（默认50，最大200）、start_time/end_time（可选Unix秒，创建时间闭区间）、username（管理员全站视图按用户名包含匹配）、view_scope（self仅本人；管理员默认全站，普通用户不能扩大范围）；返回 `{success,data:{items,total,page,page_size}}`，每项含 asset_id/user_id/username/source_type/media_type/mime_type/url/size/created_at/expires_at，不返回本地文件路径 | 完成 |
-| `/api/media-assets/:asset_id` | `DELETE` → `DeleteMediaAsset` | 仅管理员，普通用户403 | 路径参数 asset_id；删除文件及元数据，公网素材只删元数据；成功 `{success:true}`，不存在404 | 完成 |
+| `/api/mj` | `GET /` → `GetAllMidjourney`；`GET /self` → `GetUserMidjourney` | 管理员或本人 | 原分页和任务筛选；列表/total共用范围；管理员无 `task_logs.drawing_read`仅本人，隐私选中排除Root | 完成 |
+| `/api/task` | `GET /` → `GetAllTask`；`GET /self` → `GetUserTask` | 管理员或本人 | 原分页/平台/任务ID/状态/时间筛选；列表/total共用范围；无 `task_logs.task_read`仅本人，隐私选中排除Root | 完成 |
+| `/api/media-assets` | `GET` → `ListMediaAssets` | 登录；跨账户须 `task_logs.assets_read`，Root不限 | `page=1,page_size=50`（最多200）、`start_time/end_time` Unix秒、`username`包含查询、`view_scope=self`；无跨账户权限强制本人；隐私选中排除Root | `{success,data:{items,total,page,page_size}}`；每项含asset_id/user_id/username/source_type/media_type/mime_type/url/size/created_at/expires_at，不回传本地路径 | 完成 |
+| `/api/media-assets/:asset_id` | `DELETE` → `DeleteMediaAsset` | 管理员且记录处于素材可见范围；普通用户403、受保护Root403 | path `asset_id`；删除文件与元数据，公网记录只删元数据；无权时不触碰文件 | `{success:true}`；不存在404 | 完成 |
 | `/api/media-assets/:asset_id/content` | `GET/HEAD` → `MediaAssetContent` | 高熵素材链接公开读取，供上游抓取 | 路径参数 asset_id，可传 Range/条件请求头；成功200或206原始媒体字节，HEAD无正文，已过期410、删除/未知/外部公网记录404；只此内容路径排除API gzip，保留原始 Content-Length/Content-Range；no-store/nosniff/sandbox，CSP仅允许同源媒体。不是生成视频的过期接口 | 完成 |
-| `/api/task/:task_id/detail` | `GET` → `GetDashboardTaskDetail` | 登录用户仅本人；管理员可查全站 | 路径参数 `task_id`；返回 `{success,data}`，data 包含本地 task_id/id、status/progress、模型、时间、duration/seconds、delivery_status、失败原因及可用时本地签名 result_url；非管理员不返回 platform；只读已保存的最新轮询状态，不创建视频或触发付费请求；响应禁止缓存 | 完成 |
-| `/api/task/:task_id/request` | `GET` → `GetDashboardTaskRequest` | 登录用户仅本人；管理员可查全站 | 路径参数 `task_id`；返回 `{success,data:{task_id,request_body,truncated}}`；凭据脱敏、图片/音频/视频 URL 和上传文件引用显示 `[MEDIA]`；历史未留存请求体返回 null | 完成 |
+| `/api/task/:task_id/detail` | `GET` → `GetDashboardTaskDetail` | 本人；管理员跨账户须 `task_logs.task_read`且不被Root隐私排除 | path `task_id`；只读最新保存状态，不创建/轮询付费任务 | `{success,data}`含task_id/id/status/progress/模型/时间/duration/seconds/delivery_status/失败原因及可用签名result_url；无权按任务不存在处理；禁止缓存 | 完成 |
+| `/api/task/:task_id/request` | `GET` → `GetDashboardTaskRequest` | 同任务详情范围 | path `task_id` | `{success,data:{task_id,request_body,truncated}}`；凭据脱敏、媒体引用显示 `[MEDIA]`，历史无请求体为null；无权按任务不存在处理 | 完成 |
 | `/v1/tasks/:key` | `GET` → `GetTask` | 沿用任务鉴权及归属校验 | 普通用户结果不再包含 platform，其他任务状态字段保持不变 | 完成 |
 | `/v1/tasks/:key/artifacts/:artifact_key/content` | `GET/HEAD` → `TaskArtifactContent` | 任务日志成品读取/视频下载 | 高熵 access capability；视频下载可附加 download=video，服务端仅对已确认视频覆盖随机 .mp4 Content-Disposition；Range/HEAD 原始媒体响应保持 | 登录用户本人、管理员或有效 capability |
+
+### 管理员权限与 Root 隐私合同（B14，2026-10-16）
+
+| 方法 | 路径 | Handler | 用途 / 参数 | 响应 / 权限 |
+| --- | --- | --- | --- | --- |
+| GET | `/api/authz/catalog` | `GetPermissionCatalog` | 无参数；供现有PermissionMatrix展示资源、动作和默认角色 | `{success,data:{resources,roles}}`新增 `task_logs`四项与 `privacy.hide_root`；管理员/root |
+| GET | `/api/subscription/admin/users/:id/subscriptions` | `AdminListUserSubscriptions` | path正整数id；用户详情订阅查询 | 原订阅列表；管理员/root；受限管理员查询Root为403 |
+
+- 四项 `task_logs.drawing_read/image_read/task_read/assets_read` 默认授予管理员，保留原全站查看行为；单项撤销仅限制该类别到本人。Root不受限制。`privacy.hide_root`默认false，选中后限制该管理员查看Root所属绘制、生图、任务、素材和审计记录及详情。
+- 使用 `model.UserLogScope`统一列表、total和详情范围。Root ID从主库（含软删除用户）读取，日志库仅使用ID条件，支持独立LOG_DB；读取失败返回错误或拒绝详情，不能扩大范围。没有新增表、列或数据库迁移。
+- 用户列表保留Root用户名，受限管理员无法点击；详情弹窗同时禁用打开及资料/订阅查询。后端GetUser原角色层级保护继续生效，订阅旁路增加同样隐私检查。图片读取逐次授权并禁止缓存；任务请求/结果/成果获取及素材删除均检查归属。
+- 沿用一次性 `admin.user.update`二次验证，权限提交和AuthVersion递增在同一事务，提交后撤销目标会话、同步权限缓存。前端按用户、角色、类别权限和隐私标识隔离列表/详情缓存并重置已打开的预览。
+- 复用 `PermissionMatrix`、原用户编辑器、共享Dialog、现有列表与筛选组件；没有新增同类控件或页面路由。七语言文案通过临时脚本及i18n同步写入。
+- 边界：公开高熵输入素材URL及已签发的成品capability链接仍保留原分享/上游读取语义；本权限不撤回已经复制、缓存或下载的内容，也不宣称所有共享链接被撤销。真实管理员浏览器端到端和ClickHouse未在本批实测。
+- 安全参考：OWASP Authentication Cheat Sheet的敏感操作重新认证、Session Management Cheat Sheet的权限变更会话失效、Authorization Cheat Sheet的逐请求/逐对象校验与失败拒绝；ASVS 5.0.0 V8（8.1.1、8.2.1、8.2.2、8.3.1、8.3.2）作为审阅控制参考，不声明全站ASVS认证。
+- 任务插件说明：`task_plugin.bind`仅允许管理员在渠道新增/编辑中列出和绑定已注册插件；`/task-plugins`现有管理页仅Root，可查看安装列表、上传更新、版本/市场/系统开关。当前侧栏没有该页链接，Root需直接访问此路径；本批没有更改插件功能或增加入口。
 
 ### Relay 兼容 API
 
@@ -1098,15 +1114,15 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 | POST | `/api/plugin/task/:key/status` | `SetTaskPluginStatus` | 启停插件 | `enabled`；`cascade?,force?` | 更新/影响结果 | Root |
 | POST | `/api/plugin/task/:key/dryrun` | `DryRunTaskPlugin` | 插件函数调试 | `hook,member?,args[]` | 执行返回值/诊断 | Root |
 | DELETE | `/api/plugin/task/:key/versions/:version` | `DeleteTaskPluginVersion` | 删除覆盖版本 | `key,version,force?` | 删除/重建结果 | Root |
-| GET | `/api/task_plugin_options` | `GetTaskPluginOptions` | 渠道编辑器可绑定插件 | 无 | 可绑定插件及模型 | 管理员 + `task-plugin.bind` 权限 |
+| GET | `/api/task_plugin_options` | `GetTaskPluginOptions` | 渠道编辑器可绑定插件 | 无 | 可绑定插件及模型 | 管理员 + `task_plugin.bind` 权限 |
 | GET | `/api/token/auto-groups` | `GetTokenAutoGroups` | API Key 自动分组可选项 | 无 | 分组元数据 | 登录用户 |
-| GET | `/api/audit` | `GetAuditLogs` | 独立安全/操作审计日志 | 分页、用户/类型/时间/操作筛选 | 审计列表；敏感信息按权限裁剪 | 管理员 + `audit.read` |
+| GET | `/api/audit` | `GetAuditLogs` | 安全/操作审计日志 | 原分页/用户/类型/时间/操作筛选 | 审计items/total按同一范围过滤；非Root继续排除actor_role=Root的历史快照，隐私限制另排除当前Root的user_id | 管理员 + `audit.read`，叠加Root隐私；Root不限 |
 | GET | `/api/audit/self` | `GetAuditLogs` | 查看本人审计日志 | 分页及筛选 | 本人审计列表 | 登录用户，强制本人过滤 |
 | GET | `/api/log/export`、`/api/log/self/export` | `ExportAllLogs`、`ExportUserLogs` | 保留矩龙 CSV 导出 | 原日志过滤与时间范围 | 带 BOM 中文表头 CSV、截断提示，最多 5000 行 | 管理员/本人；导出开关及互斥锁 |
 | GET | `/api/log/export/stream`、`/api/log/self/export/stream` | `ExportAllLogsStream`、`ExportUserLogsStream` | 新增流式日志导出 | 日志过滤及时间范围 | NDJSON，末尾完成/截断记录 | 管理员/本人；导出开关及互斥锁 |
 | DELETE | `/api/system-task/history` | `DeleteSystemTaskHistory` | 清理已结束系统任务历史 | 任务筛选 query | `deleted_count` | Root |
-| GET | `/api/task` | `GetAllTask` | 统一插件任务管理列表 | 任务分页/筛选 | 插件任务/用量/成果 | 管理员 |
-| GET | `/api/task/:task_id/artifacts` | `GetDashboardTaskArtifacts` | 获取任务成果访问地址 | `task_id` | `task_id,artifacts[]`，兼容旧音频/视频 | 本人或获准的管理员 |
+| GET | `/api/task` | `GetAllTask` | 统一插件任务管理列表 | 原任务分页/筛选 | 原任务列表；items和total共用授权范围 | 管理员；跨账户须 `task_logs.task_read`，叠加Root隐私 |
+| GET | `/api/task/:task_id/artifacts` | `GetDashboardTaskArtifacts` | 成果访问地址 | path `task_id` | `{task_id,artifacts[]}`兼容旧音视频；无权按任务不存在处理 | 本人或获准管理员；跨账户须 `task_logs.task_read`，叠加Root隐私 |
 | POST | `/api/vendors/operations/preview` | `PreviewVendorOperation` | 厂商合并/移动预览 | `VendorOperation` | 影响预览 | 管理员 |
 | POST | `/api/vendors/operations` | `ApplyVendorOperation` | 应用厂商操作 | `VendorOperation` | 修改模型/厂商结果 | 管理员，记录操作审计 |
 | POST | `/api/models/delete` | `BatchDeleteModelMeta` | 批量删除模型及可选渠道/价格清理 | `model_ids[],remove_from_channels,remove_pricing` | 删除及更新渠道结果 | 管理员；移除定价仅 Root |
@@ -1229,8 +1245,8 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 | `/dashboard/*` | `_authenticated/dashboard/*` | 看板统计 | 用户 | 完成 |
 | `/keys` | `_authenticated/keys/index.tsx` | API Keys | 用户 | 完成 |
 | `/ledger` | `_authenticated/ledger/index.tsx` | 运营账本：日期查询、六项汇总、可点击配置的预估倍率、CSV 下载、秒级日期时间记录增改和 10 秒确认单项/批量删除 | Root 或 `ledger.read`；写入按钮及预估倍率设置需 `ledger.write`，删除控件需 `ledger.delete` | 完成 |
-| `/usage-logs/*` | `_authenticated/usage-logs/*` | 使用日志/任务日志/绘图日志 | 用户/管理员视图不同 | 完成 |
-| `/usage-logs/assets` | `_authenticated/usage-logs/$section.tsx` + `media-assets-table.tsx` | 视频输入素材列表、提交时间范围/用户名筛选、列显隐、预览、复制 URL、删除 | 用户查看本人；管理员全站视图显示独立用户列，支持切换仅本人；可手动删除 | 完成 |
+| `/usage-logs/*` | `_authenticated/usage-logs/*` | 使用/绘制/生图/任务日志；四类按独立权限切换全站或本人 | 管理员跨账户按 `task_logs`，隐私由服务端过滤；可见范围变动重置预览并隔离列表/详情缓存 | 完成 |
+| `/usage-logs/assets` | `_authenticated/usage-logs/$section.tsx` + `media-assets-table.tsx` | 素材列表、时间/用户名筛选、独立用户列、预览/复制/删除 | 普通用户本人；管理员跨账户须 `task_logs.assets_read`，隐私排除Root；可见范围变动关闭预览 | 完成 |
 | `/wallet` | `_authenticated/wallet/index.tsx` | 钱包、充值、兑换码 | 用户 | 完成 |
 | `/invoices` | `_authenticated/invoices/index.tsx` | 自助发票：仅勾选已启用来源，多选金额达到门槛后打开申请表；填写普通/专用票、粘贴识别、公司名/税号/接收邮箱/备注，上传与预览 1-3 张支付截图。邮箱默认绑定值且可更改；管理员查看开票资料和私有截图，保留原审核、交付、取消、撤回功能 | 用户；管理列表仅管理员/root | 完成 |
 | `/profile` | `_authenticated/profile/index.tsx` | 个人资料/安全 | 用户 | 完成 |
@@ -1239,7 +1255,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 | `/channels` | `_authenticated/channels/index.tsx` | 渠道管理 | 管理员/root | 完成 |
 | `/models/*` | `_authenticated/models/*` | 模型元数据/部署 | 管理员/root | 完成 |
 | `/models/document-templates` | `_authenticated/models/$section.tsx` + `features/models/index.tsx` | 文档模板列表、MD/Word上传、编辑预览、替换、改名、确认删除 | 管理员/root，沿用现有模型section路由校验 | 完成；B08验证和边界见PROJECT_PROGRESS.md |
-| `/users` | `_authenticated/users/index.tsx` | 用户管理；筛选栏在标签后提供“不统计用户”配置并展示随 URL search 实时变化的剩余总配额与用户数，支持搜索、分组、状态、角色及 `tag[]` 风险/自定义标签筛选，含标签、批量额度、风险和登录设备弹窗 | 管理员/root | 完成 |
+| `/users` | `_authenticated/users/index.tsx` | 用户管理、筛选/额度/风险/设备和管理员权限矩阵 | 管理员/root；仅Root编辑权限，新增任务日志四项及Root隐私；受限管理员的Root用户名显示纯文本且详情查询禁用 | 完成 |
 | `/subscriptions` | `_authenticated/subscriptions/index.tsx` | 订阅管理 | 管理员/root | 完成 |
 | `/error-reports` | `_authenticated/error-reports/index.tsx` | 错误反馈列表 | 管理员/root | 完成 |
 | `/system-info` | `_authenticated/system-info/index.tsx` | 系统节点/任务 | Root | 完成 |
@@ -1545,6 +1561,15 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 - 最终验证：`go test ./service ./router ./controller -run 'Test(PersistTaskMedia|MediaDataURL|ValidateUserMediaURL|MediaAssetContent|ProxyTaskMedia|SetTaskRouter|InvoiceAPI)' -count=1 -v` 三包通过、无Skip（media-final-tests-20261015.log）；`python3 /tmp/julong-media-verify-20261015/run_matrix_final.py` 再验三库8/8无Skip，matrix-final.log。根Go构建成功，最终PID15826于05:13:29监听3000，状态成功/首页6资源hash一致/匿名素材列表401；已有成品Range206、1024字节MP4、最终CSP正确（未输出私密签名URL）。本轮未跑全量Go测试，不宣称全站验收。
 
 ## 变更日志
+
+### 2026-10-16 管理员任务日志权限与 Root 隐私（B14）
+
+- 新增四类独立跨账户日志权限及Root隐私限制；服务端同时限制列表/计数/详情/图片和删除，前端复用权限矩阵并阻止受限Root详情入口，变更可见范围时清除打开状态并隔离缓存。
+- 已验证：真实SQLite 3.50.4、MySQL 5.7.44、PostgreSQL 16.15查询矩阵，含独立主/日志库、分页计数、直接访问拒绝、文件保留、默认权限与重播拒绝；权限更新旧会话失效在三库验证。命令：`python3 /tmp/julong-log-permissions-20261016/run-matrix-v5.py`；内部定向 `go test ./controller -run '^Test(AdminLogPermissionsMatrix|MediaAssetListFiltersDatabaseMatrix|AdminLogPermissionUpdateRevokesSessions)$' -count=1 -v`，另在MySQL/PostgreSQL运行会话撤销用例；无Skip。
+- `go test ./service/authz -count=1`全包、PAT路由规则定向检查、任务/生图/审计受影响回归通过；前端5文件54/54（权限/访问/素材3文件15项，审计/详情2文件39项）；`bun run typecheck`、18个修改TS/TSX目标lint/format、`bun run i18n:sync`、前端生产构建和根Go构建通过。
+- 本地激活：旧PID48103正常停止，新PID24268运行 `/tmp/julong-log-permissions-20261016/new-api`、监听3000；`GET /api/status success=true`、版本v1.0.0-julong.1，首页6个JS/CSS的SHA256与web/dist一致，四项默认权限已初始化。验证证据位于同目录的日志/exit和activation.json。Git交付另记；生产未部署。
+- 较宽后端回归存在三组既有AdminUser测试失败（manage_disable安全凭据状态期望及测试夹具缺logs/user_request_content_logs表）；使用HEAD版本controller/user.go的Go overlay复现，不将其计为通过，不宣称全量测试通过。没有全站迁移/ClickHouse/生产部署验证。
+
 
 ### 2026-10-15 任务日志视频下载文件名（B10）
 

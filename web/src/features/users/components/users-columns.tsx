@@ -33,8 +33,10 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
+import { canOpenUserDetails } from '@/lib/admin-permissions'
 import { getCurrencyDisplay } from '@/lib/currency'
 import { formatQuota } from '@/lib/format'
+import { useAuthStore } from '@/stores/auth-store'
 import { useSystemConfigStore } from '@/stores/system-config-store'
 
 import {
@@ -55,6 +57,7 @@ import { useUsers } from './users-provider'
 export function useUsersColumns(tags: UserTag[] = []): ColumnDef<User>[] {
   const { t } = useTranslation()
   const { setOpen, setCurrentRow } = useUsers()
+  const viewer = useAuthStore((state) => state.auth.user)
   const currencyConfig = useSystemConfigStore((state) => state.config.currency)
   const { meta: currency } = getCurrencyDisplay()
   const quotaUnit = currency.kind === 'tokens' ? t('Tokens') : currency.symbol
@@ -136,16 +139,22 @@ export function useUsersColumns(tags: UserTag[] = []): ColumnDef<User>[] {
           return (
             <div className='flex min-w-[160px] flex-col gap-1'>
               <div className='flex items-center gap-2'>
-                <button
-                  type='button'
-                  className='text-primary hover:text-primary/80 max-w-[140px] cursor-pointer truncate text-left font-medium underline-offset-4 hover:underline'
-                  onClick={() => {
-                    setCurrentRow(user)
-                    setOpen('user-detail')
-                  }}
-                >
-                  {username}
-                </button>
+                {canOpenUserDetails(viewer, user.role) ? (
+                  <button
+                    type='button'
+                    className='text-primary hover:text-primary/80 max-w-[140px] cursor-pointer truncate text-left font-medium underline-offset-4 hover:underline'
+                    onClick={() => {
+                      setCurrentRow(user)
+                      setOpen('user-detail')
+                    }}
+                  >
+                    {username}
+                  </button>
+                ) : (
+                  <span className='max-w-[140px] truncate font-medium'>
+                    {username}
+                  </span>
+                )}
                 {user.risk_tag && (
                   <Badge
                     className='text-white'
@@ -398,6 +407,6 @@ export function useUsersColumns(tags: UserTag[] = []): ColumnDef<User>[] {
     ],
     // formatQuota reads the currency configuration from the store.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [t, quotaUnit, currencyConfig, tags, setOpen, setCurrentRow]
+    [t, quotaUnit, currencyConfig, tags, setOpen, setCurrentRow, viewer]
   )
 }

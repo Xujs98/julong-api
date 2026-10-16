@@ -27,15 +27,20 @@ import { Dialog } from '@/components/dialog'
 import { ErrorState } from '@/components/error-state'
 import { LoadingState } from '@/components/loading-state'
 import { Button } from '@/components/ui/button'
+import { getLogsVisibilityKey } from '@/lib/admin-permissions'
 import { requireServerSuccess } from '@/lib/server-error-message'
+import { useAuthStore } from '@/stores/auth-store'
 
 import { getTaskDetail } from '../../api'
 
 export function TaskResultCell(props: { taskId: string }) {
   const { t } = useTranslation()
+  const visibilityKey = useAuthStore((state) =>
+    getLogsVisibilityKey(state.auth.user)
+  )
   const [open, setOpen] = useState(false)
   const result = useQuery({
-    queryKey: ['usage-logs', 'task-detail', props.taskId],
+    queryKey: ['usage-logs', 'task-detail', props.taskId, visibilityKey],
     queryFn: async () =>
       requireServerSuccess(await getTaskDetail(props.taskId)),
     enabled: open,

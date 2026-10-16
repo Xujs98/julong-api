@@ -65,8 +65,11 @@ func (log *ImageGenerationLog) Insert() error {
 	return DB.Create(log).Error
 }
 
-func GetImageGenerationLogs(userId int, isAdmin bool, visibleLimit, startIdx, pageSize, channelId int, modelName, prompt string, startTime, endTime int64) ([]*ImageGenerationLog, int64, error) {
+func GetImageGenerationLogs(userId int, isAdmin bool, visibleLimit, startIdx, pageSize, channelId int, modelName, prompt string, startTime, endTime int64, scopes ...UserLogScope) ([]*ImageGenerationLog, int64, error) {
 	query := DB.Model(&ImageGenerationLog{})
+	for _, scope := range scopes {
+		query = scope.Apply(query)
+	}
 	if !isAdmin {
 		query = query.Where("user_id = ?", userId)
 		if visibleLimit > 0 {

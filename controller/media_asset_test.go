@@ -9,6 +9,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/service/authz"
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
@@ -51,10 +52,14 @@ func TestMediaAssetListFiltersDatabaseMatrix(t *testing.T) {
 			require.NoError(t, err)
 			t.Cleanup(func() { require.NoError(t, connection.Close()) })
 			previous := model.DB
+			previousMaster := common.IsMasterNode
+			common.IsMasterNode = true
+			t.Cleanup(func() { common.IsMasterNode = previousMaster })
 			model.DB = db
 			t.Cleanup(func() { model.DB = previous })
-			require.NoError(t, db.AutoMigrate(&model.User{}, &model.MediaAsset{}))
-			require.NoError(t, db.Create(&[]model.User{{Id: 7, Username: "asset_alice", AffCode: "assetalice"}, {Id: 8, Username: "asset_bob", AffCode: "assetbob"}}).Error)
+			require.NoError(t, db.AutoMigrate(&model.User{}, &model.MediaAsset{}, &model.CasbinRule{}, &model.AuthzRole{}))
+			require.NoError(t, authz.Init(db))
+			require.NoError(t, db.Create(&[]model.User{{Id: 7, Username: "asset_alice", Role: common.RoleAdminUser, AffCode: "assetalice"}, {Id: 8, Username: "asset_bob", AffCode: "assetbob"}}).Error)
 			require.NoError(t, db.Create(&[]model.MediaAsset{
 				{AssetID: "alice_before", UserID: 7, SourceType: "public", MediaType: "image", CreatedAt: 99},
 				{AssetID: "alice_start", UserID: 7, SourceType: "public", MediaType: "image", CreatedAt: 100},

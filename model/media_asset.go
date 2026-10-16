@@ -48,8 +48,11 @@ func (asset *MediaAsset) BeforeCreate(_ *gorm.DB) error {
 	return nil
 }
 
-func ListMediaAssets(userID int, admin bool, offset, limit int, startTime, endTime int64, username string) ([]MediaAsset, int64, error) {
+func ListMediaAssets(userID int, admin bool, offset, limit int, startTime, endTime int64, username string, scopes ...UserLogScope) ([]MediaAsset, int64, error) {
 	query := DB.Model(&MediaAsset{})
+	for _, scope := range scopes {
+		query = scope.Apply(query)
+	}
 	if !admin {
 		query = query.Where("user_id = ?", userID)
 	} else if username != "" {

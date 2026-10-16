@@ -9,6 +9,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/service/authz"
 
 	"github.com/gin-gonic/gin"
 )
@@ -32,6 +33,14 @@ func GetImageGenerationLogs(c *gin.Context) {
 		}
 		visibleLimit = limit
 	}
+	scope, err := authz.LogScope(c.GetInt("id"), role, authz.ImageLogsRead)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	if c.Query("view_scope") == "self" {
+		scope.UserID = c.GetInt("id")
+	}
 	logs, total, err := model.GetImageGenerationLogs(
 		c.GetInt("id"),
 		role >= common.RoleAdminUser,
@@ -43,6 +52,7 @@ func GetImageGenerationLogs(c *gin.Context) {
 		strings.TrimSpace(c.Query("prompt")),
 		startTime,
 		endTime,
+		scope,
 	)
 	if err != nil {
 		common.ApiError(c, err)
@@ -79,25 +89,16 @@ func GetImageGenerationLogImage(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-	if c.GetInt("role") < common.RoleAdminUser {
-		userId := c.GetInt("id")
-		allowed, limit, accessErr := model.GetUserImageGenerationLogAccess(userId)
-		if accessErr != nil || !allowed || log.UserId != userId {
-			c.Status(http.StatusForbidden)
-			return
-		}
-		visible, visibleErr := model.IsImageGenerationLogVisibleToUser(log.Id, userId, limit)
-		if visibleErr != nil || !visible {
-			c.Status(http.StatusForbidden)
-			return
-		}
+	if !canAccessImageGenerationLog(c, log) {
+		c.Status(http.StatusForbidden)
+		return
 	}
 	data, mimeType, err := service.ReadImageGenerationLogImage(log, index)
 	if err != nil {
 		c.Status(http.StatusNotFound)
 		return
 	}
-	c.Header("Cache-Control", "private, max-age=3600")
+	c.Header("Cache-Control", "private, no-store")
 	c.Data(http.StatusOK, mimeType, data)
 }
 
@@ -128,7 +129,7 @@ func GetImageGenerationLogTask(c *gin.Context) {
 
 func canAccessImageGenerationLog(c *gin.Context, log *model.ImageGenerationLog) bool {
 	if c.GetInt("role") >= common.RoleAdminUser {
-		return true
+		return authz.CanViewLogOwner(c.GetInt("id"), c.GetInt("role"), log.UserId, authz.ImageLogsRead)
 	}
 	userId := c.GetInt("id")
 	allowed, limit, err := model.GetUserImageGenerationLogAccess(userId)

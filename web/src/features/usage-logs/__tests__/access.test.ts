@@ -20,6 +20,10 @@ import assert from 'node:assert/strict'
 
 import { describe, test } from 'vitest'
 
+import {
+  canViewOtherTaskLogs,
+  canOpenUserDetails,
+} from '@/lib/admin-permissions'
 import { ROLE } from '@/lib/roles'
 
 import { resolveLogsViewAccess } from '../components/usage-logs-provider'
@@ -35,4 +39,36 @@ describe('usage log access tier', () => {
     assert.equal(resolveLogsViewAccess(ROLE.ADMIN, 'all'), 'admin')
     assert.equal(resolveLogsViewAccess(ROLE.SUPER_ADMIN, 'all'), 'root')
   })
+})
+
+test('task categories grant cross-account views independently and Root remains unrestricted', () => {
+  const viewer = {
+    id: 2,
+    username: 'admin',
+    role: ROLE.ADMIN,
+    permissions: {
+      admin_permissions: {
+        task_logs: {
+          drawing_read: true,
+          image_read: false,
+          task_read: true,
+          assets_read: false,
+        },
+        privacy: { hide_root: true },
+      },
+    },
+  }
+  assert.equal(canViewOtherTaskLogs(viewer, 'drawing'), true)
+  assert.equal(canViewOtherTaskLogs(viewer, 'image'), false)
+  assert.equal(canViewOtherTaskLogs(viewer, 'task'), true)
+  assert.equal(canViewOtherTaskLogs(viewer, 'assets'), false)
+  assert.equal(canOpenUserDetails(viewer, ROLE.SUPER_ADMIN), false)
+  assert.equal(canOpenUserDetails(viewer, ROLE.USER), true)
+  const root = { ...viewer, role: ROLE.SUPER_ADMIN }
+  assert.equal(canViewOtherTaskLogs(root, 'assets'), true)
+  assert.equal(canOpenUserDetails(root, ROLE.SUPER_ADMIN), true)
+  assert.equal(
+    canViewOtherTaskLogs({ ...viewer, role: ROLE.USER }, 'drawing'),
+    false
+  )
 })

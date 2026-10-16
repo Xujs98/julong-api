@@ -24,6 +24,7 @@ import { useTranslation } from 'react-i18next'
 import { DataTablePage, useDataTable } from '@/components/data-table'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
+import { getLogsVisibilityKey } from '@/lib/admin-permissions'
 import { requireServerSuccess } from '@/lib/server-error-message'
 import { useAuthStore } from '@/stores/auth-store'
 
@@ -42,6 +43,9 @@ export function AuditLogViewer(props: {
   onAccessDenied?: () => Promise<void>
 }) {
   const { t } = useTranslation()
+  const visibilityKey = useAuthStore((state) =>
+    getLogsVisibilityKey(state.auth.user)
+  )
   const userId = useAuthStore((state) => state.auth.user?.id)
   const [filters, setFilters] = useState<AuditFilters>({ p: 1, page_size: 20 })
   const defaultTokenScope = props.defaultTokenScope ?? 'all'
@@ -61,7 +65,7 @@ export function AuditLogViewer(props: {
     filters.end_timestamp !== undefined &&
     filters.start_timestamp > filters.end_timestamp
   const query = useQuery({
-    queryKey: ['audit', userId, props.scope, params],
+    queryKey: ['audit', userId, props.scope, params, visibilityKey],
     queryFn: async () =>
       requireServerSuccess(await getAuditLogs(props.scope, params)),
     enabled: canQuery && !invalidRange,

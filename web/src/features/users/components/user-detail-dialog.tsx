@@ -50,6 +50,7 @@ import {
 import type { UserSubscription } from '@/features/subscriptions/types'
 import { getAllLogs } from '@/features/usage-logs/api'
 import type { UsageLog } from '@/features/usage-logs/data/schema'
+import { canOpenUserDetails } from '@/lib/admin-permissions'
 import {
   formatNumber,
   formatQuota,
@@ -57,6 +58,7 @@ import {
   formatTokens,
 } from '@/lib/format'
 import { cn } from '@/lib/utils'
+import { useAuthStore } from '@/stores/auth-store'
 
 import { getUserQuotaIncreaseLogs, getUserUsageSummary } from '../api'
 import {
@@ -301,8 +303,10 @@ function getUserStatusConfig(user?: User | null) {
 export function UserDetailDialog() {
   const { t } = useTranslation()
   const { open, setOpen, currentRow, triggerRefresh } = useUsers()
-  const isOpen = open === 'user-detail'
+  const viewer = useAuthStore((state) => state.auth.user)
   const user = currentRow
+  const isOpen =
+    open === 'user-detail' && !!user && canOpenUserDetails(viewer, user.role)
   const userId = user?.id
   const username = user?.username
 

@@ -19,6 +19,10 @@ For commercial licensing, please contact support@quantumnous.com
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useState, type ReactNode } from 'react'
 
+import {
+  canViewOtherTaskLogs,
+  getLogsVisibilityKey,
+} from '@/lib/admin-permissions'
 import { ROLE } from '@/lib/roles'
 import { useAuthStore } from '@/stores/auth-store'
 
@@ -54,7 +58,14 @@ const UsageLogsContext = createContext<UsageLogsContextValue | undefined>(
   undefined
 )
 
-export function UsageLogsProvider({ children }: { children: ReactNode }) {
+export function UsageLogsProvider(props: { children: ReactNode }) {
+  const visibilityKey = useAuthStore((state) =>
+    getLogsVisibilityKey(state.auth.user)
+  )
+  return <UsageLogsState key={visibilityKey}>{props.children}</UsageLogsState>
+}
+
+function UsageLogsState({ children }: { children: ReactNode }) {
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null)
   const [userInfoDialogOpen, setUserInfoDialogOpen] = useState(false)
   const [affinityTarget, setAffinityTarget] =
@@ -101,15 +112,20 @@ export function useUsageLogsContext() {
  * `isAdminView` rather than raw role, so an admin who switches to "only
  * mine" is treated exactly like a regular user for that view.
  */
-export function useLogsViewScope() {
-  const role = useAuthStore((state) => state.auth.user?.role ?? ROLE.GUEST)
+export function useLogsViewScope(category = 'common') {
+  const user = useAuthStore((state) => state.auth.user)
+  const role = user?.role ?? ROLE.GUEST
   const { viewScope, setViewScope } = useUsageLogsContext()
-  const canManageScope = role >= ROLE.ADMIN
-  const viewAccess = resolveLogsViewAccess(role, viewScope)
+  const canManageScope = canViewOtherTaskLogs(user, category)
+  const viewAccess = resolveLogsViewAccess(
+    role,
+    canManageScope ? viewScope : 'self'
+  )
   const isAdminView = viewAccess !== 'self'
   const isRootView = viewAccess === 'root'
 
   return {
+    visibilityKey: getLogsVisibilityKey(user),
     canManageScope,
     viewScope,
     setViewScope,

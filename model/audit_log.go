@@ -46,6 +46,7 @@ type AuditLog struct {
 }
 
 type AuditLogFilter struct {
+	UserLogScope
 	SelfView        bool // Server-selected metadata projection, independent of the viewer's actual role.
 	UserId          int
 	Username        string
@@ -137,7 +138,7 @@ func RecordAuditLog(c *gin.Context, entry AuditLog) {
 }
 
 func GetAuditLogs(filter AuditLogFilter, start, limit, viewerRole int) ([]*AuditLog, int64, error) {
-	query := LOG_DB.Model(&AuditLog{})
+	query := filter.UserLogScope.Apply(LOG_DB.Model(&AuditLog{}))
 	if common.UsingLogDatabase(common.DatabaseTypeClickHouse) {
 		// Decode native JSON through database/sql as text for AuditOther.Scan.
 		// Preserve numeric metadata instead of returning quoted Int64 values.

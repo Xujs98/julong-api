@@ -9,16 +9,21 @@ import { EmptyState } from '@/components/empty-state'
 import { ErrorState } from '@/components/error-state'
 import { LoadingState } from '@/components/loading-state'
 import { Button } from '@/components/ui/button'
+import { getLogsVisibilityKey } from '@/lib/admin-permissions'
 import { requireServerSuccess } from '@/lib/server-error-message'
+import { useAuthStore } from '@/stores/auth-store'
 
 import { getTaskRequest } from '../../api'
 import type { TaskLog } from '../../types'
 
 export function TaskRequestCell(props: { log: TaskLog }) {
   const { t } = useTranslation()
+  const visibilityKey = useAuthStore((state) =>
+    getLogsVisibilityKey(state.auth.user)
+  )
   const [open, setOpen] = useState(false)
   const request = useQuery({
-    queryKey: ['usage-logs', 'task-request', props.log.task_id],
+    queryKey: ['usage-logs', 'task-request', props.log.task_id, visibilityKey],
     queryFn: async () =>
       requireServerSuccess(await getTaskRequest(props.log.task_id)),
     enabled: open,

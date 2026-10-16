@@ -286,6 +286,7 @@ export async function fetchLogsByCategory(
   if (logCategory === 'image') {
     return await getImageGenerationLogs({
       ...baseParams,
+      view_scope: isAdmin ? 'all' : 'self',
       prompt: searchParams.filter as string | undefined,
     } as GetImageGenerationLogsParams)
   }

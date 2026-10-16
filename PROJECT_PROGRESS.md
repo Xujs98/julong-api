@@ -4,7 +4,7 @@
 > 详细 API、路由、配置和数据模型以 [DEVELOPMENT.md](./DEVELOPMENT.md) 为技术登记入口。
 > 代码与实际命令输出优先于旧文档、历史回复和截图；“代码已写”“本地可用”“已提交”“已上线”必须分开。
 
-最后更新：2026-10-16 00:13（Asia/Shanghai）
+最后更新：2026-10-16 18:29（Asia/Shanghai）
 项目根目录：`/Users/xujs/.docker_dir/new-api`
 
 ## 1. 新对话接续入口（必须先读）
@@ -22,15 +22,16 @@
 
 | 项目 | 状态（截至最后更新时间） | 依据与边界 |
 | --- | --- | --- |
-| 当前分支 / HEAD | main / 0e347030e（B13功能提交） | B11/B12/B13已推送origin/main，不处于merge，三个既有未跟踪文件保留 |
+| 当前分支 / HEAD | main / b64990956（B14起始HEAD） | B14实现、定向验证和本地激活已完成，Git交付收尾中；既有未跟踪文件保留 |
 | 上游整合 | main已包含此前功能分支提交 | 实际git和远端对比已纠正旧“尚待合并”快照，保留历史批次记录 |
 | 用户 GitHub 仓库 | origin = https://github.com/Xujs98/julong-api.git | upstream = https://github.com/QuantumNous/new-api.git，仅跟踪上游；不得把用户改动推到 upstream |
-| 本地服务 | B13最新前端嵌入Go产物，PID48103监听3000 | /api/status成功、6个首页JS/CSS与web/dist一致；真实管理员浏览器登录未实测 |
+| 本地服务 | B14最新前端嵌入Go产物，PID24268监听3000 | /api/status成功、6个首页JS/CSS与web/dist一致；真实管理员浏览器登录未实测 |
 | 模型广场按秒/按次价格 | 当前代码已实现，历史交付有验证记录 | 两项都有价格同时显示；只配一项只显示该项；模型名及分辨率价格区规则一致 |
 | 视频输入素材 | 已完成本地实现/定向回归、三库复验、浏览器预览和视频直链、最终重启 | SQLite3.50.4/MySQL5.7.44/PostgreSQL16.15最终矩阵8/8无Skip；图片及嵌入视频/音频正常、素材视频直链可播放；Safari/原生音频直链/线上公网未实测 |
 | 成品列阴影与滚轮 | 已完成（本地）；17项通过，Chromium已验证并激活；Safari待人工复核 | 独立复核10/10，主任务4文件17/17；Chromium明暗阴影、全列固定、滚轮/splitHeader已验；首页资源与dist一致，Safari无连接未实测 |
+| 管理员日志与Root隐私 | B14本地已完成，待Git交付 | 四项独立跨账户权限、Root五类日志过滤和详情保护；三库查询/会话验证、前端54项及构建/重启通过；全量测试及真实登录浏览器未验收 |
 | 项目进度入口 | 已完成（文档本地） | 本文 + AGENTS.md 必读入口；持续按批次更新 |
-| Git 提交 / 线上发布 | B13功能0e347030e已推送origin/main | 不推upstream；api.julongkj.top未部署 |
+| Git 提交 / 线上发布 | B13功能0e347030e已推送origin/main；B14待提交推送 | 不推upstream；api.julongkj.top未部署 |
 
 ## 3. 状态口径
 
@@ -308,3 +309,29 @@ B08：MD/DOCX 后端、管理 UI、模型绑定与广场调用文档已实现。
 
 - 功能/测试/文档提交0e347030e已成功推送origin/main，首次push成功；未推upstream、未force。PID48103本地健康；api.julongkj.top未部署。
 - 最终工作区只保留原有未跟踪controller/media_asset.go.bak、web/pnpm-lock.yaml、media-assets-table.tsx.bak；未修改或提交这些文件。此交付记录随后单独同步。
+
+### B14：管理员任务日志权限与 Root 隐私（2026-10-16，进行中）
+
+- 目标：四项独立跨账户日志权限；选中隐私限制后过滤Root日志、禁用用户列表Root详情入口。
+- 基线：main/b64990956，无merge；既有.bak、pnpm-lock和site-assets保留，不纳入提交。
+- 方案：复用authz权限目录、覆盖策略和PermissionMatrix；统一服务端用户范围用于列表、计数、详情。四项日志权限默认保留已有管理员全站行为，隐私限制默认不选。既有审计Root默认隔离继续保留。
+- 验证：尚未运行；需定向回归、真实三库查询矩阵、前后端构建、本地重启和origin/main交付。未生产部署。
+
+### B14 实现与验证里程碑（2026-10-16）
+
+- 四项任务日志独立授权与Root隐私限制已实现，列表/total、任务请求/详情/成果、生图详情/图片、素材删除及Root详情订阅旁路均服务端校验；默认管理员全站、隐私默认false、Root不限。复用现有authz/PermissionMatrix和编辑器；权限保存递增AuthVersion并撤销旧会话。
+- 三库真实查询矩阵matrix-v5通过（exit=0）：SQLite3.50.4、MySQL5.7.44、PostgreSQL16.15，独立主/日志库；含五类日志/计数/分页、各类别独立撤权、隐私、直接访问拒绝、文件不被越权删除、用户隔离、Root访问、查询失败拒绝和策略重载。会话更新验证含真实二次凭据、旧会话失效和凭据重放拒绝；后两库另行重复会话用例。无表列迁移。
+- 前端权限7/7（permission-ui-v8）、访问/素材/权限3文件15/15（ui-final）通过；typecheck-final、authz全包、routes-final、affected-backend-final通过。临时验证和备份位于/tmp/julong-log-permissions-20261016。最后格式/lint/i18n、详情回归、构建和重启待收尾。
+- 既有宽范围回归失败已留证：3组AdminUser测试涉及manage_disable预期与夹具缺表；HEAD版本controller/user.go overlay同样复现，非完整干净基线测试，不宣称全量通过。ClickHouse和真实管理员浏览器端到端未验证。
+- 已签发capability成果链接与公开输入素材URL保留原分享语义，不因后台日志隐私开关撤销；不能声称已复制/下载内容被收回。
+- 用户询问的任务插件：权限实际是渠道中的绑定；/task-plugins仅Root管理，侧栏当前无入口。本批仅解释并同步文档，没有增加插件页面或功能。
+- DEVELOPMENT.md已同步API参数/响应/权限、组件、路由和安全边界。仍需最终构建/本地重启、范围提交及origin/main推送；未生产部署，既有4项未跟踪内容不得纳入。
+
+### B14 最终验证与本地激活（2026-10-16，本地已完成，Git待交付）
+
+- 完成：Root用户更新页复用原权限矩阵显示绘制/生图/任务/素材四项跨账户权限，以及“不允许查看Root账户”。撤销分类权限时只看本人；隐私选中时排除Root五类日志及计数，限制详情、图片、成果和删除入口；Root用户名变为不可点击。后端逐请求校验，权限变更撤销旧会话。
+- 最终验证：matrix-v5=0，真实SQLite3.50.4、MySQL5.7.44、PostgreSQL16.15，独立主/日志库，类别隔离/Root隐私/直接访问/文件保留/查询失败拒绝/权限重载/旧会话撤销/二次凭据重放拒绝均通过；无schema迁移。authz-final、routes-final、affected-backend-final均exit0。命令和日志见/tmp/julong-log-permissions-20261016；完整矩阵入口run-matrix-v5.py。
+- 前端5文件54/54：ui-final为3文件15项，ui-details-final为2文件39项；permission-ui-v8单独7项属于重复定向检查，不重复累计。typecheck-final、lint-final-v2（18文件）、format-check-v2、i18n-final、frontend-build-final、go-build-final全部exit0；临时翻译脚本已移除。
+- Go最新产物/tmp/julong-log-permissions-20261016/new-api；旧PID48103正常停止、新PID24268监听3000，/api/status成功且版本v1.0.0-julong.1，6个首页JS/CSS SHA256与web/dist一致，默认task_logs四项策略已初始化。activation.json留证；没有重复重启或改线上环境。
+- 验证边界：全量Go未通过验收；较宽AdminUser回归三组既有失败在基线user.go overlay仍复现（不是完整干净基线），详见上一里程碑；真实管理员浏览器端到端、ClickHouse及全站迁移矩阵未测，不宣称整体ASVS合规。公开输入素材/已签发capability保持既有共享语义。
+- DEVELOPMENT.md已同步API/参数/响应/权限、默认值、组件复用、缓存和安全边界。Git提交/推送待本轮执行；仅B14范围，四项既有未跟踪内容保留且不纳入，未生产部署。

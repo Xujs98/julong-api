@@ -26,6 +26,8 @@ import { StatusBadge, type StatusVariant } from '@/components/status-badge'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Skeleton } from '@/components/ui/skeleton'
+import { getLogsVisibilityKey } from '@/lib/admin-permissions'
+import { useAuthStore } from '@/stores/auth-store'
 
 import { getImageGenerationTask } from '../../image-generation-task-api'
 import type { ImageGenerationLog } from '../../types'
@@ -61,8 +63,11 @@ export function ImageGenerationTaskDialog({
   pollingIntervalMs,
 }: Props) {
   const { t } = useTranslation()
+  const visibilityKey = useAuthStore((state) =>
+    getLogsVisibilityKey(state.auth.user)
+  )
   const taskQuery = useQuery({
-    queryKey: ['image-generation-task', log.id],
+    queryKey: ['image-generation-task', log.id, visibilityKey],
     queryFn: () => getImageGenerationTask(log.id),
     enabled: open && Boolean(log.task_id),
     refetchInterval: (query) => {

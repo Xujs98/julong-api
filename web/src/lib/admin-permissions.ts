@@ -25,6 +25,8 @@ export type AdminCapabilities = AdminPermissionMatrix
 
 export const ADMIN_PERMISSION_RESOURCES = {
   AUDIT: 'audit',
+  TASK_LOGS: 'task_logs',
+  PRIVACY: 'privacy',
   CHANNEL: 'channel',
   LEDGER: 'ledger',
   TASK_PLUGIN: 'task_plugin',
@@ -146,4 +148,56 @@ export function scopesToPermissionMatrix(
     matrix[resource] = { ...matrix[resource], [action]: true }
   }
   return matrix
+}
+
+const TASK_LOG_READ_ACTIONS: Record<string, string> = {
+  drawing: 'drawing_read',
+  image: 'image_read',
+  task: 'task_read',
+  assets: 'assets_read',
+}
+
+export function canViewOtherTaskLogs(
+  user: AuthUser | null | undefined,
+  category: string
+): boolean {
+  if (!user || user.role < ROLE.ADMIN) return false
+  if (category === 'common') return true
+  const action = TASK_LOG_READ_ACTIONS[category]
+  return (
+    !!action &&
+    hasPermission(user, ADMIN_PERMISSION_RESOURCES.TASK_LOGS, action)
+  )
+}
+
+export function isRootPrivacyRestricted(
+  user: AuthUser | null | undefined
+): boolean {
+  return (
+    !!user &&
+    user.role === ROLE.ADMIN &&
+    user.permissions?.admin_permissions?.privacy?.hide_root === true
+  )
+}
+
+export function canOpenUserDetails(
+  viewer: AuthUser | null | undefined,
+  targetRole: number
+): boolean {
+  return targetRole !== ROLE.SUPER_ADMIN || !isRootPrivacyRestricted(viewer)
+}
+
+// Partition log caches and open previews when the viewer or visibility changes.
+export function getLogsVisibilityKey(
+  user: AuthUser | null | undefined
+): string {
+  return JSON.stringify([
+    user?.id,
+    user?.role,
+    isRootPrivacyRestricted(user),
+    ...Object.keys(TASK_LOG_READ_ACTIONS).map((category) =>
+      canViewOtherTaskLogs(user, category)
+    ),
+    hasPermission(user, ADMIN_PERMISSION_RESOURCES.AUDIT, 'read'),
+  ])
 }

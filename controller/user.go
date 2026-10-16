@@ -1160,6 +1160,12 @@ func UpdateUser(c *gin.Context) {
 		}
 		touched, err := updateAdminPermissionsForUserInTx(c, tx, updatedUser.Id, originUser.Role, updatedUser.AdminPermissions)
 		authzTouched = touched
+		if err != nil {
+			return err
+		}
+		if touched && updatedUser.AdminPermissions != nil {
+			updatedUser.AuthVersion, err = model.IncrementUserAuthVersionWithTx(tx, updatedUser.Id)
+		}
 		return err
 	}); err != nil {
 		if errors.Is(err, model.ErrBindingAlreadyTaken) {

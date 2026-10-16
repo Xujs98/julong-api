@@ -27,6 +27,7 @@ import {
   ADMIN_PERMISSION_RESOURCES,
   ADMIN_PERMISSION_ACTIONS,
   hasPermission,
+  getLogsVisibilityKey,
 } from '@/lib/admin-permissions'
 import { ROLE } from '@/lib/roles'
 import { useAuthStore } from '@/stores/auth-store'
@@ -114,7 +115,7 @@ export function AuditLogs() {
           )}
           <div className='min-h-0 flex-1'>
             <AuditLogViewer
-              key={`${userId}:${effectiveScope}`}
+              key={`${getLogsVisibilityKey(user)}:${effectiveScope}`}
               scope={effectiveScope}
               onAccessDenied={handleAccessDenied}
             />

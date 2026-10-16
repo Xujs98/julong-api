@@ -30,6 +30,7 @@ type Midjourney struct {
 
 // TaskQueryParams 用于包含所有搜索条件的结构体，可以根据需求添加更多字段
 type TaskQueryParams struct {
+	UserLogScope
 	ChannelID      string
 	MjID           string
 	StartTimestamp string
@@ -68,7 +69,7 @@ func GetAllTasks(startIdx int, num int, queryParams TaskQueryParams) []*Midjourn
 	var err error
 
 	// 初始化查询构建器
-	query := DB
+	query := queryParams.UserLogScope.Apply(DB)
 
 	// 添加过滤条件
 	if queryParams.ChannelID != "" {
@@ -214,7 +215,7 @@ func MjBulkUpdateByTaskIds(taskIDs []int, params map[string]any) error {
 // CountAllTasks returns total midjourney tasks for admin query
 func CountAllTasks(queryParams TaskQueryParams) int64 {
 	var total int64
-	query := DB.Model(&Midjourney{})
+	query := queryParams.UserLogScope.Apply(DB.Model(&Midjourney{}))
 	if queryParams.ChannelID != "" {
 		query = query.Where("channel_id = ?", queryParams.ChannelID)
 	}

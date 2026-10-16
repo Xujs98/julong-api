@@ -230,6 +230,7 @@ func (p TaskPrivateData) Value() (driver.Value, error) {
 
 // SyncTaskQueryParams 用于包含所有搜索条件的结构体，可以根据需求添加更多字段
 type SyncTaskQueryParams struct {
+	UserLogScope
 	Platform       constant.TaskPlatform
 	ChannelID      string
 	TaskID         string
@@ -326,7 +327,7 @@ func TaskGetAllTasks(startIdx int, num int, queryParams SyncTaskQueryParams) []*
 	var err error
 
 	// 初始化查询构建器
-	query := DB
+	query := queryParams.UserLogScope.Apply(DB)
 
 	// 添加过滤条件
 	if queryParams.ChannelID != "" {
@@ -626,7 +627,7 @@ type TaskQuotaUsage struct {
 // TaskCountAllTasks returns total tasks that match the given query params (admin usage)
 func TaskCountAllTasks(queryParams SyncTaskQueryParams) int64 {
 	var total int64
-	query := DB.Model(&Task{})
+	query := queryParams.UserLogScope.Apply(DB.Model(&Task{}))
 	if queryParams.ChannelID != "" {
 		query = query.Where("channel_id = ?", queryParams.ChannelID)
 	}

@@ -78,7 +78,8 @@ function UsageLogsContent() {
     affinityDialogOpen,
     setAffinityDialogOpen,
   } = useUsageLogsContext()
-  const { canManageScope, viewScope, setViewScope } = useLogsViewScope()
+  const { canManageScope, viewScope, setViewScope } =
+    useLogsViewScope(activeCategory)
   const tabNavGroups = useMemo<NavGroup[]>(
     () => [
       {

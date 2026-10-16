@@ -80,7 +80,7 @@ export function TaskLogsFilterBar<TData>(props: TaskLogsFilterBarProps<TData>) {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const searchParams = route.useSearch()
-  const { isAdminView: isAdmin } = useLogsViewScope()
+  const { isAdminView: isAdmin } = useLogsViewScope(props.logCategory)
   const fetchingLogs = useIsFetching({ queryKey: ['logs'] })
 
   const [filters, setFilters] = useState<TaskLogsFilters>(() => {
@@ -117,6 +117,8 @@ export function TaskLogsFilterBar<TData>(props: TaskLogsFilterBarProps<TData>) {
       }
     }
 
+    // URL navigation is external input; retain the editable filter draft between navigations.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setFilters(next)
   }, [
     props.logCategory,

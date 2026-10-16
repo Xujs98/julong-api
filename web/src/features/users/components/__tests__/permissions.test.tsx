@@ -17,6 +17,11 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import {
+  flexRender,
+  getCoreRowModel,
+  useReactTable,
+} from '@tanstack/react-table'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, expect, it, vi } from 'vitest'
@@ -25,8 +30,9 @@ import { api } from '@/lib/api'
 import { useAuthStore } from '@/stores/auth-store'
 
 import type { User } from '../../types'
+import { useUsersColumns } from '../users-columns'
 import { UsersMutateDrawer } from '../users-mutate-drawer'
-import { UsersProvider } from '../users-provider'
+import { UsersProvider, useUsers } from '../users-provider'
 
 const target: User = {
   id: 2,
@@ -43,6 +49,20 @@ const label = "View other accounts' audit logs"
 const description =
   'View audit records from user and admin roles. Root records are always excluded.'
 
+const taskGrants = {
+  drawing_read: true,
+  image_read: true,
+  task_read: true,
+  assets_read: true,
+}
+const taskLabels = [
+  ['drawing_read', "View other accounts' drawing logs"],
+  ['image_read', "View other accounts' image generation logs"],
+  ['task_read', "View other accounts' task logs"],
+  ['assets_read', "View other accounts' media assets"],
+]
+const privacyLabel = 'Do not allow viewing Root accounts'
+
 function renderPermissions(viewerRole: number, allowed?: boolean) {
   useAuthStore
     .getState()
@@ -55,6 +75,27 @@ function renderPermissions(viewerRole: number, allowed?: boolean) {
           data: {
             resources: [
               {
+                resource: 'task_logs',
+                label_key: 'Task Logs',
+                actions: taskLabels.map(([action, label_key]) => ({
+                  action,
+                  label_key,
+                  description_key: label_key,
+                })),
+              },
+              {
+                resource: 'privacy',
+                label_key: 'Privacy permissions',
+                actions: [
+                  {
+                    action: 'hide_root',
+                    label_key: privacyLabel,
+                    description_key:
+                      'Hide Root task and audit records and prevent opening Root user details.',
+                  },
+                ],
+              },
+              {
                 resource: 'audit',
                 label_key: 'Audit Logs',
                 actions: [
@@ -66,7 +107,16 @@ function renderPermissions(viewerRole: number, allowed?: boolean) {
                 ],
               },
             ],
-            roles: [{ key: 'admin', grants: { audit: { read: false } } }],
+            roles: [
+              {
+                key: 'admin',
+                grants: {
+                  audit: { read: false },
+                  task_logs: taskGrants,
+                  privacy: { hide_root: false },
+                },
+              },
+            ],
           },
         },
       }
@@ -159,7 +209,11 @@ it.each([undefined, true])(
         '/api/user/',
         expect.objectContaining({
           id: 2,
-          admin_permissions: { audit: { read: !allowed } },
+          admin_permissions: {
+            audit: { read: !allowed },
+            task_logs: taskGrants,
+            privacy: { hide_root: false },
+          },
         }),
         expect.objectContaining({
           headers: { 'X-Security-Proof': 'update-proof' },
@@ -195,3 +249,134 @@ it('admin cannot edit the audit permission even when the catalog is available', 
   await screen.findByDisplayValue('Managed admin')
   expect(screen.queryByRole('button', { name: label })).not.toBeInTheDocument()
 })
+
+it('root can revoke one task category and enable Root privacy while retaining independent defaults', async () => {
+  const put = vi
+    .spyOn(api, 'put')
+    .mockResolvedValue({ data: { success: true } })
+  vi.spyOn(api, 'post').mockResolvedValue({
+    data: {
+      success: true,
+      data: {
+        proof_token: 'privacy-proof',
+        method: '2fa',
+        scope: 'admin.user.update',
+        expires_at: Math.floor(Date.now() / 1000) + 60,
+      },
+    },
+  })
+  renderPermissions(100)
+  await screen.findByDisplayValue('Managed admin')
+  for (const [, name] of taskLabels) {
+    expect(await screen.findByRole('button', { name })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    )
+  }
+  expect(screen.getByRole('button', { name: privacyLabel })).toHaveAttribute(
+    'aria-pressed',
+    'false'
+  )
+  await userEvent.click(
+    screen.getByRole('button', { name: "View other accounts' task logs" })
+  )
+  await userEvent.click(screen.getByRole('button', { name: privacyLabel }))
+  await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+  expect(put).not.toHaveBeenCalled()
+  await userEvent.type(
+    await screen.findByLabelText('Authenticator code or backup code'),
+    '123456'
+  )
+  await userEvent.click(screen.getByRole('button', { name: 'Verify' }))
+  await waitFor(() =>
+    expect(put).toHaveBeenCalledWith(
+      '/api/user/',
+      expect.objectContaining({
+        admin_permissions: {
+          audit: { read: false },
+          task_logs: { ...taskGrants, task_read: false },
+          privacy: { hide_root: true },
+        },
+      }),
+      expect.objectContaining({
+        headers: { 'X-Security-Proof': 'privacy-proof' },
+      })
+    )
+  )
+})
+
+const usernameRows = [
+  { ...target, username: 'root-account', role: 100 },
+  { ...target, id: 3, username: 'regular-account', role: 1 },
+]
+const usernameTags: [] = []
+
+function UsernameTable() {
+  const columns = useUsersColumns(usernameTags).filter(
+    (column) => 'accessorKey' in column && column.accessorKey === 'username'
+  )
+  const { open, currentRow } = useUsers()
+  // Exercise the real table API; this test fixture is not React Compiler output.
+  // eslint-disable-next-line react-hooks/incompatible-library
+  const table = useReactTable({
+    columns,
+    data: usernameRows,
+    getCoreRowModel: getCoreRowModel(),
+  })
+  return (
+    <>
+      <table>
+        <tbody>
+          {table.getRowModel().rows.map((row) => (
+            <tr key={row.id}>
+              {row.getVisibleCells().map((cell) => (
+                <td key={cell.id}>
+                  {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <output>{open === 'user-detail' ? currentRow?.username : ''}</output>
+    </>
+  )
+}
+
+it.each([10, 100])(
+  'Root username click respects privacy for viewer role %s',
+  async (role) => {
+    useAuthStore.getState().auth.setUser({
+      id: 1,
+      username: 'viewer',
+      role,
+      permissions: { admin_permissions: { privacy: { hide_root: true } } },
+    })
+    render(
+      <UsersProvider>
+        <UsernameTable />
+      </UsersProvider>
+    )
+    expect(screen.getByText('root-account')).toBeVisible()
+    if (role === 10) {
+      expect(
+        screen.queryByRole('button', { name: 'root-account' })
+      ).not.toBeInTheDocument()
+      await userEvent.click(screen.getByText('root-account'))
+      expect(screen.getByRole('status')).toBeEmptyDOMElement()
+    } else {
+      await userEvent.click(
+        screen.getByRole('button', { name: 'root-account' })
+      )
+      await waitFor(() =>
+        expect(screen.getByRole('status')).toHaveTextContent('root-account')
+      )
+    }
+    await userEvent.click(
+      screen.getByRole('button', { name: 'regular-account' })
+    )
+    await waitFor(() =>
+      expect(screen.getByRole('status')).toHaveTextContent('regular-account')
+    )
+  }
+)

@@ -11,6 +11,7 @@ import (
 	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/service/authz"
 	"github.com/gin-gonic/gin"
 )
 
@@ -350,6 +351,12 @@ func GetAuditLogs(c *gin.Context) {
 	}
 	filter := model.AuditLogFilter{Username: c.Query("username"), Category: c.Query("category"), TokenRef: c.Query("token_ref"), ExcludeTokenRef: c.Query("exclude_token_ref"), RequestId: c.Query("request_id")}
 	viewerRole := c.GetInt("role")
+	scope, scopeErr := authz.LogScope(c.GetInt("id"), viewerRole, authz.AuditRead)
+	if scopeErr != nil {
+		common.ApiError(c, scopeErr)
+		return
+	}
+	filter.UserLogScope = scope
 	if c.FullPath() == "/api/audit/self" {
 		filter.UserId = c.GetInt("id")
 		filter.Username = ""

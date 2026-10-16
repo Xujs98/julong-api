@@ -11,6 +11,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/service/authz"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
@@ -43,7 +44,12 @@ func ListMediaAssets(c *gin.Context) {
 	if limit < 1 || limit > 200 {
 		limit = 50
 	}
-	assets, total, err := model.ListMediaAssets(c.GetInt("id"), mediaAssetAdmin(c) && c.Query("view_scope") != "self", (page-1)*limit, limit, startTime, endTime, username)
+	scope, err := authz.LogScope(c.GetInt("id"), c.GetInt("role"), authz.MediaAssetsRead)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	assets, total, err := model.ListMediaAssets(c.GetInt("id"), mediaAssetAdmin(c) && c.Query("view_scope") != "self", (page-1)*limit, limit, startTime, endTime, username, scope)
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -67,6 +73,10 @@ func DeleteMediaAsset(c *gin.Context) {
 			return
 		}
 		common.ApiError(c, err)
+		return
+	}
+	if !authz.CanViewLogOwner(c.GetInt("id"), c.GetInt("role"), asset.UserID, authz.MediaAssetsRead) {
+		c.Status(http.StatusForbidden)
 		return
 	}
 	if asset.StoredPath != "" {
