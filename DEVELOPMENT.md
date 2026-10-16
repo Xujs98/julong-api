@@ -1767,3 +1767,9 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 - 前端2文件10项通过，typecheck、8个TS/TSX文件oxlint、保护版权头的9文件oxfmt及七语言同步通过。前后端构建/重启/Git交付见 PROJECT_PROGRESS.md B17；未运行全量Go或真实管理员浏览器验收，未部署生产。
 
 - B17最终交付：前后端构建、健康/6资源SHA256、来源列迁移与匿名GET/POST拒绝检查通过；本地PID43688监听3000，备份quick_check及关键表行数核对通过。功能提交 `1466080e7e10cfd2fc0d3c2dcd034f4ca8132c9b` 的28个本批文件首次推送 `origin/main` 成功，远端SHA一致；四项历史未跟踪内容保留，生产未部署。
+
+### 2026-10-16 本地测试 IP 封禁解除（B18）
+
+- 本地测试误将 `127.0.0.1` 写入主库 `blocked_ips`，从而使本机所有请求（包括 Root 管理员）被 `SiteAccessGuard` 拒绝。使用 `/Users/xujs/.docker_dir/new-api/one-api.db`，未操作 `tmp/dev-one-api.db`。
+- 先创建 SQLite 在线备份 `/tmp/julong-ip-unblock-20261016/one-api.db.before` 并通过 `PRAGMA quick_check`，随后在事务中精确删除 `ip='127.0.0.1'` 的 1 条记录；其他封禁 IP 保留。未删除用户、登录会话、设备记录或 SSRF 配置。
+- 删除后重启本地 Go 服务以清除封禁缓存。当前服务 PID `49920` 监听 `3000`；`GET /api/status` 实测 `200 OK`、`success=true`。这是本地运行数据修复，无业务代码变更、无生产发布。

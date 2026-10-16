@@ -4,7 +4,7 @@
 > 详细 API、路由、配置和数据模型以 [DEVELOPMENT.md](./DEVELOPMENT.md) 为技术登记入口。
 > 代码与实际命令输出优先于旧文档、历史回复和截图；“代码已写”“本地可用”“已提交”“已上线”必须分开。
 
-最后更新：2026-10-16 20:31（Asia/Shanghai）
+最后更新：2026-10-16 21:17（Asia/Shanghai）
 项目根目录：`/Users/xujs/.docker_dir/new-api`
 
 ## 1. 新对话接续入口（必须先读）
@@ -57,6 +57,12 @@
 - 前端：ui-final 2文件10/10，typecheck、8个TS/TSX文件oxlint、保护版权头的9文件oxfmt、七语言sync、Rsbuild构建通过；新增hook覆盖挂机、点击/键盘/滚动/触摸、节流、隐藏页/焦点、卸载、匿名/Root。最终Go构建通过；证据目录 /tmp/julong-presence-sources-20261016。
 - 本地激活：旧PID38584正常停止，最新PID43688监听3000；/api/status、6项资源SHA256与dist相同；GET统计/旧心跳及POST活动接口匿名均401，新来源字段迁移生效。SQLite在线备份0600且quick_check通过；用户/令牌/任务/素材/配置行数与备份一致。
 - 范围与边界：四项既有未跟踪内容保留；未运行全量Go、真实管理员浏览器或生产验收。功能提交1466080e7e10cfd2fc0d3c2dcd034f4ca8132c9b的28个本批文件已首次推送origin/main成功且远端SHA一致；不推upstream，未部署线上。最终回执独立文档提交保存。
+
+### B18：解除本地测试 IP 封禁（2026-10-16，已完成本地）
+
+- 用户反馈本地测试误封 `127.0.0.1`，导致 Root 管理员和本地站点访问同时被拦截。仅处理主库 `one-api.db` 的 `blocked_ips` 精确记录，不修改用户、会话、设备、SSRF 配置或其他封禁 IP。
+- 操作前使用 SQLite 在线备份保存为 `/tmp/julong-ip-unblock-20261016/one-api.db.before`，备份 `PRAGMA quick_check` 返回 `ok`；事务删除 1 条 `ip='127.0.0.1'` 记录，删除后该 IP 记录数为 0，其他封禁记录数为 1，主库 `quick_check` 返回 `ok`。
+- 运行中的旧进程已停止并重新启动，清除进程内 1 分钟封禁缓存；当前新进程监听 `3000`，`GET http://127.0.0.1:3000/api/status` 返回 `200 OK` 且 `success=true`。本批仅为本地运行数据修复，未修改业务代码、未部署线上、未提交数据库文件。
 
 ### B08：模型文档模板（2026-10-15，已本地验证/待 Git 交付）
 
