@@ -1567,7 +1567,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 - 新增四类独立跨账户日志权限及Root隐私限制；服务端同时限制列表/计数/详情/图片和删除，前端复用权限矩阵并阻止受限Root详情入口，变更可见范围时清除打开状态并隔离缓存。
 - 已验证：真实SQLite 3.50.4、MySQL 5.7.44、PostgreSQL 16.15查询矩阵，含独立主/日志库、分页计数、直接访问拒绝、文件保留、默认权限与重播拒绝；权限更新旧会话失效在三库验证。命令：`python3 /tmp/julong-log-permissions-20261016/run-matrix-v5.py`；内部定向 `go test ./controller -run '^Test(AdminLogPermissionsMatrix|MediaAssetListFiltersDatabaseMatrix|AdminLogPermissionUpdateRevokesSessions)$' -count=1 -v`，另在MySQL/PostgreSQL运行会话撤销用例；无Skip。
 - `go test ./service/authz -count=1`全包、PAT路由规则定向检查、任务/生图/审计受影响回归通过；前端5文件54/54（权限/访问/素材3文件15项，审计/详情2文件39项）；`bun run typecheck`、18个修改TS/TSX目标lint/format、`bun run i18n:sync`、前端生产构建和根Go构建通过。
-- 本地激活：旧PID48103正常停止，新PID24268运行 `/tmp/julong-log-permissions-20261016/new-api`、监听3000；`GET /api/status success=true`、版本v1.0.0-julong.1，首页6个JS/CSS的SHA256与web/dist一致，四项默认权限已初始化。验证证据位于同目录的日志/exit和activation.json。Git交付另记；生产未部署。
+- 本地激活：旧PID48103正常停止，新PID24268运行 `/tmp/julong-log-permissions-20261016/new-api`、监听3000；`GET /api/status success=true`、版本v1.0.0-julong.1，首页6个JS/CSS的SHA256与web/dist一致，四项默认权限已初始化。验证证据位于同目录的日志/exit和activation.json。功能/回归/文档提交8c9403bae首次成功推送origin/main，远端SHA已核验；交付回执另存文档提交。生产未部署。
 - 较宽后端回归存在三组既有AdminUser测试失败（manage_disable安全凭据状态期望及测试夹具缺logs/user_request_content_logs表）；使用HEAD版本controller/user.go的Go overlay复现，不将其计为通过，不宣称全量测试通过。没有全站迁移/ClickHouse/生产部署验证。
 
 

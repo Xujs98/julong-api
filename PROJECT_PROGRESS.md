@@ -4,7 +4,7 @@
 > 详细 API、路由、配置和数据模型以 [DEVELOPMENT.md](./DEVELOPMENT.md) 为技术登记入口。
 > 代码与实际命令输出优先于旧文档、历史回复和截图；“代码已写”“本地可用”“已提交”“已上线”必须分开。
 
-最后更新：2026-10-16 18:29（Asia/Shanghai）
+最后更新：2026-10-16 18:32（Asia/Shanghai）
 项目根目录：`/Users/xujs/.docker_dir/new-api`
 
 ## 1. 新对话接续入口（必须先读）
@@ -22,16 +22,16 @@
 
 | 项目 | 状态（截至最后更新时间） | 依据与边界 |
 | --- | --- | --- |
-| 当前分支 / HEAD | main / b64990956（B14起始HEAD） | B14实现、定向验证和本地激活已完成，Git交付收尾中；既有未跟踪文件保留 |
+| 当前分支 / HEAD | main / 8c9403bae（B14功能提交，交付文档随后） | B14已实现、验证、本地激活并推送；既有未跟踪内容保留；既有未跟踪文件保留 |
 | 上游整合 | main已包含此前功能分支提交 | 实际git和远端对比已纠正旧“尚待合并”快照，保留历史批次记录 |
 | 用户 GitHub 仓库 | origin = https://github.com/Xujs98/julong-api.git | upstream = https://github.com/QuantumNous/new-api.git，仅跟踪上游；不得把用户改动推到 upstream |
 | 本地服务 | B14最新前端嵌入Go产物，PID24268监听3000 | /api/status成功、6个首页JS/CSS与web/dist一致；真实管理员浏览器登录未实测 |
 | 模型广场按秒/按次价格 | 当前代码已实现，历史交付有验证记录 | 两项都有价格同时显示；只配一项只显示该项；模型名及分辨率价格区规则一致 |
 | 视频输入素材 | 已完成本地实现/定向回归、三库复验、浏览器预览和视频直链、最终重启 | SQLite3.50.4/MySQL5.7.44/PostgreSQL16.15最终矩阵8/8无Skip；图片及嵌入视频/音频正常、素材视频直链可播放；Safari/原生音频直链/线上公网未实测 |
 | 成品列阴影与滚轮 | 已完成（本地）；17项通过，Chromium已验证并激活；Safari待人工复核 | 独立复核10/10，主任务4文件17/17；Chromium明暗阴影、全列固定、滚轮/splitHeader已验；首页资源与dist一致，Safari无连接未实测 |
-| 管理员日志与Root隐私 | B14本地已完成，待Git交付 | 四项独立跨账户权限、Root五类日志过滤和详情保护；三库查询/会话验证、前端54项及构建/重启通过；全量测试及真实登录浏览器未验收 |
+| 管理员日志与Root隐私 | B14本地已完成，已推送origin/main | 四项独立跨账户权限、Root五类日志过滤和详情保护；三库查询/会话验证、前端54项及构建/重启通过；全量测试及真实登录浏览器未验收 |
 | 项目进度入口 | 已完成（文档本地） | 本文 + AGENTS.md 必读入口；持续按批次更新 |
-| Git 提交 / 线上发布 | B13功能0e347030e已推送origin/main；B14待提交推送 | 不推upstream；api.julongkj.top未部署 |
+| Git 提交 / 线上发布 | B14功能8c9403bae已推送origin/main | 不推upstream；api.julongkj.top未部署 |
 
 ## 3. 状态口径
 
@@ -335,3 +335,10 @@ B08：MD/DOCX 后端、管理 UI、模型绑定与广场调用文档已实现。
 - Go最新产物/tmp/julong-log-permissions-20261016/new-api；旧PID48103正常停止、新PID24268监听3000，/api/status成功且版本v1.0.0-julong.1，6个首页JS/CSS SHA256与web/dist一致，默认task_logs四项策略已初始化。activation.json留证；没有重复重启或改线上环境。
 - 验证边界：全量Go未通过验收；较宽AdminUser回归三组既有失败在基线user.go overlay仍复现（不是完整干净基线），详见上一里程碑；真实管理员浏览器端到端、ClickHouse及全站迁移矩阵未测，不宣称整体ASVS合规。公开输入素材/已签发capability保持既有共享语义。
 - DEVELOPMENT.md已同步API/参数/响应/权限、默认值、组件复用、缓存和安全边界。Git提交/推送待本轮执行；仅B14范围，四项既有未跟踪内容保留且不纳入，未生产部署。
+
+### B14 Git交付与最终移交（2026-10-16 18:32，Asia/Shanghai）
+
+- 权限管理功能、集中回归和同步文档已提交为8c9403baee260db750f007913d677d2ea0316b95，并首次成功推送origin/main；git ls-remote确认远端SHA一致。仅向Xujs98/julong-api推送，无force/upstream操作。此交付回执作为独立文档提交随后保存。
+- 本地PID24268监听3000且健康，最新前端已嵌入；三库与前端54项等定向验证见上一记录。全量Go既有失败、未测真实登录浏览器和ClickHouse及共享URL边界保留，不扩大通过范围。api.julongkj.top未部署。
+- 43个本批文件已范围审核；保护的版权头保持原样。原有controller/media_asset.go.bak、site-assets/、web/pnpm-lock.yaml、web/src/features/usage-logs/components/media-assets-table.tsx.bak保持未跟踪，不包含在提交中。
+- 用户最新要求只完成权限管理；本轮没有额外增加任务插件入口。后续在可用真实登录环境补人工验收，生产发布另行执行。
