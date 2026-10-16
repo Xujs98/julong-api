@@ -9,14 +9,16 @@ import (
 )
 
 type UserPresence struct {
-	UserId         int    `json:"user_id" gorm:"primaryKey;column:user_id"`
-	IsOnline       bool   `json:"is_online" gorm:"type:bool;not null;column:is_online;index"`
-	LastActivityAt int64  `json:"last_activity_at" gorm:"type:bigint;not null;column:last_activity_at;index"`
-	LastSource     string `json:"last_source" gorm:"type:varchar(32);not null;column:last_source"`
-	LastIP         string `json:"last_ip" gorm:"type:varchar(45);not null;column:last_ip"`
-	LastUserAgent  string `json:"last_user_agent" gorm:"type:varchar(512);not null;column:last_user_agent"`
-	LastChangedAt  int64  `json:"last_changed_at" gorm:"type:bigint;not null;column:last_changed_at"`
-	UpdatedAt      int64  `json:"updated_at" gorm:"autoUpdateTime;column:updated_at"`
+	UserId            int    `json:"user_id" gorm:"primaryKey;column:user_id"`
+	IsOnline          bool   `json:"is_online" gorm:"type:bool;not null;column:is_online;index"`
+	LastActivityAt    int64  `json:"last_activity_at" gorm:"type:bigint;not null;column:last_activity_at;index"`
+	LastWebActivityAt int64  `json:"last_web_activity_at" gorm:"type:bigint;not null;default:0;index"`
+	LastAPIActivityAt int64  `json:"last_api_activity_at" gorm:"type:bigint;not null;default:0;index"`
+	LastSource        string `json:"last_source" gorm:"type:varchar(32);not null;column:last_source"`
+	LastIP            string `json:"last_ip" gorm:"type:varchar(45);not null;column:last_ip"`
+	LastUserAgent     string `json:"last_user_agent" gorm:"type:varchar(512);not null;column:last_user_agent"`
+	LastChangedAt     int64  `json:"last_changed_at" gorm:"type:bigint;not null;column:last_changed_at"`
+	UpdatedAt         int64  `json:"updated_at" gorm:"autoUpdateTime;column:updated_at"`
 }
 
 func RecordUserPresenceActivity(userId int, activityAt int64, source, ip, userAgent string) (UserPresence, bool, error) {
@@ -30,12 +32,25 @@ func RecordUserPresenceActivity(userId int, activityAt int64, source, ip, userAg
 		LastChangedAt:  activityAt,
 		UpdatedAt:      activityAt,
 	}
+	activityColumn := "last_web_activity_at"
+	if source == "api" {
+		activityColumn = "last_api_activity_at"
+		presence.LastAPIActivityAt = activityAt
+	} else {
+		presence.LastWebActivityAt = activityAt
+	}
 	created := DB.Clauses(clause.OnConflict{DoNothing: true}).Create(&presence)
 	if created.Error != nil {
 		return UserPresence{}, false, created.Error
 	}
 	if created.RowsAffected == 1 {
 		return presence, true, nil
+	}
+	// Sources advance independently, including requests in the same second.
+	if err := DB.Model(&UserPresence{}).
+		Where("user_id = ? AND "+activityColumn+" < ?", userId, activityAt).
+		UpdateColumn(activityColumn, activityAt).Error; err != nil {
+		return UserPresence{}, false, err
 	}
 
 	updates := map[string]any{
@@ -148,7 +163,7 @@ func (options UserSortOptions) ApplyPresence(query *gorm.DB, now int64) *gorm.DB
 	if options.Presence != "online" && options.Presence != "offline" {
 		return query
 	}
-	recent := query.Session(&gorm.Session{NewDB: true}).Model(&UserPresence{}).Select("user_id").Where("last_activity_at > ? AND last_activity_at <= ?", now-UserOnlineWindowSeconds, now)
+	recent := query.Session(&gorm.Session{NewDB: true}).Model(&UserPresence{}).Select("user_id").Where("(last_web_activity_at > ? AND last_web_activity_at <= ?) OR (last_api_activity_at > ? AND last_api_activity_at <= ?)", now-UserOnlineWindowSeconds, now, now-UserOnlineWindowSeconds, now)
 	// Exclude Root from both sides, preventing state inference by filtering.
 	query = query.Where("role <> ?", common.RoleRootUser)
 	if options.Presence == "online" {
@@ -161,6 +176,7 @@ func FillUserOnlineStatus(users []*User, now int64) error {
 	ids := make([]int, 0, len(users))
 	for _, user := range users {
 		user.IsOnline = nil
+		user.OnlineSource = ""
 		if user.Role != common.RoleRootUser {
 			ids = append(ids, user.Id)
 		}
@@ -169,19 +185,32 @@ func FillUserOnlineStatus(users []*User, now int64) error {
 		return nil
 	}
 	var presences []UserPresence
-	if err := DB.Select("user_id", "last_activity_at").Where("user_id IN ?", ids).Find(&presences).Error; err != nil {
+	if err := DB.Select("user_id", "last_web_activity_at", "last_api_activity_at").Where("user_id IN ?", ids).Find(&presences).Error; err != nil {
 		return err
 	}
-	active := make(map[int]bool, len(presences))
+	active := make(map[int]string, len(presences))
 	for _, presence := range presences {
-		active[presence.UserId] = presence.LastActivityAt > now-UserOnlineWindowSeconds && presence.LastActivityAt <= now
+		web := presence.LastWebActivityAt > now-UserOnlineWindowSeconds && presence.LastWebActivityAt <= now
+		api := presence.LastAPIActivityAt > now-UserOnlineWindowSeconds && presence.LastAPIActivityAt <= now
+		switch {
+		case web && api:
+			active[presence.UserId] = "both"
+		case web:
+			active[presence.UserId] = "web"
+		case api:
+			active[presence.UserId] = "api"
+		}
 	}
 	for _, user := range users {
 		if user.Role == common.RoleRootUser {
 			continue
 		}
-		online := user.Status == common.UserStatusEnabled && !user.DeletedAt.Valid && active[user.Id]
+		online := user.Status == common.UserStatusEnabled && !user.DeletedAt.Valid && active[user.Id] != ""
 		user.IsOnline = &online
+		user.OnlineSource = "offline"
+		if online {
+			user.OnlineSource = active[user.Id]
+		}
 	}
 	return nil
 }
@@ -202,7 +231,8 @@ func GetUserActivitySummary(now time.Time) (*UserActivitySummary, error) {
 	if err := query.Session(&gorm.Session{}).Where("user_presences.last_activity_at >= ? AND user_presences.last_activity_at <= ?", start, now.Unix()).Count(&result.DailyActiveUsers).Error; err != nil {
 		return nil, err
 	}
-	if err := query.Session(&gorm.Session{}).Where("users.status = ? AND user_presences.last_activity_at > ? AND user_presences.last_activity_at <= ?", common.UserStatusEnabled, now.Unix()-UserOnlineWindowSeconds, now.Unix()).Count(&result.OnlineUsers).Error; err != nil {
+	if err := query.Session(&gorm.Session{}).Where("users.status = ?", common.UserStatusEnabled).
+		Where("(user_presences.last_web_activity_at > ? AND user_presences.last_web_activity_at <= ?) OR (user_presences.last_api_activity_at > ? AND user_presences.last_api_activity_at <= ?)", now.Unix()-UserOnlineWindowSeconds, now.Unix(), now.Unix()-UserOnlineWindowSeconds, now.Unix()).Count(&result.OnlineUsers).Error; err != nil {
 		return nil, err
 	}
 	return &result, nil

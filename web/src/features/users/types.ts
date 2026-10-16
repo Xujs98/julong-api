@@ -46,6 +46,7 @@ export type UserTag = z.infer<typeof userTagSchema>
 
 export const userSchema = z.object({
   is_online: z.boolean().optional(),
+  online_source: z.enum(['web', 'api', 'both', 'offline']).optional(),
   id: z.number(),
   username: z.string(),
   display_name: z.string(),

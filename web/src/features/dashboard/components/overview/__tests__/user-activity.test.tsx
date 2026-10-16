@@ -42,8 +42,9 @@ it.each([10, 100])(
     expect(await screen.findByText('23')).toBeInTheDocument()
     expect(screen.getByText('7')).toBeInTheDocument()
     expect(
-      screen.getByText('Unique active accounts today (UTC+8), excluding Root')
+      screen.getByText('Unique active accounts today (UTC+8)')
     ).toBeInTheDocument()
+    expect(screen.queryByText(/excluding Root/i)).not.toBeInTheDocument()
   }
 )
 it('does not fetch or expose site activity to ordinary users', () => {
@@ -84,4 +85,30 @@ it('offers online/offline in the existing status filter and preserves the summar
   expect(getUserQuotaSummaryParams({ status: ['offline'] })).toMatchObject({
     status: 'offline',
   })
+})
+
+it('distinguishes API activity and simultaneous website/API activity', () => {
+  const { rerender } = render(
+    <UserOnlineBadge
+      user={{ role: 1, is_online: true, online_source: 'api' }}
+    />
+  )
+  expect(screen.getByText('Online · API')).toBeInTheDocument()
+  rerender(
+    <UserOnlineBadge
+      user={{ role: 1, is_online: true, online_source: 'both' }}
+    />
+  )
+  expect(screen.getByText('Online · Web + API')).toBeInTheDocument()
+  expect(
+    screen.getByText('Online · Web + API').closest('[data-slot]')
+  ).toHaveClass('user-presence-glow')
+  rerender(
+    <UserOnlineBadge
+      user={{ role: 1, is_online: false, online_source: 'both' }}
+    />
+  )
+  expect(screen.getByText('Offline').closest('[data-slot]')).not.toHaveClass(
+    'user-presence-glow'
+  )
 })

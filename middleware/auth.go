@@ -84,7 +84,9 @@ func authHelper(c *gin.Context, minRole int) {
 	if useAccessToken {
 		setAccessTokenContext(c, lookup)
 	}
-	service.RecordUserPresenceActivity(user.Id, service.UserPresenceActivitySourceDashboard, c.ClientIP(), c.Request.UserAgent())
+	if useAccessToken {
+		service.RecordUserPresenceActivity(user.Id, service.UserPresenceActivitySourceAPI, c.ClientIP(), c.Request.UserAgent())
+	}
 
 	// 管理/root 写操作审计兜底：内聚在鉴权链路里，保证任何经过 AdminAuth/RootAuth
 	// 的写接口都会自动留痕（无需在路由上单独挂审计中间件，避免漏挂）。
@@ -128,7 +130,9 @@ func TryUserAuth() func(c *gin.Context) {
 				return
 			}
 			setDashboardAuthContext(c, user, identity, credentialKind == dashboardCredentialPAT)
-			service.RecordUserPresenceActivity(user.Id, service.UserPresenceActivitySourceDashboard, c.ClientIP(), c.Request.UserAgent())
+			if credentialKind == dashboardCredentialPAT {
+				service.RecordUserPresenceActivity(user.Id, service.UserPresenceActivitySourceAPI, c.ClientIP(), c.Request.UserAgent())
+			}
 		}
 		c.Next()
 	}

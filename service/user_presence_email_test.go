@@ -106,7 +106,7 @@ func TestReEnablingUserPresenceDoesNotThrottleFirstActivity(t *testing.T) {
 		LastChangedAt:  now,
 	}).Error)
 	userPresenceActivityMu.Lock()
-	userPresenceActivityWrites[users["common"].Id] = now
+	userPresenceActivityWrites[users["common"].Id] = [2]int64{now, now}
 	userPresenceActivityMu.Unlock()
 	t.Cleanup(func() {
 		clearUserPresenceActivityWriteThrottle([]int{users["common"].Id})
@@ -158,4 +158,20 @@ func TestUserPresenceRecordsWithoutEmailsAndExcludesRoot(t *testing.T) {
 	var count int64
 	require.NoError(t, model.DB.Model(&model.UserPresence{}).Where("user_id = ?", users["root"].Id).Count(&count).Error)
 	assert.Zero(t, count)
+}
+
+func TestUserPresenceThrottleKeepsWebAndAPIIndependent(t *testing.T) {
+	_, users := setupEmailSettingsTest(t)
+	id := users["common"].Id
+	clearUserPresenceActivityWriteThrottle([]int{id})
+	t.Cleanup(func() { clearUserPresenceActivityWriteThrottle([]int{id}) })
+	RecordUserPresenceActivity(id, UserPresenceActivitySourceDashboard, "203.0.113.1", "Browser")
+	RecordUserPresenceActivity(id, UserPresenceActivitySourceAPI, "203.0.113.1", "API client")
+	presence, err := model.GetUserPresence(id)
+	require.NoError(t, err)
+	assert.Positive(t, presence.LastWebActivityAt)
+	assert.Positive(t, presence.LastAPIActivityAt)
+	user := &model.User{Id: id, Status: common.UserStatusEnabled, Role: common.RoleCommonUser}
+	require.NoError(t, model.FillUserOnlineStatus([]*model.User{user}, time.Now().Unix()))
+	assert.Equal(t, "both", user.OnlineSource)
 }

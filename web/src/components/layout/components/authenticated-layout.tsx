@@ -16,20 +16,14 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useQuery } from '@tanstack/react-query'
-
 import { AnnouncementPopup } from '@/components/announcement-popup'
 import { AnimatedOutlet } from '@/components/page-transition'
 import { SkipToMain } from '@/components/skip-to-main'
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
 import { LayoutProvider } from '@/context/layout-provider'
 import { SearchProvider } from '@/context/search-provider'
-import { api } from '@/lib/api'
 import { getCookie } from '@/lib/cookies'
-import { ROLE } from '@/lib/roles'
-import { requireServerSuccess } from '@/lib/server-error-message'
 import { cn } from '@/lib/utils'
-import { useAuthStore } from '@/stores/auth-store'
 
 import { AppHeader } from './app-header'
 import { AppSidebar } from './app-sidebar'
@@ -40,24 +34,6 @@ type AuthenticatedLayoutProps = {
 
 export function AuthenticatedLayout(props: AuthenticatedLayoutProps) {
   const defaultOpen = getCookie('sidebar_state') !== 'false'
-  const user = useAuthStore((state) => state.auth.user)
-  useQuery({
-    queryKey: ['user-activity-heartbeat', user?.id],
-    enabled: Boolean(user) && user?.role !== ROLE.SUPER_ADMIN,
-    queryFn: async () => {
-      const response = await api.get<{ success: boolean }>(
-        '/api/user/self/activity'
-      )
-      requireServerSuccess(response.data)
-      return true
-    },
-    staleTime: 30 * 1000,
-    refetchInterval: 60 * 1000,
-    refetchIntervalInBackground: false,
-    retry: false,
-    meta: { errorToast: false },
-  })
-
   return (
     <LayoutProvider>
       <SearchProvider>

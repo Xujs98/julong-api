@@ -254,7 +254,37 @@ func TestTryUserAuthCredentialClassification(t *testing.T) {
 	requiredRouter.ServeHTTP(requiredResponse, requiredRequest)
 	assert.Equal(t, http.StatusUnauthorized, requiredResponse.Code, "required dashboard authentication must not adopt optional-auth fallback semantics")
 
-	var patUserQueries int
+	// Session-authenticated polling must not refresh website presence.
+	var webPresenceCount int64
+	require.NoError(t, model.DB.Model(&model.UserPresence{}).Where("user_id = ? AND last_web_activity_at > ?", internalUser.Id, 0).Count(&webPresenceCount).Error)
+	assert.Zero(t, webPresenceCount)
+	requiredRouter.POST("/api/user/self/activity", UserAuth(), func(c *gin.Context) {
+		assert.Equal(t, session.SID, c.GetString("session_id"))
+		c.Status(http.StatusNoContent)
+	})
+	for _, tc := range []struct {
+		name, token string
+		status      int
+	}{
+		{"session", accessToken, http.StatusNoContent},
+		{"anonymous", "", http.StatusUnauthorized},
+		{"expired session", issueExpiredDashboardAccessToken(t, identity), http.StatusUnauthorized},
+		{"tampered session", tamperDashboardToken(accessToken), http.StatusUnauthorized},
+		{"legacy PAT", "optional.pat.with-dots", http.StatusForbidden},
+		{"scoped PAT", scopedPAT, http.StatusForbidden},
+	} {
+		t.Run("website activity/"+tc.name, func(t *testing.T) {
+			request := httptest.NewRequest(http.MethodPost, "/api/user/self/activity", nil)
+			if tc.token != "" {
+				request.Header.Set("Authorization", "Bearer "+tc.token)
+			}
+			response := httptest.NewRecorder()
+			requiredRouter.ServeHTTP(response, request)
+			assert.Equal(t, tc.status, response.Code)
+		})
+	}
+
+	var patUserQueries int // Preserve the subsequent cache failure regression.
 	forcedCacheError := errors.New("forced PAT user cache lookup failure")
 	const callbackName = "test:optional-auth-pat-user-cache-failure"
 	require.NoError(t, model.DB.Callback().Query().Before("gorm:query").Register(callbackName, func(tx *gorm.DB) {

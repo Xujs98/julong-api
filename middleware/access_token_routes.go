@@ -68,6 +68,7 @@ var accessTokenRouteRules = map[string]accessTokenRouteRule{
 	"POST /api/user/sessions/revoke-others":        accessTokenSessionRule,
 	"GET /api/user/self/groups":                    accessTokenScopeRule("profile:read"),
 	"GET /api/user/self/activity":                  accessTokenScopeRule("profile:read"),
+	"POST /api/user/self/activity":                 accessTokenSessionRule,
 	"GET /api/user/self":                           accessTokenScopeRule("profile:read"),
 	"GET /api/user/models":                         accessTokenScopeRule("profile:read"),
 	"PUT /api/user/self":                           accessTokenScopeRule("profile:write"),

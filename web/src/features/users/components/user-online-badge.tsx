@@ -20,11 +20,12 @@ import { useTranslation } from 'react-i18next'
 
 import { StatusBadge } from '@/components/status-badge'
 import { ROLE } from '@/lib/roles'
+import { cn } from '@/lib/utils'
 
 import type { User } from '../types'
 
 export function UserOnlineBadge(props: {
-  user?: Pick<User, 'role' | 'is_online'> | null
+  user?: Pick<User, 'role' | 'is_online' | 'online_source'> | null
 }) {
   const { t } = useTranslation()
   if (
@@ -34,14 +35,22 @@ export function UserOnlineBadge(props: {
   ) {
     return null
   }
+  const simultaneous =
+    props.user.is_online && props.user.online_source === 'both'
+  let label = props.user.is_online ? t('Online') : t('Offline')
+  if (simultaneous) {
+    label = t('Online · Web + API')
+  } else if (props.user.is_online && props.user.online_source === 'api') {
+    label = t('Online · API')
+  }
   return (
     <StatusBadge
-      label={props.user.is_online ? t('Online') : t('Offline')}
+      label={label}
       variant={props.user.is_online ? 'success' : 'neutral'}
       showDot
       copyable={false}
       type='text'
-      className='text-xs'
+      className={cn('text-xs', simultaneous && 'user-presence-glow')}
     />
   )
 }

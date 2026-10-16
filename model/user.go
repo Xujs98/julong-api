@@ -168,6 +168,7 @@ func resolveUserSortOptions(sortOptions []UserSortOptions) UserSortOptions {
 // Otherwise, the sensitive information will be saved on local storage in plain text!
 type User struct {
 	IsOnline                     *bool                      `json:"is_online,omitempty" gorm:"-:all"`
+	OnlineSource                 string                     `json:"online_source,omitempty" gorm:"-:all"`
 	Id                           int                        `json:"id"`
 	Username                     string                     `json:"username" gorm:"unique;index" validate:"max=20"`
 	Password                     string                     `json:"password" gorm:"not null;" validate:"min=8,max=20"`

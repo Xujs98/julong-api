@@ -50,7 +50,7 @@ export function UserActivityCards() {
         value={
           query.data ? formatNumber(query.data.daily_active_users, locale) : '-'
         }
-        description={t('Unique active accounts today (UTC+8), excluding Root')}
+        description={t('Unique active accounts today (UTC+8)')}
         icon={Users}
         loading={query.isLoading}
         error={query.isError}
@@ -58,7 +58,7 @@ export function UserActivityCards() {
       <StatCard
         title={t('Online users')}
         value={query.data ? formatNumber(query.data.online_users, locale) : '-'}
-        description={t('Active in the last 5 minutes, excluding Root')}
+        description={t('Active in the last 5 minutes')}
         icon={Activity}
         tone='accent-2'
         loading={query.isLoading}

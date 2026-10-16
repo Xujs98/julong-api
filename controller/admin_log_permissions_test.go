@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -76,6 +77,40 @@ func TestAdminLogPermissionsMatrix(t *testing.T) {
 			require.NoError(t, db.Raw(query).Scan(&version).Error)
 			t.Logf("database %s %s; independent log database", dialect, version)
 			require.NoError(t, i18n.Init())
+			t.Run("presence_fresh_and_upgrade", func(t *testing.T) {
+				// Verify fresh creation, then upgrade a representative pre-source schema.
+				require.NoError(t, db.AutoMigrate(&model.UserPresence{}))
+				require.NoError(t, db.AutoMigrate(&model.UserPresence{}))
+				require.NoError(t, db.Migrator().DropTable(&model.UserPresence{}))
+				type previousPresence struct {
+					UserId         int    `gorm:"primaryKey;column:user_id"`
+					IsOnline       bool   `gorm:"type:bool;not null;column:is_online;index"`
+					LastActivityAt int64  `gorm:"type:bigint;not null;column:last_activity_at;index"`
+					LastSource     string `gorm:"type:varchar(32);not null;column:last_source"`
+					LastIP         string `gorm:"type:varchar(45);not null;column:last_ip"`
+					LastUserAgent  string `gorm:"type:varchar(512);not null;column:last_user_agent"`
+					LastChangedAt  int64  `gorm:"type:bigint;not null;column:last_changed_at"`
+					UpdatedAt      int64  `gorm:"autoUpdateTime;column:updated_at"`
+				}
+				require.NoError(t, db.Table("user_presences").AutoMigrate(&previousPresence{}))
+				old := previousPresence{UserId: 99, IsOnline: true, LastActivityAt: 1234, LastSource: "dashboard", LastIP: "203.0.113.1", LastUserAgent: "old-browser", LastChangedAt: 1200, UpdatedAt: 1234}
+				require.NoError(t, db.Table("user_presences").Create(&old).Error)
+				for range 2 {
+					require.NoError(t, db.AutoMigrate(&model.UserPresence{}))
+					var preserved model.UserPresence
+					require.NoError(t, db.First(&preserved, "user_id = ?", 99).Error)
+					assert.Equal(t, old.LastActivityAt, preserved.LastActivityAt)
+					assert.Equal(t, old.LastIP, preserved.LastIP)
+					assert.Equal(t, old.LastUserAgent, preserved.LastUserAgent)
+					assert.True(t, preserved.IsOnline)
+					assert.Zero(t, preserved.LastWebActivityAt)
+					assert.Zero(t, preserved.LastAPIActivityAt)
+					require.True(t, db.Migrator().HasIndex(&model.UserPresence{}, "LastActivityAt"))
+					require.True(t, db.Migrator().HasIndex(&model.UserPresence{}, "LastWebActivityAt"))
+					require.True(t, db.Migrator().HasIndex(&model.UserPresence{}, "LastAPIActivityAt"))
+				}
+				require.NoError(t, db.Delete(&model.UserPresence{}, "user_id = ?", 99).Error)
+			})
 			require.NoError(t, db.AutoMigrate(&model.User{}, &model.CasbinRule{}, &model.AuthzRole{}, &model.Task{}, &model.Midjourney{}, &model.MediaAsset{}, &model.ImageGenerationLog{}, &model.Channel{}, &model.UserPresence{}))
 			require.NoError(t, logDB.AutoMigrate(&model.AuditLog{}, &model.Log{}))
 			require.NoError(t, authz.Init(db))
@@ -280,7 +315,7 @@ func TestAdminLogPermissionsMatrix(t *testing.T) {
 				}
 				require.NoError(t, db.Create(&extra).Error)
 				for id, at := range map[int]int64{1: now.Unix(), 2: now.Unix() - 10, 3: now.Unix() - 300, 4: now.Unix(), 6: now.Unix(), 7: now.Unix()} {
-					require.NoError(t, db.Create(&model.UserPresence{UserId: id, LastActivityAt: at, IsOnline: false}).Error)
+					require.NoError(t, db.Create(&model.UserPresence{UserId: id, LastActivityAt: at, LastWebActivityAt: at, IsOnline: false}).Error)
 				}
 				summary, err := model.GetUserActivitySummary(now)
 				require.NoError(t, err)
@@ -301,6 +336,7 @@ func TestAdminLogPermissionsMatrix(t *testing.T) {
 				for _, u := range loaded {
 					if u.Role == common.RoleRootUser {
 						assert.Nil(t, u.IsOnline)
+						assert.Empty(t, u.OnlineSource)
 						data, e := common.Marshal(u)
 						require.NoError(t, e)
 						assert.NotContains(t, string(data), "is_online")
@@ -310,8 +346,8 @@ func TestAdminLogPermissionsMatrix(t *testing.T) {
 					}
 				}
 				// Verify live HTTP list/search pagination and Root field omission for both viewers.
-				require.NoError(t, db.Model(&model.UserPresence{}).Where("user_id > ?", 0).Update("last_activity_at", time.Now().Unix()-600).Error)
-				require.NoError(t, db.Model(&model.UserPresence{}).Where("user_id = ?", 2).Update("last_activity_at", time.Now().Unix()).Error)
+				require.NoError(t, db.Model(&model.UserPresence{}).Where("user_id > ?", 0).Updates(map[string]any{"last_activity_at": time.Now().Unix() - 600, "last_web_activity_at": time.Now().Unix() - 600}).Error)
+				require.NoError(t, db.Model(&model.UserPresence{}).Where("user_id = ?", 2).Updates(map[string]any{"last_activity_at": time.Now().Unix(), "last_web_activity_at": time.Now().Unix()}).Error)
 				for _, role := range []int{common.RoleAdminUser, common.RoleRootUser} {
 					viewerID, viewerRole = 2, role
 					for _, path := range []string{"/api/user/?presence=online", "/api/user/search?status=online"} {
@@ -349,6 +385,46 @@ func TestAdminLogPermissionsMatrix(t *testing.T) {
 					}
 				}
 				assert.True(t, strings.Contains(request(http.MethodGet, "/api/user/search?status=offline").Body.String(), `"success":true`))
+			})
+			t.Run("independent_web_api_activity", func(t *testing.T) {
+				now := time.Date(2026, time.October, 16, 12, 0, 0, 0, time.UTC)
+				require.NoError(t, db.Model(&model.UserPresence{}).Where("user_id > ?", 0).Updates(map[string]any{"last_web_activity_at": 0, "last_api_activity_at": 0}).Error)
+				for _, source := range []string{"dashboard", "api"} {
+					_, _, err := model.RecordUserPresenceActivity(3, now.Unix(), source, "203.0.113.1", "source-test")
+					require.NoError(t, err)
+				}
+				// An older API request must not rewind either timestamp.
+				_, _, err := model.RecordUserPresenceActivity(3, now.Unix()-600, "api", "203.0.113.1", "source-test")
+				require.NoError(t, err)
+				user := &model.User{Id: 3, Role: common.RoleCommonUser, Status: common.UserStatusEnabled}
+				require.NoError(t, model.FillUserOnlineStatus([]*model.User{user}, now.Unix()))
+				assert.Equal(t, "both", user.OnlineSource)
+				assert.True(t, *user.IsOnline)
+				for _, tc := range []struct {
+					web, api int64
+					source   string
+				}{
+					{now.Unix() - 300, now.Unix(), "api"},
+					{now.Unix(), now.Unix() - 300, "web"},
+					{now.Unix() - 300, now.Unix() - 301, "offline"},
+					{now.Unix() + 1, 0, "offline"},
+					{0, 0, "offline"}, // legacy heartbeat alone cannot keep a user online
+				} {
+					require.NoError(t, db.Model(&model.UserPresence{}).Where("user_id = ?", 3).Updates(map[string]any{"last_activity_at": now.Unix(), "last_web_activity_at": tc.web, "last_api_activity_at": tc.api}).Error)
+					require.NoError(t, model.FillUserOnlineStatus([]*model.User{user}, now.Unix()))
+					assert.Equal(t, tc.source, user.OnlineSource)
+					assert.Equal(t, tc.source != "offline", *user.IsOnline)
+					var ids []int
+					require.NoError(t, (model.UserSortOptions{Presence: "online"}).ApplyPresence(db.Model(&model.User{}), now.Unix()).Pluck("id", &ids).Error)
+					assert.Equal(t, tc.source != "offline", slices.Contains(ids, 3))
+					summary, err := model.GetUserActivitySummary(now)
+					require.NoError(t, err)
+					if tc.source == "offline" {
+						assert.Zero(t, summary.OnlineUsers)
+					} else {
+						assert.EqualValues(t, 1, summary.OnlineUsers)
+					}
+				}
 			})
 			// A failed Root lookup must not turn into an unrestricted query or detail response.
 			viewerID, viewerRole = 2, common.RoleAdminUser

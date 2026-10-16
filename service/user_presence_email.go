@@ -57,7 +57,7 @@ var (
 	userPresenceRuntimeSignature string
 	userPresenceRuntime          userPresenceRuntimeConfig
 	userPresenceActivityMu       sync.Mutex
-	userPresenceActivityWrites   = map[int]int64{}
+	userPresenceActivityWrites   = map[int][2]int64{}
 )
 
 func currentUserPresenceRuntimeConfig() userPresenceRuntimeConfig {
@@ -202,14 +202,23 @@ func RecordUserPresenceActivity(userId int, source, ip, userAgent string) {
 	if userId <= 0 {
 		return
 	}
+	if source != UserPresenceActivitySourceLogin && source != UserPresenceActivitySourceDashboard && source != UserPresenceActivitySourceAPI {
+		return
+	}
+	sourceIndex := 0
+	if source == UserPresenceActivitySourceAPI {
+		sourceIndex = 1
+	}
 	activityAt := time.Now().Unix()
 	userPresenceActivityMu.Lock()
-	lastWrite := userPresenceActivityWrites[userId]
+	writes := userPresenceActivityWrites[userId]
+	lastWrite := writes[sourceIndex]
 	if activityAt-lastWrite < int64(userPresenceActivityWriteInterval/time.Second) {
 		userPresenceActivityMu.Unlock()
 		return
 	}
-	userPresenceActivityWrites[userId] = activityAt
+	writes[sourceIndex] = activityAt
+	userPresenceActivityWrites[userId] = writes
 	userPresenceActivityMu.Unlock()
 
 	user, err := model.GetUserCache(userId)
@@ -226,7 +235,7 @@ func RecordUserPresenceActivity(userId int, source, ip, userAgent string) {
 	presence, transitioned, err := model.RecordUserPresenceActivity(userId, activityAt, source, ip, userAgent)
 	if err != nil {
 		userPresenceActivityMu.Lock()
-		if userPresenceActivityWrites[userId] == activityAt {
+		if userPresenceActivityWrites[userId][sourceIndex] == activityAt {
 			delete(userPresenceActivityWrites, userId)
 		}
 		userPresenceActivityMu.Unlock()

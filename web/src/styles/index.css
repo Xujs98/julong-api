@@ -30,6 +30,26 @@ For commercial licensing, please contact support@quantumnous.com
 @import './theme.css';
 @import './theme-presets.css';
 
+@keyframes user-presence-glow {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 1px currentColor);
+  }
+  50% {
+    filter: drop-shadow(0 0 4px currentColor);
+  }
+}
+
+.user-presence-glow {
+  animation: user-presence-glow 2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .user-presence-glow {
+    animation: none;
+  }
+}
+
 @layer base {
   :root {
     /* Mobile browser toolbars change dvh; 50% positioning and vh still use
