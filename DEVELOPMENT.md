@@ -36,7 +36,7 @@
 | 用户运营管理 | 已实现 | 用户列表筛选栏在标签后展示全部或当前筛选用户的剩余总配额与匹配人数，可持久化选择不统计用户，并支持按用户名/姓名/邮箱、分组、状态、角色和标签过滤；同时支持自定义标签、内置中/高风险标签筛选、批量额度增减及可选邮件。用户详情展示今日消费、额度明细、已选分组实际扣费倍率及分组用量，并支持单用户在最终真实倍率上增减调整。编辑已有用户时绑定信息默认只读，启用开关后才提交绑定修改；创建用户仍可直接填写绑定信息。 |
 | 用户风险与设备管控 | 已实现 | 风险检测支持全局或逐用户开启，按 1/7/30 天请求、错误、退款、客户端断开、异常流和 IP 等信号评分；登录 IP 与设备面板支持识别设备、封禁设备并撤销对应会话。 |
 | 模型 API 使用开关 | 已实现（本地验证） | 模型管理编辑页的“允许 API 访问”默认开启；关闭后服务端拒绝普通 HTTP、视频 remix 和 Responses WebSocket 调用，并从 /v1/models、/api/user/models 中过滤。旧记录 NULL 按开启处理；与模型广场 status 独立。 |
-| 文本替换规则 | 已实现（本地验证） | 渠道和模型均可配置 `request`/`response` 文本替换 JSON。请求规则改写发往上游的文本，响应规则改写返回客户端的 JSON 文本字段；模型规则按 exact/prefix/suffix/contains 继承优先级覆盖渠道规则。 |
+| 文本替换规则 | 已完成并推送 | 渠道和模型均可配置 `request`/`response` 文本替换 JSON。请求规则改写发往上游的文本，响应规则改写返回客户端的 JSON 文本字段；模型规则按 exact/prefix/suffix/contains 继承优先级覆盖渠道规则。提交 `f5d5be1cd` 已推送 `origin/main`。 |
 | 模型 Token 特殊倍率 | 已实现 | 分组定价可按用户分组、计费分组和模型分别增加输入、输出、缓存读取、缓存创建 Token；用户和管理员看到计费后 Token，管理员悬浮可查看真实 Token、原始费用及分组/模型倍率收益。 |
 | 日志与兑换码导出 | 已实现 | 使用日志支持下载本页、今日、自定义时间和全部记录，CSV 使用中文表头并防公式注入；兑换码支持新生成结果复制/下载及多选复制、下载、5 秒确认删除。 |
 | 运营账本 | 已实现 | 概览下方新增独立账本页，支持日期查询、额度/用户消耗/运营成本/成本倍率汇总、CSV 下载、账本记录增改和 10 秒确认的单项/批量软删除；root 通过用户编辑器按查看、编辑、删除三项权限授权管理员。 |
@@ -1591,7 +1591,8 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 - 渠道和模型编辑页新增文本替换 JSON 配置；请求方向支持 `矩龙API启动` → `By倾城`，响应方向支持 `By倾城` → `矩龙 API`，规则可按需自定义。模型级配置沿用 `NameRule` 的 exact/prefix/suffix/contains 匹配并覆盖渠道默认配置，空模型配置继续继承渠道规则。
 - Relay 已接入 OpenAI Compatible、Claude、Gemini、Responses 和 Pass-through；普通 JSON、SSE 事件及 Responses WebSocket 响应均按文本字段改写。请求改写只影响发往上游的 JSON 文本，保留原始请求存储供审计/计费使用；响应改写保留原始 Responses WebSocket 事件供 usage/billing 解析。
 - 配置保存时验证 JSON、规则数量和长度；新增 `relaykit/dto/text_replacement.go`、`relay/common/text_replacement.go` 及对应 Go/前端回归测试。前端七语言同步完成，未新增数据库表或迁移。
-- 验证：`go test ./relay/common ./relay/helper ./model ./relay -count=1`、`cd relaykit && GOWORK=off go test ./... -count=1`、`cd relaykit && GOWORK=off go build ./...`、根模块 `go build ./...`、SQLite 3.50.4/MySQL 5.7.44/PostgreSQL 16.15 真实数据库矩阵、前端文本替换测试3项、`bun run typecheck`、目标文件 `oxfmt --check`、`rsbuild build` 均通过；前端和后端重启及 `/api/status` 结果记录在 PROJECT_PROGRESS.md。
+- 验证：`go test ./relay/common ./relay/helper ./model ./relay -count=1`、`cd relaykit && GOWORK=off go test ./... -count=1`、`cd relaykit && GOWORK=off go build ./...`、根模块 `go build -o /tmp/julong-api-runtime/new-api-text-replacement .`、前端文本替换测试3项、`bun run typecheck`、目标文件 `oxfmt --check`、`bun run build` 和 `git diff --check` 均通过。此前项目批次的 SQLite 3.50.4/MySQL 5.7.44/PostgreSQL 16.15 数据库矩阵记录仍有效，本批未因无 schema 变化重复执行。
+- 本地激活：文本替换最新产物 `/tmp/julong-api-runtime/new-api-text-replacement` 的 PID `29600` 监听 `3000`；`GET http://127.0.0.1:3000/api/status` 返回 HTTP 200、`success=true`、版本 `v1.0.0-julong.1`。提交 `f5d5be1cdf31b5110aba700112ba50c911590774` 已推送 `origin/main`，生产环境未部署。
 
 ### 2026-10-16 管理员任务日志权限与 Root 隐私（B14）
 

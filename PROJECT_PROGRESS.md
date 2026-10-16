@@ -33,7 +33,7 @@
 | 禁用账户全站防护 | B15本地已完成，功能已推origin/main | 全站IP/可信身份拦截、自动追封、SSRF页独立入站名单、登录IP记录；三库与登录追加回归通过，人机验证需真实密钥，未上线 |
 | 使用日志权限与在线统计 | B16功能已推；B17网站/API独立在线已完成（本地） | 登录/网站交互与API独立300秒窗口，自动轮询不续在线；双活跃发光，卡片移除排除说明；三库、前端10项、构建/重启通过 |
 | 项目进度入口 | 已完成（文档本地） | 本文 + AGENTS.md 必读入口；持续按批次更新 |
-| Git 提交 / 线上发布 | B22尚未提交；origin/main仍为提交前远端状态 | 本批只提交文本替换与同步文档；不推upstream，未部署线上 |
+| Git 提交 / 线上发布 | B22提交 `f5d5be1cdf31b5110aba700112ba50c911590774` 已推送 `origin/main`，远端 SHA 已核对一致 | 不推upstream；本地服务已启动，生产未部署 |
 
 ## 3. 状态口径
 
@@ -462,4 +462,4 @@ B08：MD/DOCX 后端、管理 UI、模型绑定与广场调用文档已实现。
 - 前端渠道编辑页“路由与映射”和模型编辑页均加入 JSON 编辑器，提供校验、归一化和七语言文案；未新增数据库表或迁移。
 - 实际验证：`gofmt -d` 无输出；`go test ./relay/common ./relay/helper ./model ./relay -count=1` 通过；`cd relaykit && GOWORK=off go test ./... -count=1` 通过；`cd relaykit && GOWORK=off go build ./...` 通过；前端文本替换 Vitest 3/3、`bun run typecheck`、目标文件 `oxfmt --check`、`bun run build`、根模块 `go build -o /tmp/julong-api-runtime/new-api-text-replacement .` 和 `git diff --check` 均通过。
 - 本地服务已由文本替换最新产物启动：PID `29600` 监听 `*:3000`，`GET http://127.0.0.1:3000/api/status` 返回 HTTP 200、`success=true`、版本 `v1.0.0-julong.1`；未部署生产。
-- 已提交本批功能和文档，提交与推送结果、远端 SHA 见本批后续交付记录；既有未跟踪内容 `controller/media_asset.go.bak`、`site-assets/`、`web/pnpm-lock.yaml`、`web/src/features/usage-logs/components/media-assets-table.tsx.bak` 保留，未纳入本批提交。
+- 本批已提交为 `f5d5be1cdf31b5110aba700112ba50c911590774` 并成功推送 `origin/main`，`git ls-remote` 已核对远端 SHA 一致；既有未跟踪内容 `controller/media_asset.go.bak`、`site-assets/`、`web/pnpm-lock.yaml`、`web/src/features/usage-logs/components/media-assets-table.tsx.bak` 保留，未纳入本批提交。
