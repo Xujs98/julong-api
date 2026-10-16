@@ -371,13 +371,13 @@ curl http://localhost:3000/api/error-reports \
 | POST | `/api/user/` | `controller.CreateUser` | 创建用户 | `UserFormData`；管理员/root 可通过 `binding_updates` 设置邮箱、GitHub、Discord、OIDC、WeChat、Telegram、LinuxDO 绑定，空字符串清除 | `User` | 完成 |
 | PUT | `/api/user/` | `controller.UpdateUser` | 更新用户及管理员权限 | `UserFormData & {id,admin_permissions?}`；权限变更仅Root、须一次性 `admin.user.update` 安全凭据；绑定信息仍仅按传入 `binding_updates` 更新 | partial `User`；权限矩阵事务提交时递增目标AuthVersion，提交后撤销旧会话和发布权限缓存变更 | 完成 |
 | DELETE | `/api/user/:id` | `controller.DeleteUser` | 删除用户 | path `id` | success | 完成 |
-| POST | `/api/user/manage` | `controller.ManageUser` | 晋升/降级/启用/禁用/删除/额度调整；`disable` 同时封禁全部已知登录 IP | `{id,action,...}` | partial `User` | 完成 |
+| POST | `/api/user/manage` | `controller.ManageUser` | 晋升/降级/启用/禁用/删除/额度调整；`disable` 同时封禁全部已知登录/会话 IP 和设备、递增认证版本并撤销会话 | `{id,action,...}` | partial `User` | 完成 |
 | GET | `/api/user/agent-detail/:id` | `controller.AdminGetAgentDetail` | 代理详情弹窗 | path `id` | `{agent,users,redemptions}` | 完成 |
 | GET | `/api/user/:id/usage-summary` | `controller.AdminGetUserUsageSummary` | 用户详情总 Token、今日 Token/消费和已选计费分组的实际倍率/用量 | path `id`；可选 `user_group` 用于编辑预览 | `{total_tokens,today_tokens,today_quota,base_group_ratios,group_ratios,group_usage}` | 完成；仅返回该用户 API Key 实际选择过的分组，倍率包含特殊规则和单用户调整 |
 | GET | `/api/user/:id/quota-increases` | `controller.AdminGetUserQuotaIncreaseLogs` | 用户“额度明细”分页 | path `id`；`p`, `page_size` | `PageInfo<QuotaIncreaseLog[]>` | 完成；记录兑换码、签到、管理员调整、在线充值、退款、注册/邀请奖励等增加额度来源 |
 | GET | `/api/user/:id/risk` | `controller.AdminGetUserRiskReport` | 计算用户风险报告 | path `id`；`days=1|7|30`，默认 7 | `UserRiskReport`，包含开关状态、0-100 分、`low/medium/high`、汇总和信号 | 完成；全局和单用户开关均关闭时返回禁用的低风险报告 |
 | PUT | `/api/user/:id/risk` | `controller.AdminUpdateUserRiskDetection` | 单独开启或关闭用户风险评估 | `{enabled:boolean}` | `{enabled,global_enabled,user_enabled}` | 完成；全局开启时单用户关闭不覆盖全局 |
-| GET | `/api/user/:id/login-ips` | `controller.AdminGetUserLoginIPs` | 用户历史登录 IP、登录次数、最后使用时间、封禁和共享状态 | path `id` | `UserLoginIPStat[]` | 完成；管理员仅可查看低权限用户，root 可查看全部 |
+| GET | `/api/user/:id/login-ips` | `controller.AdminGetUserLoginIPs` | 用户历史登录/自动追封 IP、登录次数、最后使用时间、封禁和共享状态；自动追封未登录 IP 的次数/时间为0 | path `id` | `UserLoginIPStat[]` | 完成；管理员仅可查看低权限用户，root 可查看全部 |
 | PUT | `/api/user/:id/login-ips` | `controller.AdminUpdateUserLoginIPs` | 批量封禁或解封登录 IP | path `id`；`{ips:string[],blocked:boolean}`，1-100 个标准 IPv4/IPv6 | success | 完成；管理员仅可操作低权限用户，root 可操作全部；非法 IP 返回参数错误 |
 | GET | `/api/user/:id/login-devices` | `controller.AdminGetUserLoginDevices` | 用户登录设备、UA、关联 IP、会话和封禁状态 | path `id` | `UserLoginDeviceStat[]`，最多聚合 100 个设备 | 完成 |
 | PUT | `/api/user/:id/login-devices` | `controller.AdminUpdateUserLoginDevices` | 批量封禁或解封用户设备 | `{device_ids:string[],blocked:boolean}`，1-100 个 UUID | `{revoked_count}` | 完成；封禁时立即撤销对应活跃会话 |
@@ -1095,6 +1095,8 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 | POST | `/api/oauth/email/bind` | `EmailBind` | 确认绑定邮箱 | `flow_token,new_code,old_code?` | success | 本人绑定流程 |
 | GET/POST/GET | `/api/oauth/telegram/login`、`/api/oauth/telegram/bind/start`、`/api/oauth/telegram/bind/:flow_token` | `TelegramLegacyAuth` | 旧 Telegram 入口兼容提示 | 原流程参数 | 引导采用标准 OAuth 流程 | 原登录/绑定入口权限 |
 | GET | `/api/oauth/telegram` | `HandleOAuth` | Telegram 接入统一 OAuth/OIDC | OAuth code/state | 会话或绑定结果 | 校验 OAuth 状态及绑定证明 |
+| GET | `/api/option/site_blocked_ips` | `controller.GetSiteBlockedIPs` | 网站全站访问IP黑名单分页/精确IP筛选 | `p,page_size,ip?`；IP标准化 | `PageInfo<BlockedIP[]>`（`items,total,page,page_size`），记录含`id,ip,user_id,operator_id,reason,created_at,updated_at` | AdminAuth + `system_settings/security.ssrf`页面权限；Root允许；PAT须对应scope |
+| PUT | `/api/option/site_blocked_ips` | `controller.UpdateSiteBlockedIPs` | 手动封禁/解封网站访问IP | `{ips:string[],blocked:boolean}`；1–100个合法IP；手动封禁拒绝操作者当前IP | success；失败保持列表/确认框，成功立即失效IP缓存；写`site.ip.update`审计 | 同GET，审计不写凭据 |
 | GET | `/api/option/request_policy` | `GetRequestPolicy` | 读取请求过滤/路由/健康策略 | `section` | `data.options`，仅返回该页面配置键 | Root 或相应设置页面权限 |
 | PATCH | `/api/option/request_policy` | `UpdateRequestPolicy` | 原子更新并验证请求策略 | `section`；`options:{key:string}` | 生效后的 `options` | 同上，写入键逐项校验 |
 | PUT | `/api/option/passkey/domains` | `UpdatePasskeyDomains` | 预览/修改 WebAuthn RP 域名 | `rp_id,legacy_rp_ids,origins,preview,removal_confirmation?` | 变更影响；危险移除返回 409 确认合同 | Root 或 `auth.passkey` |
@@ -1151,7 +1153,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 | `UserSession` | `model/user_session.go` | Dashboard 服务端登录会话 | 主键 `sid varchar(64)`；索引 `user_id/status/expires_at`；`version`、`user_auth_version`、状态、refresh HMAC、登录方式、IP、User-Agent、`device_id`、创建/活跃/过期/撤销时间 | 浏览器持久化设备 UUID 并随登录/刷新提交；短期 access token 同时校验会话与用户认证版本。设备封禁会撤销该用户对应设备的活跃会话。 | 上游同步，活跃 |
 | `AuthFlow` | `model/auth_flow.go` | OAuth、2FA、Passkey、Telegram 等一次性认证流程 | `id`；唯一 `token_hash`；索引 `purpose/expires_at`；`provider`、`intent`、`user_id`、`session_id`、内部 payload、`consumed_at` | 只保存不透明 flow token 的 HMAC；消费操作防重放并带过期校验。 | 上游同步，活跃 |
 | `ExternalIdentityClaim` | `model/external_identity_claim.go` | 外部身份唯一归属 | `provider+subject` 和 `provider+user_id` 两组唯一索引；`created_at` | 当前用于 Telegram 等外部身份原子占用，避免同一身份绑定多个用户；迁移时回填已有 Telegram 绑定。 | 上游同步，活跃 |
-| `BlockedIP` | `model/blocked_ip.go` | 全局 IP 黑名单 | 唯一 `ip varchar(45)`、索引 `user_id` 来源用户、索引 `operator_id` 操作者、`reason varchar(255)`、创建/更新时间 | IP 经 `net.ParseIP` 标准化；封禁状态使用 Redis 或 60 秒本地缓存。普通用户登录、注册、Dashboard 会话和 API Token 鉴权均拦截；管理员/root Dashboard 登录豁免。 | 活跃 |
+| `BlockedIP` | `model/blocked_ip.go` | 全局 IP 黑名单 | 唯一 `ip varchar(45)`、索引 `user_id` 来源用户、索引 `operator_id` 操作者、`reason varchar(255)`、创建/更新时间 | IP 经 `net.ParseIP` 标准化；封禁状态使用 Redis 或 60 秒本地缓存。SiteAccessGuard 在全站路由前拦截，覆盖官网、静态资源、注册/登录、Dashboard 和 API；黑名单不设管理员/root豁免。 | 活跃 |
 | `BlockedDevice` | `model/blocked_device.go` | 按用户封禁 Dashboard 登录设备 | `user_id+device_id` 唯一索引；`device_id varchar(64)` UUID、`operator_id`、`reason varchar(255)`、时间戳 | 设备封禁仅作用于指定用户，登录和刷新时校验；封禁接口同步撤销该设备活跃会话，解封不自动恢复旧会话。 | 活跃 |
 | `UserTag` | `model/user_tag.go` | 用户自定义标签 | `id`、唯一 `name varchar(32)`、`color char(7)`、时间戳 | 用户通过 `User.tag_id` 关联；删除标签时事务清空关联。中风险 ID `-1`、高风险 ID `-2` 是按风险报告动态生成的内置 transient 标签，不写表且不可修改/删除。 | 活跃 |
 | `Token` | `model/token.go` | API keys | `id`、`user_id`、`key`、`name`、额度字段、模型限制、group、allow IPs | Relay 鉴权和计费使用。 | 活跃 |
@@ -1374,9 +1376,9 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 - 用户详情基本信息区显示有效订阅摘要；前端并行读取用户订阅与套餐列表，展示套餐名称、状态、剩余额度、到期时间和有效订阅数量。
 - “登录 IP”页签聚合每个历史 IP 的登录次数和最后使用时间，可多选封禁/解封；同一最近登录 IP 被多个未删除用户使用时显示共享人数。
 - `LoginIPPanel` 依赖 `getUserLoginIPs/updateUserLoginIPs` 和 React Query，关键参数为 `userId/onUpdated`；`LoginIPRow` 负责移动端/桌面 IP、次数、时间、共享和封禁状态展示，均已完成。
-- 禁用用户会在同一个主库事务中禁用账号并封禁该用户全部登录审计 IP 及最近 IP。重新启用账号不会自动解封 IP，必须在登录 IP 页签手动选择解封。
+- 禁用用户会在同一个主库事务中禁用账号并封禁全部登录审计/最近/服务端会话IP和有效设备，递增认证版本并撤销会话。重新启用不会自动解封IP/设备，必须手动选择解封。可信禁用身份随后出现的新IP也会封禁，并补充到登录IP列表（无成功登录时次数为0、时间显示“-”）。
 - 用户列表执行禁用前显示破坏性确认弹窗，明确提示 IP 联动封禁及重新启用不会自动解封。
-- 黑名单阻止普通用户注册、登录、已有 Dashboard 会话和 API Token 请求；管理员/root 的 Dashboard 登录豁免，避免共享办公出口 IP 导致后台锁死。
+- 黑名单在全站路由前阻止所有页面/API/静态资源，包括管理员/root；共享办公/运营商出口可能连带影响正常用户，可在安全设置SSRF页或用户详情解封。网站黑名单接口拒绝手动封禁操作者当前IP，但自动封禁不设角色豁免。
 - “上下文与提示词”页签可为单个用户开启后续 Relay 请求记录；列表展示模型、路径、状态、请求 ID、时间和捕获大小，详情提供结构化对话及 JSON 复制/下载。关闭开关不会清空已有记录，清空操作需要二次确认。
 - 请求在参数校验及 RelayInfo 创建成功后、发往上游前写入 `pending`，完成后更新为 `success/error`，所以上游 `500 do request failed` 也可保留对应请求内容。历史请求无法追溯，必须先开启再观察。
 
@@ -1698,3 +1700,19 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 - Go控制器在专用SQLite/MySQL/PostgreSQL库验证旧联系方式兼容、两类群保存、图片读取、替换/删除、非法URL/文件/重复ID、失败回滚；不更改实际用户配置，不做生产发布。验证日志 /tmp/julong-support-20261016/。历史徽标测试有既有审计表缺失日志，不宣称全量测试通过。
 
 - B13交付：功能提交0e347030e已推送origin/main；前后端重建，本地PID48103健康且6个首页资源与web/dist一致。无生产部署，真实管理员浏览器端到端未验。
+
+### 2026-10-16 禁用账户全站防护（B15）
+
+- `middleware.SiteAccessGuard`挂载于`SetRouter`第一项，覆盖官网fallback、静态资源、管理和relay路由。黑名单IP直接403；禁用账户的验签JWT、真实PAT/relay Key、验secret的refresh或签名设备标记命中也403并追封来源IP/绑定设备；拒绝响应`Cache-Control:no-store`，查询错误拒绝，不更改正常路由鉴权。
+- `new_api_site_identity`是400天HMAC签名设备标记，仅用于拒绝，不能登录；成功登录/刷新写入，Path=/、HttpOnly、SameSite=Lax，Secure沿用项目正式HTTPS配置。禁用判断实时读取用户状态；已删除账号的旧标记不阻塞公共页，重新启用后标记不再追封。普通设备UUID、用户ID头、伪造JWT/refresh及不可信XFF不触发自动封禁。依赖`TRUSTED_PROXIES`仅信任真实反向代理。
+- 浏览器跨源请求（Sec-Fetch-Site/Origin/Referer）携带禁用凭据时仍拒绝，但不持久追封或种身份Cookie，防止跨站投毒；原生API客户端按真实凭据识别。IP入库事务锁定用户并复核禁用状态；冲突不覆盖既有归属。
+- 安全与限制 → SSRF保护新增“网站访问IP黑名单”，支持分页、精确查询、手动封禁、确认解封；复用ConfirmDialog、EmptyState/ErrorState/LoadingState及已有控件。现有SSRF表单不能管理入站BlockedIP，因此新增业务组件，复用同一页；独立入站名单不改`fetch_setting.ip_list`或出站白名单，不关闭SSRF。
+- 复用BlockedIP/BlockedDevice与现有索引，无新增schema或配置键/页面路由。后端API清单见上；前端仍使用原系统设置权限入口`security.ssrf`。7种locale各补8键，使用同步脚本完成。
+- 项目已有Cloudflare Turnstile：系统设置 → 认证设置 → 机器人防护，配置Site Key/Secret Key并开启。登录、注册、邮件验证及重置密码已有后端检查；本地只读状态为未开启且无Site Key，未查询或修改生产设置、未虚构密钥。
+- 防御边界：不追溯匿名身份、清Cookie且换IP的访客；设备标记不是硬件封禁。共享IP全站封禁可能影响正常用户。单个用户未充值、curl/Node UA、154次记录或401不能证明DDoS/越权；应用403不能代替CDN/WAF及流量清洗，CDN缓存和独立官网必须配置边缘规则才有相同效果。
+- 安全依据：已读官方Authentication/Session Management/Authorization Cheat Sheet保存副本；关注服务端逐请求校验、会话撤销、Cookie完整性、通用登录错误、跨源防投毒和无凭据审计。联网核实最新稳定ASVS受证书/工具无返回限制，未编造版本/控制ID，不声明全站合规。
+- 验证：`run-matrix-v2.py`在SQLite3.50.4、MySQL5.7.44、PostgreSQL16.15真实独立主/日志库，9组全站/凭据/伪造/跨源/权限/解封/恢复/验证码用例通过无Skip；首轮MySQL临时库latin1拒绝，修正测试库utf8mb4后通过。正常登录/刷新发标记及禁用后新IP拦截的独立回归也通过。
+- 前端`final-frontend-checks`格式、3文件lint、typecheck、UI4/4、i18n同步全部通过。较宽controller认证回归5例失败，在HEAD业务代码overlay复现相同5例（缺two_fas夹具、aff_code唯一冲突等）；未弱化认证规则，不能算全量通过。构建/重启/Git交付的最终证据续记PROJECT_PROGRESS.md B15。
+
+
+- B15最终验证：router-final 10组、主体matrix-v2三库9组及login-matrix三库追加登录回归全部exit0；前端4项及格式/lint/typecheck/i18n、最终前后端build通过。旧PID24268已停止、新PID32714监听3000，健康/6项资源哈希/匿名管理拒绝通过；Git交付待执行，未部署生产。详情与既有控制器5项失败边界见PROJECT_PROGRESS.md。

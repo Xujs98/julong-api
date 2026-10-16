@@ -4,7 +4,7 @@
 > 详细 API、路由、配置和数据模型以 [DEVELOPMENT.md](./DEVELOPMENT.md) 为技术登记入口。
 > 代码与实际命令输出优先于旧文档、历史回复和截图；“代码已写”“本地可用”“已提交”“已上线”必须分开。
 
-最后更新：2026-10-16 18:32（Asia/Shanghai）
+最后更新：2026-10-16 19:17（Asia/Shanghai）
 项目根目录：`/Users/xujs/.docker_dir/new-api`
 
 ## 1. 新对话接续入口（必须先读）
@@ -22,14 +22,15 @@
 
 | 项目 | 状态（截至最后更新时间） | 依据与边界 |
 | --- | --- | --- |
-| 当前分支 / HEAD | main / 8c9403bae（B14功能提交，交付文档随后） | B14已实现、验证、本地激活并推送；既有未跟踪内容保留；既有未跟踪文件保留 |
+| 当前分支 / HEAD | main / bdba71e34（B15本地已完成；Git交付待执行） | B14已实现、验证、本地激活并推送；既有未跟踪内容保留；既有未跟踪文件保留 |
 | 上游整合 | main已包含此前功能分支提交 | 实际git和远端对比已纠正旧“尚待合并”快照，保留历史批次记录 |
 | 用户 GitHub 仓库 | origin = https://github.com/Xujs98/julong-api.git | upstream = https://github.com/QuantumNous/new-api.git，仅跟踪上游；不得把用户改动推到 upstream |
-| 本地服务 | B14最新前端嵌入Go产物，PID24268监听3000 | /api/status成功、6个首页JS/CSS与web/dist一致；真实管理员浏览器登录未实测 |
+| 本地服务 | B15最新前端嵌入Go产物，PID32714监听3000 | /api/status成功、6个首页JS/CSS与web/dist一致、匿名黑名单管理401；真实管理员浏览器登录未实测 |
 | 模型广场按秒/按次价格 | 当前代码已实现，历史交付有验证记录 | 两项都有价格同时显示；只配一项只显示该项；模型名及分辨率价格区规则一致 |
 | 视频输入素材 | 已完成本地实现/定向回归、三库复验、浏览器预览和视频直链、最终重启 | SQLite3.50.4/MySQL5.7.44/PostgreSQL16.15最终矩阵8/8无Skip；图片及嵌入视频/音频正常、素材视频直链可播放；Safari/原生音频直链/线上公网未实测 |
 | 成品列阴影与滚轮 | 已完成（本地）；17项通过，Chromium已验证并激活；Safari待人工复核 | 独立复核10/10，主任务4文件17/17；Chromium明暗阴影、全列固定、滚轮/splitHeader已验；首页资源与dist一致，Safari无连接未实测 |
 | 管理员日志与Root隐私 | B14本地已完成，已推送origin/main | 四项独立跨账户权限、Root五类日志过滤和详情保护；三库查询/会话验证、前端54项及构建/重启通过；全量测试及真实登录浏览器未验收 |
+| 禁用账户全站防护 | B15本地已完成，待Git交付 | 全站IP/可信身份拦截、自动追封、SSRF页独立入站名单、登录IP记录；三库与登录追加回归通过，人机验证需真实密钥，未上线 |
 | 项目进度入口 | 已完成（文档本地） | 本文 + AGENTS.md 必读入口；持续按批次更新 |
 | Git 提交 / 线上发布 | B14功能8c9403bae已推送origin/main | 不推upstream；api.julongkj.top未部署 |
 
@@ -342,3 +343,31 @@ B08：MD/DOCX 后端、管理 UI、模型绑定与广场调用文档已实现。
 - 本地PID24268监听3000且健康，最新前端已嵌入；三库与前端54项等定向验证见上一记录。全量Go既有失败、未测真实登录浏览器和ClickHouse及共享URL边界保留，不扩大通过范围。api.julongkj.top未部署。
 - 43个本批文件已范围审核；保护的版权头保持原样。原有controller/media_asset.go.bak、site-assets/、web/pnpm-lock.yaml、web/src/features/usage-logs/components/media-assets-table.tsx.bak保持未跟踪，不包含在提交中。
 - 用户最新要求只完成权限管理；本轮没有额外增加任务插件入口。后续在可用真实登录环境补人工验收，生产发布另行执行。
+
+### B15：禁用账户全站拦截与自动追封（2026-10-16，进行中）
+
+- 基线：main/bdba71e34，origin为Xujs98/julong-api；既有4项未跟踪内容保留。
+- 用户目标：禁用身份的全站请求拦截、可信身份新IP/设备自动封禁、登录IP显示、SSRF设置页管理入口与登录/注册人机验证核对。
+- 已核实：原实现禁用账户并撤销会话、封历史IP；Turnstile已接入登录/注册。全站公共路由和新IP追封尚缺。
+- 实现边界：只使用验签凭据/服务端会话秘密识别身份，不凭用户名、原始设备UUID或任意代理头自动封禁；入站黑名单复用BlockedIP，与SSRF出站白名单分离。
+- 认证控制：服务端统一检查、禁用会话不可恢复、不可伪造身份触发封禁、Cookie完整性和安全属性、日志无凭据；已读OWASP Authentication/Session Management/Authorization，最新稳定ASVS版本联网核实受限，未编造版本或声称合规。
+- 状态：正在实现；三库、回归、构建、重启、提交、推送均待本批验证；未部署线上。
+
+### B15 实现与验证里程碑（2026-10-16，构建收尾中）
+
+- 实现全站SiteAccessGuard、禁用可信身份的新IP/设备追封、正确密码后的追封、签名设备标记（成功登录/刷新写入）、自动IP补充用户详情、SSRF页面独立入站黑名单管理GET/PUT与对应权限/PAT scope和操作审计；出站SSRF配置保持原语义。详见DEVELOPMENT.md接口及B15章节。
+- 安全回归涵盖无凭据/伪造用户ID、设备UUID、JWT、refresh和XFF不投毒；跨源禁用凭据拒绝但不持久封禁；正常/已删除账户、重新启用和Cookie过期；真实禁用账户的JWT/PAT/relay/provider/Gemini/refresh/设备换IP追封，IP拦截覆盖官网/静态/API，手动解封恢复。
+- 真实三库`python3 /tmp/julong-site-ban-20261016/run-matrix-v2.py`通过exit0：SQLite3.50.4、MySQL5.7.44、PostgreSQL16.15各9顶层用例，无Skip，独立临时主/日志库已删除；首轮MySQL测试库latin1拒绝的失败保留，修utf8mb4后通过。无schema变更。
+- 正常密码登录与refresh签发有效签名设备标记、禁用后换IP拦截的追加回归`login-proof`通过；补充三库登录回归运行中。验证码测试模拟Cloudflare成功/失败返回，不能算真实线上验证码验收。
+- 前端final-frontend-checks exit0：oxfmt、目标3文件oxlint、bun run typecheck、UI1文件4/4、bun run i18n:sync通过。较宽controller认证回归5例失败，在HEAD业务代码overlay复现相同5例：two_fas夹具缺失、aff_code唯一冲突及已有加密登录失败，证据auth-regressions/controller-baseline.log；model/middleware定向通过、service无选中测试不计通过。
+- 本地Turnstile未开启且未配置Site Key；现有入口为系统设置→认证设置→机器人防护，须用户实际域名密钥。未查询生产账户或生产设置。截图请求401/脚本UA/154条不足以认定DDoS或越权。
+- 验证局限：浏览器真实管理员交互及线上环境未验；全量Go未通过验收；稳定ASVS联网核实受证书/搜索空返回限制，不声明合规。共享IP可能误封，清Cookie换IP匿名不可归因；CDN缓存/独立官网/流量攻击需要边缘防护。
+- 下一步：最终构建、后端重启/健康/嵌入资源核对、范围提交并推origin/main；现仍B14 PID24268运行，未生产部署。四项既有未跟踪内容保留排除。
+
+### B15 最终验证与本地激活（2026-10-16 19:17，本地已完成、Git待交付）
+
+- `router-final`最终10组TestSiteAccess通过exit0，含拒绝响应no-store及实际登录/refresh发标记；`login-matrix`在真实SQLite3.50.4、MySQL5.7.44、PostgreSQL16.15追加登录/refresh/禁用换IP用例均通过。主体三库9组矩阵见matrix-v2；无Skip、测试临时库已清理。测试仅使用临时夹具，未改实际用户封禁或验证码配置。
+- `final-frontend-checks`（格式、3文件lint、typecheck、4项UI、i18n）全部通过；frontend-build-final及go-build-final exit0，版本v1.0.0-julong.1；Go嵌入最新dist。控制器5项较宽认证测试在HEAD业务代码overlay复现相同失败，不宣称全量Go通过。
+- 本地旧PID24268已正常停止，新PID32714监听3000，/api/status success=true，首页6项JS/CSS SHA256与web/dist一致，新管理接口匿名拒绝。证据/tmp/julong-site-ban-20261016/activation.json。未部署api.julongkj.top，不将本地重启当作线上防御生效。
+- DEVELOPMENT.md同步GET/PUT接口参数/响应/权限、禁用及IP统计变化、Cookie语义、组件复用、SSRF出入站分离、共享IP/匿名识别/CDN缓存边界和验证码开启方式；稳定ASVS联网核实与真实浏览器/线上验证码验收仍有限制。
+- Git交付待执行：仅B15范围，保留并排除controller/media_asset.go.bak、site-assets/、web/pnpm-lock.yaml、web/src/features/usage-logs/components/media-assets-table.tsx.bak；目的地仅origin/main，禁止force/upstream。

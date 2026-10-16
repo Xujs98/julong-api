@@ -84,22 +84,21 @@ func BlockUserDevices(userId int, deviceIds []string, operatorId int, reason str
 		return nil
 	}
 	return DB.Transaction(func(tx *gorm.DB) error {
-		for _, deviceId := range normalized {
-			record := BlockedDevice{
-				UserId:     userId,
-				DeviceId:   deviceId,
-				OperatorId: operatorId,
-				Reason:     strings.TrimSpace(reason),
-			}
-			if err := tx.Clauses(clause.OnConflict{
-				Columns:   []clause.Column{{Name: "user_id"}, {Name: "device_id"}},
-				DoUpdates: clause.AssignmentColumns([]string{"operator_id", "reason", "updated_at"}),
-			}).Create(&record).Error; err != nil {
-				return err
-			}
-		}
-		return nil
+		return BlockUserDevicesWithTx(tx, userId, normalized, operatorId, reason)
 	})
+}
+
+func BlockUserDevicesWithTx(tx *gorm.DB, userId int, deviceIds []string, operatorId int, reason string) error {
+	for _, deviceId := range deviceIds {
+		record := BlockedDevice{UserId: userId, DeviceId: deviceId, OperatorId: operatorId, Reason: strings.TrimSpace(reason)}
+		if err := tx.Clauses(clause.OnConflict{
+			Columns:   []clause.Column{{Name: "user_id"}, {Name: "device_id"}},
+			DoUpdates: clause.AssignmentColumns([]string{"operator_id", "reason", "updated_at"}),
+		}).Create(&record).Error; err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func UnblockUserDevices(userId int, deviceIds []string) error {

@@ -31,6 +31,7 @@ func RefreshAuth(c *gin.Context) {
 		return
 	}
 	service.WriteRefreshCookie(c, bundle.RefreshToken)
+	service.WriteSiteIdentityCookie(c, user.Id, bundle.Session.DeviceID)
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",

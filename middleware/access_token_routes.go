@@ -187,6 +187,8 @@ var accessTokenRouteRules = map[string]accessTokenRouteRule{
 
 	// router/api-router.go: /api/option
 	"GET /api/option/":                                           accessTokenSettingsRule,
+	"GET /api/option/site_blocked_ips":                           accessTokenScopeRule(service.AccessTokenScopeOf(authz.SystemSettingsPermission("security.ssrf"))),
+	"PUT /api/option/site_blocked_ips":                           accessTokenScopeRule(service.AccessTokenScopeOf(authz.SystemSettingsPermission("security.ssrf"))),
 	"GET /api/option/request_policy":                             accessTokenSettingsRule,
 	"PATCH /api/option/request_policy":                           accessTokenSettingsRule,
 	"PUT /api/option/":                                           accessTokenSettingsRule,

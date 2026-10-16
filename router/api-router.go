@@ -303,6 +303,8 @@ func SetApiRouter(router *gin.Engine) {
 		{
 			optionRoute.GET("/", controller.GetOptions)
 			optionRoute.GET("/request_policy", controller.GetRequestPolicy)
+			optionRoute.GET("/site_blocked_ips", middleware.RequirePermission(authz.SystemSettingsPermission("security.ssrf")), controller.GetSiteBlockedIPs)
+			optionRoute.PUT("/site_blocked_ips", middleware.RequirePermission(authz.SystemSettingsPermission("security.ssrf")), controller.UpdateSiteBlockedIPs)
 			optionRoute.PATCH("/request_policy", controller.UpdateRequestPolicy)
 			optionRoute.PUT("/", controller.UpdateOption)
 			optionRoute.PUT("/passkey/domains", middleware.RequirePermission(authz.SystemSettingsPermission("auth.passkey")), controller.UpdatePasskeyDomains)

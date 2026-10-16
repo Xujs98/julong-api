@@ -526,7 +526,23 @@ func GetUserLoginIPStats(userId int) ([]UserLoginIPStat, error) {
 		Group("ip").
 		Order("last_login_at DESC").
 		Scan(&stats).Error
-	return stats, err
+	if err != nil {
+		return stats, err
+	}
+	var blocked []BlockedIP
+	if err := DB.Where("user_id = ?", userId).Order("id DESC").Find(&blocked).Error; err != nil {
+		return nil, err
+	}
+	known := make(map[string]bool, len(stats))
+	for _, stat := range stats {
+		known[stat.IP] = true
+	}
+	for _, record := range blocked {
+		if !known[record.IP] {
+			stats = append(stats, UserLoginIPStat{IP: record.IP, Blocked: true})
+		}
+	}
+	return stats, nil
 }
 
 type UserQuotaIncreaseLog struct {

@@ -85,6 +85,16 @@ func Login(c *gin.Context) {
 		Password: password,
 	}
 	err = user.ValidateAndFill()
+	if errors.Is(err, model.ErrUserDisabled) && service.MayPersistSiteIdentity(c) {
+		// Password was verified; a username-only failed attempt cannot reach here.
+		device := service.ResolveLoginDeviceID(c)
+		_, blockErr := model.BlockDisabledUserRequest(user.Id, c.ClientIP(), device)
+		if blockErr != nil {
+			common.SysError(common.LogText("failed to persist disabled password login block"))
+		}
+		service.WriteDeviceCookie(c, device)
+		service.WriteSiteIdentityCookie(c, user.Id, device)
+	}
 	if err != nil {
 		switch {
 		case errors.Is(err, model.ErrDatabase):
@@ -206,6 +216,7 @@ func setupLoginAtAuthVersion(user *model.User, expectedAuthVersion int64, c *gin
 	model.UpdateUserLastLogin(user.Id, c.ClientIP())
 	service.WriteRefreshCookie(c, bundle.RefreshToken)
 	service.WriteDeviceCookie(c, deviceID)
+	service.WriteSiteIdentityCookie(c, user.Id, deviceID)
 	setAuthNoStore(c)
 	recordLoginAudit(user, c, deviceID)
 	service.RecordUserPresenceActivity(user.Id, service.UserPresenceActivitySourceLogin, c.ClientIP(), c.Request.UserAgent())

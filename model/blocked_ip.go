@@ -151,6 +151,22 @@ func DisableUserAndBlockIPs(user *User, ips []string, operatorId int) error {
 		if err := user.UpdateWithTx(tx, false); err != nil {
 			return err
 		}
+		var sessions []UserSession
+		if err := tx.Select("device_id", "ip").Where("user_id = ?", user.Id).Find(&sessions).Error; err != nil {
+			return err
+		}
+		devices := make([]string, 0, len(sessions))
+		for _, session := range sessions {
+			if device, err := NormalizeDeviceID(session.DeviceID); err == nil {
+				devices = append(devices, device)
+			}
+			if ip, err := NormalizeIPAddress(session.IP); err == nil {
+				normalized = append(normalized, ip)
+			}
+		}
+		if err := BlockUserDevicesWithTx(tx, user.Id, devices, operatorId, "user disabled"); err != nil {
+			return err
+		}
 		return BlockIPAddressesWithTx(tx, normalized, user.Id, operatorId, "user disabled")
 	}); err != nil {
 		return err
@@ -221,4 +237,50 @@ func GetSharedLastLoginIPCounts(ips []string) (map[string]int64, error) {
 		result[row.IP] = row.Count
 	}
 	return result, nil
+}
+
+// BlockDisabledUserRequest is only called after cryptographic credential checks.
+// Recheck status under the user row lock so re-enabling cannot race a new ban.
+func BlockDisabledUserRequest(userID int, value, deviceID string) (bool, error) {
+	ip, err := NormalizeIPAddress(value)
+	if err != nil {
+		return false, err
+	}
+	blocked := false
+	err = DB.Transaction(func(tx *gorm.DB) error {
+		var user User
+		if err := lockForUpdate(tx).Select("id", "status").First(&user, userID).Error; err != nil {
+			return err
+		}
+		if user.Status != common.UserStatusDisabled {
+			return nil
+		}
+		blocked = true
+		record := BlockedIP{IP: ip, UserId: userID, Reason: "disabled user request"}
+		if err := tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "ip"}}, DoNothing: true}).Create(&record).Error; err != nil {
+			return err
+		}
+		if device, err := NormalizeDeviceID(deviceID); err == nil {
+			return BlockUserDevicesWithTx(tx, userID, []string{device}, 0, "disabled user request")
+		}
+		return nil
+	})
+	if blocked && err == nil {
+		invalidateBlockedIPCache([]string{ip})
+	}
+	return blocked, err
+}
+
+func ListBlockedIPs(ip string, offset, limit int) ([]BlockedIP, int64, error) {
+	query := DB.Model(&BlockedIP{})
+	if ip != "" {
+		query = query.Where("ip = ?", ip)
+	}
+	var total int64
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	records := make([]BlockedIP, 0)
+	err := query.Order("id DESC").Offset(offset).Limit(limit).Find(&records).Error
+	return records, total, err
 }

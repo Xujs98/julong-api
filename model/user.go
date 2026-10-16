@@ -1408,7 +1408,13 @@ func (user *User) ValidateAndFill() (err error) {
 		return ErrInvalidCredentials
 	}
 	okay := common.ValidatePasswordAndHash(password, user.Password)
-	if !okay || user.Status != common.UserStatusEnabled {
+	if !okay {
+		return ErrInvalidCredentials
+	}
+	if user.Status == common.UserStatusDisabled {
+		return errors.Join(ErrInvalidCredentials, ErrUserDisabled)
+	}
+	if user.Status != common.UserStatusEnabled {
 		return ErrInvalidCredentials
 	}
 	return nil
