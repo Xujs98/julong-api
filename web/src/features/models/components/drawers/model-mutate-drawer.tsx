@@ -33,6 +33,7 @@ import {
   sideDrawerSwitchItemClassName,
 } from '@/components/drawer-layout'
 import { ErrorState } from '@/components/error-state'
+import { JsonCodeEditor } from '@/components/json-code-editor'
 import { JsonEditor } from '@/components/json-editor'
 import { LoadingState } from '@/components/loading-state'
 import { LobeIconField } from '@/components/lobe-icon-field'
@@ -336,7 +337,9 @@ function ModelMutateDrawerContent(props: ModelMutateDrawerProps) {
                                 {t('Allow API access')}
                               </FormLabel>
                               <FormDescription>
-                                {t('When disabled, users cannot use this model. Enabled by default.')}
+                                {t(
+                                  'When disabled, users cannot use this model. Enabled by default.'
+                                )}
                               </FormDescription>
                             </div>
                             <FormControl>
@@ -568,6 +571,36 @@ function ModelMutateDrawerContent(props: ModelMutateDrawerProps) {
                       <ModelDocumentTemplateField
                         control={form.control}
                         disabled={isSubmitting}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name='text_replacements'
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>{t('Text Replacement Rules')}</FormLabel>
+                            <FormControl>
+                              <JsonCodeEditor
+                                value={field.value || ''}
+                                onChange={field.onChange}
+                                name={field.name}
+                                onBlur={field.onBlur}
+                                textareaRef={field.ref}
+                                disabled={isSubmitting}
+                                placeholder={t(
+                                  '{"request":[{"from":"source","to":"upstream"}],"response":[{"from":"upstream","to":"source"}]}'
+                                )}
+                                ariaLabel={t('Text Replacement Rules')}
+                              />
+                            </FormControl>
+                            <FormDescription>
+                              {t(
+                                'Model rules replace the channel rules for this model when configured.'
+                              )}
+                            </FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )}
                       />
                     </SideDrawerSection>
 

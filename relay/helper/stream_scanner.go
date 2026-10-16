@@ -269,6 +269,9 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 				continue
 			}
 			if !strings.HasPrefix(data, "[DONE]") {
+				if transformed, err := relaycommon.ApplyTextReplacementsJSON([]byte(data), info.TextReplacements, true); err == nil {
+					data = string(transformed)
+				}
 				info.SetFirstResponseTime()
 				info.ReceivedResponseCount++
 

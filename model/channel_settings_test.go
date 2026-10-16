@@ -50,6 +50,34 @@ func TestChannelValidateSettingsRejectsInvalidHTTPTransport(t *testing.T) {
 	}
 }
 
+func TestChannelValidateSettingsRejectsInvalidTextReplacementRules(t *testing.T) {
+	channel := &Channel{}
+	channel.SetSetting(dto.ChannelSettings{
+		TextReplacements: &dto.TextReplacementConfig{
+			Request: []dto.TextReplacementRule{{From: "", To: "replacement"}},
+		},
+	})
+
+	err := channel.ValidateSettings()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "text replacement request rule 0 has empty from")
+}
+
+func TestResolveModelMetadataUsesTextReplacementPrecedence(t *testing.T) {
+	prefix := `{"request":[{"from":"prefix","to":"upstream"}]}`
+	suffix := `{"request":[{"from":"suffix","to":"upstream"}]}`
+	contains := `{"request":[{"from":"contains","to":"upstream"}]}`
+	records := []Model{
+		{Id: 3, ModelName: "model", NameRule: NameRuleContains, TextReplacements: &contains},
+		{Id: 2, ModelName: "model", NameRule: NameRuleSuffix, TextReplacements: &suffix},
+		{Id: 1, ModelName: "model", NameRule: NameRulePrefix, TextReplacements: &prefix},
+	}
+	resolved := resolveModelMetadata(records, []string{"model-v1"})
+	require.NotNil(t, resolved["model-v1"])
+	require.NotNil(t, resolved["model-v1"].TextReplacements)
+	assert.Equal(t, prefix, *resolved["model-v1"].TextReplacements)
+}
+
 func TestAdvancedCustomChannelRequiresModelListRouteOnlyWhenUpdateChecksEnabled(t *testing.T) {
 	inferenceRoute := dto.AdvancedCustomRoute{
 		IncomingPath: "/v1/chat/completions",

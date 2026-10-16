@@ -2,11 +2,13 @@ package model
 
 import (
 	"errors"
+	"fmt"
 	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
+	relaydto "github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
 
 	"gorm.io/gorm"
@@ -42,6 +44,7 @@ type Model struct {
 	VendorID           int            `json:"vendor_id,omitempty" gorm:"index"`
 	Endpoints          string         `json:"endpoints,omitempty" gorm:"type:text"`
 	DocumentTemplateID int            `json:"document_template_id" gorm:"index"`
+	TextReplacements   *string        `json:"text_replacements,omitempty" gorm:"type:text"`
 	SupportedEndpoints []string       `json:"supported_endpoints,omitempty" gorm:"-"`
 	Status             int            `json:"status" gorm:"default:1"`
 	Enabled            *int           `json:"enabled" gorm:"default:1"`
@@ -77,6 +80,22 @@ func (mi *Model) MatchesName(name string) bool {
 	}
 }
 
+// ValidateTextReplacements validates the optional model-level override stored
+// as JSON text. An empty value means the model inherits its channel rules.
+func (mi *Model) ValidateTextReplacements() error {
+	if mi == nil || mi.TextReplacements == nil || strings.TrimSpace(*mi.TextReplacements) == "" {
+		return nil
+	}
+	var config relaydto.TextReplacementConfig
+	if err := common.Unmarshal([]byte(*mi.TextReplacements), &config); err != nil {
+		return fmt.Errorf("invalid text_replacements JSON: %w", err)
+	}
+	if err := config.Validate(); err != nil {
+		return fmt.Errorf("invalid text_replacements: %w", err)
+	}
+	return nil
+}
+
 // resolveModelMetadata preserves catalog precedence: exact, prefix, suffix,
 // then contains. The oldest record within a rule type wins, independent of query order.
 func resolveModelMetadata(records []Model, names []string) map[string]*Model {
@@ -106,6 +125,28 @@ func resolveModelMetadata(records []Model, names []string) map[string]*Model {
 		}
 	}
 	return resolved
+}
+
+// FindModelTextReplacement resolves the same exact/prefix/suffix/contains
+// metadata precedence used by model availability and the model catalog.
+func FindModelTextReplacement(modelName string) (*string, error) {
+	modelName = strings.TrimSpace(modelName)
+	if modelName == "" || DB == nil {
+		return nil, nil
+	}
+	names := []string{modelName, ratio_setting.RoutingMatchModelName(modelName)}
+	var records []Model
+	if err := DB.Select("id", "model_name", "name_rule", "text_replacements").Find(&records).Error; err != nil {
+		return nil, err
+	}
+	resolved := resolveModelMetadata(records, names)
+	for _, name := range names {
+		metadata := resolved[name]
+		if metadata != nil && metadata.TextReplacements != nil && strings.TrimSpace(*metadata.TextReplacements) != "" {
+			return metadata.TextReplacements, nil
+		}
+	}
+	return nil, nil
 }
 
 // FillModelSquareStates applies the same metadata policy as the public catalog
@@ -244,6 +285,9 @@ func SearchModelsWithChannels(keyword, vendor, status, syncOfficial string, offs
 
 func (mi *Model) Insert() error {
 	return metadataTransaction(func(tx *gorm.DB) error {
+		if err := mi.ValidateTextReplacements(); err != nil {
+			return err
+		}
 		if err := validateModelDocumentTemplate(tx, mi.DocumentTemplateID); err != nil {
 			return err
 		}
@@ -276,6 +320,9 @@ func IsModelNameDuplicated(id int, name string) (bool, error) {
 
 func (mi *Model) Update() error {
 	return metadataTransaction(func(tx *gorm.DB) error {
+		if err := mi.ValidateTextReplacements(); err != nil {
+			return err
+		}
 		if err := validateModelDocumentTemplate(tx, mi.DocumentTemplateID); err != nil {
 			return err
 		}
@@ -283,7 +330,7 @@ func (mi *Model) Update() error {
 			return err
 		}
 		mi.UpdatedTime = common.GetTimestamp()
-		fields := []string{"model_name", "description", "icon", "tags", "vendor_id", "endpoints", "document_template_id", "status", "sync_official", "name_rule", "updated_time"}
+		fields := []string{"model_name", "description", "icon", "tags", "vendor_id", "endpoints", "document_template_id", "text_replacements", "status", "sync_official", "name_rule", "updated_time"}
 		if mi.Enabled != nil {
 			fields = append(fields, "enabled")
 		}

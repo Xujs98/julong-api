@@ -19,6 +19,11 @@ For commercial licensing, please contact support@quantumnous.com
 import * as z from 'zod'
 
 import {
+  isOptionalTextReplacementConfig,
+  normalizeTextReplacementConfig,
+} from '@/lib/text-replacements'
+
+import {
   CLAUDE_FIELD_PASSTHROUGH_TYPES,
   CHANNEL_TYPE_NEW_API,
   CHANNEL_TYPE_OLLAMA,
@@ -225,6 +230,13 @@ export const channelFormSchema = z
       .refine(
         isOptionalModelMapping,
         'Model mapping must be a JSON object with string values'
+      ),
+    text_replacements: z
+      .string()
+      .optional()
+      .refine(
+        isOptionalTextReplacementConfig,
+        'Text replacement rules must be valid JSON with request and response arrays'
       ),
     priority: z.number().optional(),
     weight: z.number().optional(),
@@ -474,6 +486,7 @@ export const CHANNEL_FORM_DEFAULT_VALUES: ChannelFormValues = {
   responses_websocket_enabled: false,
   system_prompt: '',
   system_prompt_override: false,
+  text_replacements: '',
   // Type-specific settings
   is_enterprise_account: false,
   vertex_key_type: 'json',
@@ -521,6 +534,7 @@ export function transformChannelToFormDefaults(
     responses_websocket_enabled: false,
     system_prompt: '',
     system_prompt_override: false,
+    text_replacements: '',
   }
 
   if (channel.setting) {
@@ -549,6 +563,9 @@ export function transformChannelToFormDefaults(
           parsed.responses_websocket_enabled === true,
         system_prompt: parsed.system_prompt || '',
         system_prompt_override: parsed.system_prompt_override || false,
+        text_replacements: parsed.text_replacements
+          ? JSON.stringify(parsed.text_replacements, null, 2)
+          : '',
       }
     } catch (error) {
       // eslint-disable-next-line no-console
@@ -693,6 +710,9 @@ export function buildSettingJSON(formData: ChannelFormValues): string {
       formData.responses_websocket_enabled === true,
     system_prompt: formData.system_prompt || '',
     system_prompt_override: formData.system_prompt_override || false,
+    text_replacements: formData.text_replacements?.trim()
+      ? JSON.parse(normalizeTextReplacementConfig(formData.text_replacements))
+      : undefined,
   }
 
   const protocol = normalizeHttpProtocol(formData.http_protocol)

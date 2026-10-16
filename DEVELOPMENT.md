@@ -36,6 +36,7 @@
 | 用户运营管理 | 已实现 | 用户列表筛选栏在标签后展示全部或当前筛选用户的剩余总配额与匹配人数，可持久化选择不统计用户，并支持按用户名/姓名/邮箱、分组、状态、角色和标签过滤；同时支持自定义标签、内置中/高风险标签筛选、批量额度增减及可选邮件。用户详情展示今日消费、额度明细、已选分组实际扣费倍率及分组用量，并支持单用户在最终真实倍率上增减调整。编辑已有用户时绑定信息默认只读，启用开关后才提交绑定修改；创建用户仍可直接填写绑定信息。 |
 | 用户风险与设备管控 | 已实现 | 风险检测支持全局或逐用户开启，按 1/7/30 天请求、错误、退款、客户端断开、异常流和 IP 等信号评分；登录 IP 与设备面板支持识别设备、封禁设备并撤销对应会话。 |
 | 模型 API 使用开关 | 已实现（本地验证） | 模型管理编辑页的“允许 API 访问”默认开启；关闭后服务端拒绝普通 HTTP、视频 remix 和 Responses WebSocket 调用，并从 /v1/models、/api/user/models 中过滤。旧记录 NULL 按开启处理；与模型广场 status 独立。 |
+| 文本替换规则 | 已实现（本地验证） | 渠道和模型均可配置 `request`/`response` 文本替换 JSON。请求规则改写发往上游的文本，响应规则改写返回客户端的 JSON 文本字段；模型规则按 exact/prefix/suffix/contains 继承优先级覆盖渠道规则。 |
 | 模型 Token 特殊倍率 | 已实现 | 分组定价可按用户分组、计费分组和模型分别增加输入、输出、缓存读取、缓存创建 Token；用户和管理员看到计费后 Token，管理员悬浮可查看真实 Token、原始费用及分组/模型倍率收益。 |
 | 日志与兑换码导出 | 已实现 | 使用日志支持下载本页、今日、自定义时间和全部记录，CSV 使用中文表头并防公式注入；兑换码支持新生成结果复制/下载及多选复制、下载、5 秒确认删除。 |
 | 运营账本 | 已实现 | 概览下方新增独立账本页，支持日期查询、额度/用户消耗/运营成本/成本倍率汇总、CSV 下载、账本记录增改和 10 秒确认的单项/批量软删除；root 通过用户编辑器按查看、编辑、删除三项权限授权管理员。 |
@@ -987,7 +988,8 @@ curl -X DELETE \
 | --- | --- | --- | --- | --- |
 | `/api/channel` | `GET/POST/PUT/DELETE`、`/search`、`/test`、状态/批量路由见 `router/api-router.go` 和 `router/channel-router.go` | 管理员/root 及 authz 权限 | 上游渠道管理 | 完成 |
 | `/api/channel/:id/key` | `POST` | 管理员/root | 显示渠道 key | 完成 |
-| `/api/models` | `GET /`、`/search`、`/:id`、`POST /`、`PUT /`、`DELETE /:id`、`/sync_upstream/*`、`/missing` | 管理员/root | 模型元数据/目录/部署元数据；POST/PUT 的 enabled 为 0/1，默认 1，表示是否允许用户通过 API 使用模型，不能替代 status 的模型广场可见性 | 完成；本轮开关验证见 PROJECT_PROGRESS.md |
+| `/api/channel` 的渠道配置字段 | 既有渠道 `POST/PUT` | 管理员/root 及 authz 权限 | `setting.text_replacements` 可保存 `{request:[{from,to}],response:[{from,to}]}`；每类最多100条，单条 `from/to` 最长4096字符；非法 JSON 或规则返回400 | 完成；规则在保存时校验，运行时按渠道继承 |
+| `/api/models` | `GET /`、`/search`、`/:id`、`POST /`、`PUT /`、`DELETE /:id`、`/sync_upstream/*`、`/missing` | 管理员/root | 模型元数据/目录/部署元数据；POST/PUT 的 enabled 为 0/1，默认 1，表示是否允许用户通过 API 使用模型，不能替代 status 的模型广场可见性；`text_replacements` 可保存模型级 JSON 规则，非空时覆盖匹配渠道规则，空值继承渠道规则 | 完成；本轮开关与文本替换验证见 PROJECT_PROGRESS.md |
 | `/api/model-document-templates` | `GET` → `ListModelDocumentTemplates` | 管理员/root；PAT需 `model:read` | `p,page_size,keyword`；返回 `{success,data:{items,total,page,page_size}}`。每项 `id,name,format,original_filename,created_time,updated_time`，列表不加载 content | 完成；B08验收见PROJECT_PROGRESS.md |
 | `/api/model-document-templates` | `POST` → `CreateModelDocumentTemplate` | 管理员/root；PAT需 `model:write` | multipart `file` 必填、`name` 可选，默认原文件去扩展名；MD/.markdown或Word .docx；成功 `{success,data:模板}` 含 Markdown content；空/非法/超限400 | 完成 |
 | `/api/model-document-templates/:id` | `GET` → `GetModelDocumentTemplate` | 管理员/root；PAT需 `model:read` | 正整数id；成功 `{success,data:模板}` 含 content；不存在404 | 完成 |
@@ -1157,7 +1159,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 | `BlockedDevice` | `model/blocked_device.go` | 按用户封禁 Dashboard 登录设备 | `user_id+device_id` 唯一索引；`device_id varchar(64)` UUID、`operator_id`、`reason varchar(255)`、时间戳 | 设备封禁仅作用于指定用户，登录和刷新时校验；封禁接口同步撤销该设备活跃会话，解封不自动恢复旧会话。 | 活跃 |
 | `UserTag` | `model/user_tag.go` | 用户自定义标签 | `id`、唯一 `name varchar(32)`、`color char(7)`、时间戳 | 用户通过 `User.tag_id` 关联；删除标签时事务清空关联。中风险 ID `-1`、高风险 ID `-2` 是按风险报告动态生成的内置 transient 标签，不写表且不可修改/删除。 | 活跃 |
 | `Token` | `model/token.go` | API keys | `id`、`user_id`、`key`、`name`、额度字段、模型限制、group、allow IPs | Relay 鉴权和计费使用。 | 活跃 |
-| `Channel` | `model/channel.go` | 上游 provider 渠道 | `id`、`type`、`key`、`base_url`、`models`、`group`、状态、priority/weight、计费/override 字段 | 由 distributor middleware 选择。敏感 key 需要脱敏。 | 活跃 |
+| `Channel` | `model/channel.go` | 上游 provider 渠道 | `id`、`type`、`key`、`base_url`、`models`、`group`、状态、priority/weight、计费/override 字段 | `setting` JSON 的 `text_replacements` 保存渠道默认 `request`/`response` 规则；每次保存验证 JSON、规则数量和长度。由 distributor middleware 选择。敏感 key 需要脱敏。 | 活跃 |
 | `Ability` | `model/ability.go` | 渠道/模型能力映射 | channel/model/group enabled 字段 | 用于模型可用性和路由。 | 活跃 |
 | `Log` | `model/log.go` | 使用日志和审计日志 | 既有消费字段、可空 `user_display_group_ratio`、JSON `other`；`type=8` 为额度增加明细 | 模型 Token 倍率后的计费 Token写入 Token 列，真实/计费后 Token 保存到 `other.admin_info.model_token_adjustment`；原费用和两类倍率收益保存到 `admin_info.billing_revenue`，非管理员响应剥离。额度增加日志记录来源和额度，风险报告直接聚合既有日志信号。 | 活跃 |
 | `LedgerEntry` | `model/ledger.go` | 运营账号额度与成本账本 | `id`；索引 `platform/type/occurred_at/created_by/deleted_at`；`account/email`；原始 `quota int`；`cost_price decimal(20,6)`；`quantity int`；创建/更新时间 | `occurred_at` 与创建时间分离，按 Unix 秒保存用户选择的本地日期及时、分、秒，支持补录历史账本；删除使用 GORM `DeletedAt` 软删除。汇总读取使用日志和用户额度，但不参与 Relay 计费、预扣、结算、退款或用户余额写入。 | 活跃 |
@@ -1169,7 +1171,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 | `Redemption` | `model/redemption.go` | 兑换码 | 唯一 `key`、`user_id` 生成者、`status`、`name`、`quota`、`created_time`、`redeemed_time`、`used_user_id`、`expired_time`、`agent_charge`、软删除 | 生成者显示字段是 transient。搜索支持 code、生成者、ID、名称。代理退款使用 `agent_charge`。 | 活跃 |
 | `TopUp` | `model/topup.go` | 在线支付/充值订单 | trade no、user、amount/money、provider、status | 支付回调结算。 | 活跃 |
 | `Checkin` / `CheckinRecord` | `model/checkin.go` | 每日签到奖励记录 | user/date/quota/time 字段 | 设置位于 `checkin_setting.*`。 | 活跃 |
-| `Model` | `model/model_meta.go` | 模型目录元数据 | 模型名、vendor、展示元数据、定价/可见性、`document_template_id`（0/NULL为未绑定） | 模型编辑端点处绑定本站文档；Insert/Update事务验证模板存在；元数据同步不覆盖本站绑定。 | 活跃 |
+| `Model` | `model/model_meta.go` | 模型目录元数据 | 模型名、vendor、展示元数据、定价/可见性、`document_template_id`（0/NULL为未绑定）、`text_replacements`（可空 JSON 文本） | 模型编辑端点处绑定本站文档并验证文本替换配置；规则按 `NameRule` 的 exact/prefix/suffix/contains 选择匹配模型，非空模型配置覆盖渠道默认，空值继承；元数据同步不覆盖本站绑定。 | 活跃 |
 | `ModelDocumentTemplate` | `model/model_document_template.go` | 管理员上传的模型调用文档 | id、name(128字符)、format、original_filename、content(LongText)、created_time/updated_time(Unix秒) | 标准/快速迁移均注册；Markdown最大2MiB，MySQL使用LongText避免64KiB截断；不留存原始Word文件；删除与清模型关联在共享元数据事务锁内进行。 | 活跃 |
 | `Vendor` | `model/vendor_meta.go` | Vendor 元数据 | id/name/display/config 字段 | 与 Model 元数据关联。 | 活跃 |
 | `Pricing` / `PricingVendor` | `model/pricing.go` | 定价页面数据 | 模型定价和 vendor 分组字段 | 用于公开定价页。 | 活跃 |
@@ -1255,8 +1257,8 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 | `/profile` | `_authenticated/profile/index.tsx` | 个人资料/安全 | 用户 | 完成 |
 | `/agent-users` | `_authenticated/agent-users/index.tsx` | 代理所属用户 | 代理 | 完成 |
 | `/redemption-codes` | `_authenticated/redemption-codes/index.tsx` | 兑换码管理；新生成代码复制/下载，多选复制/下载/倒计时删除 | 用户；管理员全部，代理限自己；批量删除仅管理员/root | 完成 |
-| `/channels` | `_authenticated/channels/index.tsx` | 渠道管理 | 管理员/root | 完成 |
-| `/models/*` | `_authenticated/models/*` | 模型元数据/部署 | 管理员/root | 完成 |
+| `/channels` | `_authenticated/channels/index.tsx` | 渠道管理；编辑抽屉的“路由与映射”可配置文本替换 JSON | 管理员/root | 完成；配置字段见 B22 |
+| `/models/*` | `_authenticated/models/*` | 模型元数据/部署；模型编辑抽屉可配置模型级文本替换 JSON | 管理员/root | 完成；配置字段见 B22 |
 | `/models/document-templates` | `_authenticated/models/$section.tsx` + `features/models/index.tsx` | 文档模板列表、MD/Word上传、编辑预览、替换、改名、确认删除 | 管理员/root，沿用现有模型section路由校验 | 完成；B08验证和边界见PROJECT_PROGRESS.md |
 | `/users` | `_authenticated/users/index.tsx` | 用户管理、筛选/额度/风险/设备和管理员权限矩阵 | 管理员/root；仅Root编辑权限，新增任务日志四项及Root隐私；受限管理员的Root用户名显示纯文本且详情查询禁用 | 完成 |
 | `/subscriptions` | `_authenticated/subscriptions/index.tsx` | 订阅管理 | 管理员/root | 完成 |
@@ -1297,7 +1299,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 | `custom-endpoints` | `types.ts`、`system-settings/content/custom-endpoints-section.tsx`、`keys/components/custom-endpoints.tsx` | 自定义端点共享类型、后台编辑器、API 密钥页复制条和悬停介绍 | `/api/option`、`/api/status` | 完成 |
 | `system-settings/operations/email-campaigns` | `email-campaigns-section.tsx:EmailCampaignsSection/Stat`、`email-campaign-user-picker.tsx:EmailCampaignUserPicker`、`email-campaigns-api.ts`、`email-templates-api.ts`、`operations/section-registry.tsx` | 运维邮件任务列表、统计、创建/编辑、收件人预估、草稿/启用/暂停/失败重试/删除和逐用户明细；指定用户支持分页模糊搜索及回显；创建任务可选择 `campaign_compatible` 中英文模板，预览样例渲染后套用主题和 HTML；关键状态含 `page/form/editing/templateKey/templatePreview/selected/deliveryPage` | `/api/email-campaigns*`、`GET/POST /api/email-settings/templates*`；依赖 React Query、Popover/Command/Checkbox、Dialog、HtmlContent、Table、NativeSelect、i18n | 完成 |
 | `system-settings/operations/email-templates`（显示名“邮件设置”） | `email-template-settings-section.tsx:EmailTemplateSettingsSection`、`email-alert-settings.tsx:EmailAlertSettings/AlertPanel`、`dashboard-report-schedule-editor.tsx`、`email-templates-api.ts`、`email-campaign-user-picker.tsx` | 七张提醒卡配置订阅到期、余额不足、渠道账号额度、渠道异常、数据看板报表、风险用户和用户上线/下线；上线事件和监控用户可多选，默认 5 分钟无登录/真实网站操作/API 活动判定下线，收件人仅限管理员/root，并可发送真实 SMTP 测试。下方按事件和 `zh/en` 编辑 12 类图片式模板（含电子发票交付） | `/api/email-settings/config`、`/recipients*`、`/monitored-users*`、`/channel-anomaly/test`、`/dashboard-report/test`、`/risk-user/test`、`/user-presence/test`、`/templates*` | 完成 |
-| `channels` | `channels-table.tsx`、`channels-columns.tsx`、dialogs/drawers、`api.ts` | 上游渠道 CRUD/测试/配置 | `/api/channel*` | 完成 |
+| `channels` | `channels-table.tsx`、`channels-columns.tsx`、dialogs/drawers、`api.ts`、`channel-mutate-drawer.tsx`、`channel-form.ts` | 上游渠道 CRUD/测试/配置；文本替换编辑器支持 request/response 规则校验、归一化和保存 | `/api/channel*` | 完成 |
 | `keys` | `index.tsx`、`custom-endpoints.tsx`、`api-keys-table.tsx`、`api-keys-columns.tsx`、`api-keys-mutate-drawer.tsx`、`api-key-group-combobox.tsx`、mutate/delete dialogs | 用户 API key 管理；自定义端点区保留高度，列表占用页面剩余高度并复用共享表格的纵向滚动，桌面固定表头，桌面/移动端分页始终在页脚；令牌分组下拉框和列表倍率统一读取 `/api/user/self/groups`，可配置展示真实特殊倍率或基础定价分组倍率 | `/api/token*`、`/api/user/self/groups` | 完成 |
 | `ledger` | `index.tsx`、`api.ts`、`types.ts`、`ledger-summary-cards.tsx`、`ledger-estimate-ratio-dialog.tsx`、`ledger-entry-dialog.tsx`、`ledger-export-menu.tsx`、`ledger-delete-dialog.tsx` | 账本日期筛选、统一预估倍率设置、六项汇总卡片、秒级日期时间、分页表格、权限感知的新增/编辑/单项与批量删除、10 秒确认和四种 CSV 下载范围 | `/api/ledger*`；复用使用日志日期范围选择器、用户权限矩阵和全站额度/货币格式 | 完成 |
 | `usage-logs` | `usage-logs-table.tsx`、`usage-logs-export-menu.tsx`、`cost-breakdown-tooltip.tsx`、普通/绘图/生图/任务 columns、倍率审计 libs | 普通消费日志、绘图、生图和媒体任务日志；下载菜单支持本页、今日、自定义时间和全部 CSV。用户和管理员均展示模型倍率调整后的 Token；管理员/root 悬浮 Tokens 查看真实 Token，悬浮费用查看原始费用及分组特殊倍率/模型倍率收益。原有普通用户倍率展示逻辑保持不变 | `/api/log*`、`/api/log/export`、`/api/log/self/export`、`/api/mj`、`/api/image-generation-logs*`、`/api/task` | 完成 |
@@ -1306,7 +1308,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 | `invoices` | `index.tsx`、`api.ts`、`types.ts`、`apply-invoice-dialog.tsx`、`invoice-payment-proofs.tsx`、`lib/invoice-application.ts`、`eligible-credits-table.tsx`、`applications-table.tsx`、`cancel-invoice-dialog.tsx`、`manage-invoice-dialog.tsx`、`complete-invoice-dialog.tsx`、`withdraw-invoice-dialog.tsx` | 用户多选符合配置来源的额度记录，通过申请表填写普通/专用票、公司、税号、可编辑接收邮箱和备注；本地解析粘贴资料，地址/电话/银行信息保留到备注；1-3 张付款截图选择、预览与私有查看；查看历史；待确认申请可二次确认后取消，已完成申请可下载交付附件。管理员/root 可打开全部状态申请查看开票资料、私有支付截图和卡片式账单来源明细，来源请求 ID 一键复制且长文本完整换行；选择已完成后在详情内上传附件、确认发送邮件并保存邮件模板设置，最终保存时发送；已完成详情可二次确认撤回，删除错误附件并恢复待确认 | `/api/user/invoice*`；React Query、Card、Checkbox、Dialog、AlertDialog、Clipboard、Blob 下载、multipart、i18n | 完成 |
 | `redemption-codes` | `redemptions-generated-dialog.tsx`、`data-table-bulk-actions.tsx`、`redemptions-multi-delete-dialog.tsx`、表格和编辑弹窗 | 管理员/代理兑换码管理；刚生成的兑换码支持仅复制代码、复制名称和代码、一键下载；多选支持仅复制代码、下载和管理员 5 秒确认批量删除 | `/api/redemption*`、`POST /api/redemption/batch`、`/api/user/agent/topup-link` | 完成 |
 | `users` | `index.tsx`、`users-table.tsx`、`users-columns.tsx`、`users-mutate-drawer.tsx`、`user-detail-dialog.tsx`、`user-quota-summary-control.tsx`、`user-quota-summary-badge.tsx`、`user-tags-dialog.tsx`、`user-batch-quota-dialog.tsx`、`user-risk-panel.tsx`、`user-login-access-panel.tsx`、`user-group-ratios-card.tsx`、`lib/user-quota-summary.ts` | 后台用户管理、筛选余额汇总、标签筛选/标注、批量额度、代理详情和用户详情；标签后可持久化选择不统计用户，剩余总配额和匹配人数会排除该名单后再按表格 URL 筛选实时汇总，被排除用户仍正常显示。详情含今日消费、总/今日 Token、额度明细、已选分组真实倍率及额度/Token、风险报告、登录 IP 与设备、上下文审计。编辑用户可在特殊规则后的最终真实倍率上增加或减少单用户调整，并实时预览已有分组结果；绑定信息区域对已有用户默认只读，打开编辑开关后才可修改，创建用户时默认可编辑 | `/api/user*`、`/api/user/quota-summary*`、`/api/user/tags*`、`/api/user/options*`、`/api/user/batch-quota`、`/api/user/:id/{usage-summary,quota-increases,risk,login-ips,login-devices,request-content}*` | 完成 |
-| `models` | metadata/deployment tables/drawers、`document-templates-table.tsx`、`dialogs/document-template-{dialog,form}.tsx`、`document-templates-api.ts` | 模型元数据、部署和文档模板管理；列表分页/搜索、MD/Word上传、编辑Markdown与预览、改名/替换/确认删除，端点绑定 | `/api/models*`、`/api/vendors*`、`/api/deployments*`、`/api/model-document-templates*` | 完成；B08验收边界见PROJECT_PROGRESS.md |
+| `models` | metadata/deployment tables/drawers、`document-templates-table.tsx`、`dialogs/document-template-{dialog,form}.tsx`、`document-templates-api.ts`、`model-mutate-drawer.tsx`、`model-form.ts` | 模型元数据、部署和文档模板管理；列表分页/搜索、MD/Word上传、编辑Markdown与预览、改名/替换/确认删除、端点绑定；模型级文本替换覆盖渠道默认规则 | `/api/models*`、`/api/vendors*`、`/api/deployments*`、`/api/model-document-templates*` | 完成；B08验收边界见PROJECT_PROGRESS.md，文本替换见 B22 |
 | `subscriptions` | subscription table/drawers | 后台订阅计划/用户绑定 | `/api/subscription/admin*` | 完成 |
 | `system-settings` | 各一级菜单 section registries；`maintenance/{log-settings-section,update-checker-section}.tsx`、`models/group-ratio-form.tsx`、`model-token-ratio-editor.tsx`、邮件设置组件和 `ImageStorageSettings` | 管理员/root 运行时设置；系统维护展示 Julong 与已合并 New API 双版本并按上游版本检查更新；日志维护含全局风险检测；分组定价含模型 Token 特殊倍率；邮件设置维护数据报表、风险及用户上线/下线提醒；其余站点徽标、普通用户倍率展示、MinIO 生命周期等既有功能保持 | `/api/status`、`/api/option*`、`/api/email-settings*`、`/api/site-assets/logo*`、`/api/performance/image-storage*`、`/api/system-task/*` | 完成 |
 | `system-info` | system instances/tasks panels | Root 系统运维 | `/api/system-info*`、`/api/system-task*` | 完成 |
@@ -1563,7 +1565,33 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 - Base64解码前先核算有效编码长度和padding推导的解码大小，按50MiB单文件与128MiB剩余请求预算拒绝，再分配输出；CR/LF不计入预算，保留标准/无padding两种编码。精确小边界、非法/空内容、真实大于单文件上限、剩余总预算和已取消上下文均加入原测试文件；原落盘/到期/失败回滚仍受回归保护。宿主请求体限制继续有效。
 - 最终验证：`go test ./service ./router ./controller -run 'Test(PersistTaskMedia|MediaDataURL|ValidateUserMediaURL|MediaAssetContent|ProxyTaskMedia|SetTaskRouter|InvoiceAPI)' -count=1 -v` 三包通过、无Skip（media-final-tests-20261015.log）；`python3 /tmp/julong-media-verify-20261015/run_matrix_final.py` 再验三库8/8无Skip，matrix-final.log。根Go构建成功，最终PID15826于05:13:29监听3000，状态成功/首页6资源hash一致/匿名素材列表401；已有成品Range206、1024字节MP4、最终CSP正确（未输出私密签名URL）。本轮未跑全量Go测试，不宣称全站验收。
 
+## 文本替换规则
+
+渠道和模型编辑页都提供 JSON 配置编辑器，示例：
+
+```json
+{
+  "request": [
+    { "from": "矩龙API启动", "to": "By倾城" }
+  ],
+  "response": [
+    { "from": "By倾城", "to": "矩龙 API" }
+  ]
+}
+```
+
+`request` 只改写发往上游的请求文本，`response` 只改写返回客户端的响应文本。规则作用于兼容 JSON 中的文本字段（如 `content`、`input`、`instructions`、`prompt`、`text`、`parts`、`thinking` 和 `reasoning_content` 等），不会替换模型名、数字、密钥或任意 JSON 元数据。非流式响应直接改写；SSE 按事件改写；Responses WebSocket 改写发出的响应事件，同时保留原始事件供 usage/billing 解析。
+
+渠道配置保存于 `Channel.Setting.text_replacements`，作为该渠道所有请求的默认规则。模型配置保存于 `Model.text_replacements`；非空时按模型 `NameRule`（exact、prefix、suffix、contains）匹配并覆盖渠道规则，空值继续继承渠道规则。每类最多 100 条规则，单条 `from`/`to` 最长 4096 字符；空 `from`、非法 JSON 和超限规则会被拒绝。
+
 ## 变更日志
+
+### 2026-10-17 可配置文本替换规则（B22）
+
+- 渠道和模型编辑页新增文本替换 JSON 配置；请求方向支持 `矩龙API启动` → `By倾城`，响应方向支持 `By倾城` → `矩龙 API`，规则可按需自定义。模型级配置沿用 `NameRule` 的 exact/prefix/suffix/contains 匹配并覆盖渠道默认配置，空模型配置继续继承渠道规则。
+- Relay 已接入 OpenAI Compatible、Claude、Gemini、Responses 和 Pass-through；普通 JSON、SSE 事件及 Responses WebSocket 响应均按文本字段改写。请求改写只影响发往上游的 JSON 文本，保留原始请求存储供审计/计费使用；响应改写保留原始 Responses WebSocket 事件供 usage/billing 解析。
+- 配置保存时验证 JSON、规则数量和长度；新增 `relaykit/dto/text_replacement.go`、`relay/common/text_replacement.go` 及对应 Go/前端回归测试。前端七语言同步完成，未新增数据库表或迁移。
+- 验证：`go test ./relay/common ./relay/helper ./model ./relay -count=1`、`cd relaykit && GOWORK=off go test ./... -count=1`、`cd relaykit && GOWORK=off go build ./...`、根模块 `go build ./...`、SQLite 3.50.4/MySQL 5.7.44/PostgreSQL 16.15 真实数据库矩阵、前端文本替换测试3项、`bun run typecheck`、目标文件 `oxfmt --check`、`rsbuild build` 均通过；前端和后端重启及 `/api/status` 结果记录在 PROJECT_PROGRESS.md。
 
 ### 2026-10-16 管理员任务日志权限与 Root 隐私（B14）
 

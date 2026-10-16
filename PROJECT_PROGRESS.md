@@ -25,7 +25,7 @@
 | 当前分支 / HEAD | main / HEAD `650844181`；清理提交 `7d5bc78f5` 已本地保存 | Bun 1.4.1 digest 完整 Docker 构建已通过；本地构建垃圾已移出项目；四项既有未跟踪内容保留 |
 | 上游整合 | main已包含此前功能分支提交 | 实际git和远端对比已纠正旧“尚待合并”快照，保留历史批次记录 |
 | 用户 GitHub 仓库 | origin = https://github.com/Xujs98/julong-api.git | upstream = https://github.com/QuantumNous/new-api.git，仅跟踪上游；不得把用户改动推到 upstream |
-| 本地服务 | B19最新前端嵌入Go产物，PID52263监听3000 | localhost、127.0.0.1、[::1] 首页与 /api/status 均返回200；真实管理员浏览器登录未实测 |
+| 本地服务 | B22文本替换最新Go产物，PID29600监听3000 | `http://127.0.0.1:3000` 的 `/api/status` 返回200且 `success=true`，版本 `v1.0.0-julong.1`；真实管理员浏览器登录未实测 |
 | 模型广场按秒/按次价格 | 当前代码已实现，历史交付有验证记录 | 两项都有价格同时显示；只配一项只显示该项；模型名及分辨率价格区规则一致 |
 | 视频输入素材 | 已完成本地实现/定向回归、三库复验、浏览器预览和视频直链、最终重启 | SQLite3.50.4/MySQL5.7.44/PostgreSQL16.15最终矩阵8/8无Skip；图片及嵌入视频/音频正常、素材视频直链可播放；Safari/原生音频直链/线上公网未实测 |
 | 成品列阴影与滚轮 | 已完成（本地）；17项通过，Chromium已验证并激活；Safari待人工复核 | 独立复核10/10，主任务4文件17/17；Chromium明暗阴影、全列固定、滚轮/splitHeader已验；首页资源与dist一致，Safari无连接未实测 |
@@ -33,7 +33,7 @@
 | 禁用账户全站防护 | B15本地已完成，功能已推origin/main | 全站IP/可信身份拦截、自动追封、SSRF页独立入站名单、登录IP记录；三库与登录追加回归通过，人机验证需真实密钥，未上线 |
 | 使用日志权限与在线统计 | B16功能已推；B17网站/API独立在线已完成（本地） | 登录/网站交互与API独立300秒窗口，自动轮询不续在线；双活跃发光，卡片移除排除说明；三库、前端10项、构建/重启通过 |
 | 项目进度入口 | 已完成（文档本地） | 本文 + AGENTS.md 必读入口；持续按批次更新 |
-| Git 提交 / 线上发布 | 本地领先 `origin/main` 3 个提交（HEAD `650844181`）；推送被网络阻塞，origin/main仍为 `8919baf6c` | 不推upstream；测试镜像和旧Bun镜像已移除，未推送镜像仓库、未部署线上 |
+| Git 提交 / 线上发布 | B22尚未提交；origin/main仍为提交前远端状态 | 本批只提交文本替换与同步文档；不推upstream，未部署线上 |
 
 ## 3. 状态口径
 
@@ -453,3 +453,13 @@ B08：MD/DOCX 后端、管理 UI、模型绑定与广场调用文档已实现。
 - 本地PID38584监听3000，健康与6项嵌入资源核对通过；真实三库、前端17项与定向权限/活动测试、格式/typecheck/i18n/build结果见上一记录。Root不采集/不统计/不返回在线字段，线上未部署。
 - 四项既有未跟踪内容controller/media_asset.go.bak、site-assets/、web/pnpm-lock.yaml、web/src/features/usage-logs/components/media-assets-table.tsx.bak保持未跟踪，未删除或纳入提交。全量Go、真实管理员浏览器及ClickHouse未验收；不扩大验证结论。
 - OWASP官方页面工具本轮返回空后，已通过正常TLS的curl读取并保存ASVS/Authorization/Authentication/Session Management原文于临时验证目录，稳定版5.0.0已从官方正文核实；未关闭TLS校验，未声称整体合规。
+
+### B22：渠道/模型请求与响应文本替换（2026-10-17，已完成本地，已提交并推送）
+
+- 实现渠道默认和模型级覆盖两层配置：渠道保存于 `Channel.Setting.text_replacements`，模型保存于 `Model.text_replacements`。模型非空配置按现有 `NameRule`（exact/prefix/suffix/contains）匹配并覆盖渠道规则，模型为空时继续继承渠道规则。
+- 配置格式支持独立的 `request` 与 `response` 规则，例如 `矩龙API启动` → `By倾城`、`By倾城` → `矩龙 API`；规则可完全自定义。每类最多100条，单条 `from/to` 最长4096字符，保存时拒绝非法JSON、空 `from` 和超限规则。
+- Relay 已接入 OpenAI Compatible、Claude、Gemini、Responses 和 Pass-through。请求改写仅作用于发往上游的 JSON 文本字段；非流式响应、SSE 事件和 Responses WebSocket 响应按文本字段改写；保留原始请求/响应数据供审计、usage 和 billing 解析。
+- 前端渠道编辑页“路由与映射”和模型编辑页均加入 JSON 编辑器，提供校验、归一化和七语言文案；未新增数据库表或迁移。
+- 实际验证：`gofmt -d` 无输出；`go test ./relay/common ./relay/helper ./model ./relay -count=1` 通过；`cd relaykit && GOWORK=off go test ./... -count=1` 通过；`cd relaykit && GOWORK=off go build ./...` 通过；前端文本替换 Vitest 3/3、`bun run typecheck`、目标文件 `oxfmt --check`、`bun run build`、根模块 `go build -o /tmp/julong-api-runtime/new-api-text-replacement .` 和 `git diff --check` 均通过。
+- 本地服务已由文本替换最新产物启动：PID `29600` 监听 `*:3000`，`GET http://127.0.0.1:3000/api/status` 返回 HTTP 200、`success=true`、版本 `v1.0.0-julong.1`；未部署生产。
+- 已提交本批功能和文档，提交与推送结果、远端 SHA 见本批后续交付记录；既有未跟踪内容 `controller/media_asset.go.bak`、`site-assets/`、`web/pnpm-lock.yaml`、`web/src/features/usage-logs/components/media-assets-table.tsx.bak` 保留，未纳入本批提交。

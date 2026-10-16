@@ -70,6 +70,9 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 			return newAPIError
 		}
 	}
+	if err := relaycommon.TransformResponseBody(httpResp, info.TextReplacements); err != nil {
+		return types.NewError(err, types.ErrorCodeReadResponseBodyFailed, types.ErrOptionWithSkipRetry())
+	}
 
 	usage, newAPIError := adaptor.DoResponse(c, httpResp, info)
 	if newAPIError != nil {

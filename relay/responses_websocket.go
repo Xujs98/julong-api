@@ -391,6 +391,12 @@ func (s *responsesWSSession) runCall(c *gin.Context, state *responsesWSCallState
 				ConsumeResponsesQuota(c, info, accumulator.Finish())
 				return nil
 			}
+			clientBody := incoming.body
+			if transformed, err := relaycommon.ApplyTextReplacementsJSON(incoming.body, info.TextReplacements, true); err == nil {
+				clientBody = transformed
+			}
+			clientIncoming := incoming
+			clientIncoming.body = clientBody
 			info.SetFirstResponseTime()
 			var event struct {
 				dto.ResponsesStreamResponse
@@ -400,7 +406,7 @@ func (s *responsesWSSession) runCall(c *gin.Context, state *responsesWSCallState
 				info.StreamStatus.RecordError("invalid upstream websocket event")
 			} else {
 				if event.Type != "error" && event.StreamID != "" && event.StreamID != create.StreamID {
-					if err := s.writeClient(incoming.kind, incoming.body); err != nil {
+					if err := s.writeClient(incoming.kind, clientBody); err != nil {
 						s.shutdown(websocket.CloseInternalServerErr, "")
 					}
 					continue
@@ -418,7 +424,7 @@ func (s *responsesWSSession) runCall(c *gin.Context, state *responsesWSCallState
 					}
 					terminal, ambiguous, controlError := responsesWSErrorEndsRequest(rejection, create.StreamID, responseID, sentControl)
 					if !terminal {
-						if err := s.writeClient(incoming.kind, incoming.body); err != nil {
+						if err := s.writeClient(incoming.kind, clientBody); err != nil {
 							s.shutdown(websocket.CloseInternalServerErr, "")
 						}
 						// Only a control error in this stream resolves its pending control.
@@ -438,7 +444,7 @@ func (s *responsesWSSession) runCall(c *gin.Context, state *responsesWSCallState
 						accumulator.Observe(&event.ResponsesStreamResponse, incoming.body)
 						info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonDone, nil)
 						s.lastResponseID = responseID
-						state.terminal = &incoming
+						state.terminal = &clientIncoming
 						if ambiguous {
 							state.closeCode = websocket.CloseInternalServerErr
 						}
@@ -474,11 +480,11 @@ func (s *responsesWSSession) runCall(c *gin.Context, state *responsesWSCallState
 					s.lastResponseID = event.Response.ID
 				}
 				info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonDone, nil)
-				state.terminal = &incoming
+				state.terminal = &clientIncoming
 				ConsumeResponsesQuota(c, info, accumulator.Finish())
 				return nil
 			}
-			if err := s.writeClient(incoming.kind, incoming.body); err != nil {
+			if err := s.writeClient(incoming.kind, clientBody); err != nil {
 				s.shutdown(websocket.CloseInternalServerErr, "")
 			}
 			if accepted && pendingControl != nil {

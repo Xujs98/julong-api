@@ -94,6 +94,10 @@ export interface ChannelSettings {
   http_protocol?: 'auto' | 'http1' | string
   http2_connection_shards?: number
   tls_insecure_skip_verify?: boolean
+  text_replacements?: {
+    request?: Array<{ from: string; to: string }>
+    response?: Array<{ from: string; to: string }>
+  }
 }
 
 export interface ChannelOtherSettings {

@@ -22,6 +22,7 @@ type ChannelSettings struct {
 	ResponsesWebSocketEnabled bool                        `json:"responses_websocket_enabled,omitempty"`
 	SystemPrompt              string                      `json:"system_prompt,omitempty"`
 	SystemPromptOverride      bool                        `json:"system_prompt_override,omitempty"`
+	TextReplacements          *TextReplacementConfig      `json:"text_replacements,omitempty"`
 	// TaskExtendPluginKeys lists the task plugins a New API channel (type 60)
 	// is extended with. The upstream gateway may host many plugins, so the
 	// channel serves every listed plugin's models while the request still pins
@@ -88,6 +89,15 @@ func (s *ChannelSettings) ValidateHTTPTransport() error {
 		return fmt.Errorf("http2_connection_shards must be 1 when http_protocol is http1")
 	}
 	return nil
+}
+
+// ValidateTextReplacements validates the optional channel-level replacement
+// rules before they are persisted or used by a relay request.
+func (s ChannelSettings) ValidateTextReplacements() error {
+	if s.TextReplacements == nil {
+		return nil
+	}
+	return s.TextReplacements.Validate()
 }
 
 type VertexKeyType string

@@ -4716,6 +4716,37 @@ export function ChannelMutateDrawer({
         routing={
           <>
             {redirectPanelActive ? redirectPanelNotice : modelMappingFields}
+            <FormField
+              control={form.control}
+              name='text_replacements'
+              render={({ field }) => (
+                <FormItem className='space-y-3'>
+                  <div className='space-y-1'>
+                    <FormLabel>{t('Text Replacement Rules')}</FormLabel>
+                    <FormDescription>
+                      {t(
+                        'Replace configured text in request and response content. Model rules override channel rules.'
+                      )}
+                    </FormDescription>
+                  </div>
+                  <FormControl>
+                    <JsonCodeEditor
+                      value={field.value || ''}
+                      onChange={field.onChange}
+                      name={field.name}
+                      onBlur={field.onBlur}
+                      textareaRef={field.ref}
+                      disabled={sensitiveLocked || isSubmitting}
+                      placeholder={t(
+                        '{"request":[{"from":"source","to":"upstream"}],"response":[{"from":"upstream","to":"source"}]}'
+                      )}
+                      ariaLabel={t('Text Replacement Rules')}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
             {routingFields}
             {currentType === CHANNEL_TYPE_NEW_API &&
               (formValues.gateway_provider === 'suanliai' ||

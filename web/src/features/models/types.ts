@@ -46,6 +46,7 @@ export interface Model {
   tags?: string
   vendor_id?: number
   document_template_id?: number
+  text_replacements?: string | null
   endpoints?: string
   supported_endpoints?: string[]
   status: number

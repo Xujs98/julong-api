@@ -54,8 +54,11 @@ func PrepareResponsesRequest(c *gin.Context, info *relaycommon.RelayInfo, req *d
 		if err != nil {
 			return nil, nil, nil, types.NewError(err, types.ErrorCodeReadRequestBodyFailed, types.ErrOptionWithSkipRetry())
 		}
-		body := common.NewReplayableBodyReader(storage)
-		return adaptor, body, io.NopCloser(body), nil
+		body, bodyCloser, err := relaycommon.TransformStoredRequestBody(storage, info.TextReplacements)
+		if err != nil {
+			return nil, nil, nil, types.NewError(err, types.ErrorCodeReadRequestBodyFailed, types.ErrOptionWithSkipRetry())
+		}
+		return adaptor, body, bodyCloser, nil
 	}
 
 	convertedRequest, err := adaptor.ConvertOpenAIResponsesRequest(c, info, *request)
@@ -76,6 +79,10 @@ func PrepareResponsesRequest(c *gin.Context, info *relaycommon.RelayInfo, req *d
 		if err != nil {
 			return nil, nil, nil, newAPIErrorFromParamOverride(err)
 		}
+	}
+	jsonData, err = relaycommon.ApplyTextReplacementsJSON(jsonData, info.TextReplacements, false)
+	if err != nil {
+		return nil, nil, nil, types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
 	}
 
 	logger.LogDebug(c, "requestBody: %s", jsonData)

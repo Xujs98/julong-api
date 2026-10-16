@@ -3,8 +3,10 @@ package helper
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	rootcommon "github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	hostreasoning "github.com/QuantumNous/new-api/setting/reasoning"
@@ -65,5 +67,37 @@ func ModelMappedHelper(c *gin.Context, info *relaycommon.RelayInfo, request dto.
 	if request != nil {
 		request.SetModelName(info.UpstreamModelName)
 	}
+	return resolveTextReplacements(info)
+}
+
+func resolveTextReplacements(info *relaycommon.RelayInfo) error {
+	if info == nil {
+		return nil
+	}
+	config := dto.TextReplacementConfig{}
+	if info.ChannelMeta != nil && info.ChannelMeta.ChannelSetting.TextReplacements != nil {
+		config = *info.ChannelMeta.ChannelSetting.TextReplacements
+	}
+	if err := config.Validate(); err != nil {
+		return fmt.Errorf("invalid channel text replacement config: %w", err)
+	}
+
+	if model.DB != nil && strings.TrimSpace(info.OriginModelName) != "" {
+		textReplacements, err := model.FindModelTextReplacement(info.OriginModelName)
+		if err == nil && textReplacements != nil {
+			modelConfig := dto.TextReplacementConfig{}
+			if err := rootcommon.Unmarshal([]byte(*textReplacements), &modelConfig); err != nil {
+				return fmt.Errorf("invalid model text replacement config: %w", err)
+			}
+			if err := modelConfig.Validate(); err != nil {
+				return fmt.Errorf("invalid model text replacement config: %w", err)
+			}
+			config = modelConfig
+		} else if err != nil {
+			return fmt.Errorf("load model text replacement config: %w", err)
+		}
+	}
+
+	info.TextReplacements = config
 	return nil
 }
