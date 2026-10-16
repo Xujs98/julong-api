@@ -1773,3 +1773,9 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 - 本地测试误将 `127.0.0.1` 写入主库 `blocked_ips`，从而使本机所有请求（包括 Root 管理员）被 `SiteAccessGuard` 拒绝。使用 `/Users/xujs/.docker_dir/new-api/one-api.db`，未操作 `tmp/dev-one-api.db`。
 - 先创建 SQLite 在线备份 `/tmp/julong-ip-unblock-20261016/one-api.db.before` 并通过 `PRAGMA quick_check`，随后在事务中精确删除 `ip='127.0.0.1'` 的 1 条记录；其他封禁 IP 保留。未删除用户、登录会话、设备记录或 SSRF 配置。
 - 删除后重启本地 Go 服务以清除封禁缓存。当前服务 PID `49920` 监听 `3000`；`GET /api/status` 实测 `200 OK`、`success=true`。这是本地运行数据修复，无业务代码变更、无生产发布。
+
+### 2026-10-16 IPv6 本机回环封禁解除（B19）
+
+- 复核浏览器访问 `localhost` 时发现请求走 `::1`；主库仍残留 1 条 `blocked_ips` 记录，因此页面继续返回 `SITE_ACCESS_DENIED`。
+- 创建修复前备份 `/tmp/julong-ip-unblock-20261016/one-api.db.before-ipv6-fix`，通过 SQLite `PRAGMA quick_check`；事务精确删除 `ip='::1'` 的 1 条记录。`127.0.0.1` 与 `::1` 均无封禁，其他封禁 IP 也已为 0。
+- 重启本地服务清除进程内封禁缓存，当前 PID `52263` 监听 `3000`。`localhost`、`127.0.0.1`、`[::1]` 首页及 `/api/status` 均返回 `200`。无业务代码变更、无生产发布。
