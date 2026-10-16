@@ -1,6 +1,6 @@
 # Julong-API 开发文档
 
-最后更新：2026-10-16
+最后更新：2026-10-17
 
 本文档是本二开项目的强制开发记录。以后新增、修改或删除任何 API、组件、数据模型、配置项、路由、数据库行为或部署行为时，必须在同一次改动中同步更新本文档，并在“变更日志”中新增记录。
 
@@ -26,7 +26,7 @@
 | 默认前端 UI | 进行中 | React 19 + Rsbuild + TanStack Router，代码在 `web`。本地开发服务通常是 `:5173`。 |
 | Classic 前端 | 已移除 | 跟随上游架构调整，只保留 `web/` 单一前端。 |
 | 上游同步 | 主分支已包含既有功能分支提交（本轮核对） | 2026-10-13 合并 `QuantumNous/new-api@ef60ef27f36e418143fa4abf0c9025ba6f17fba7`（发行版 `v1.0.0-rc.44` 及后续主线提交）。`origin/main` 本轮核实已为 f0870f9d1，main 已包含原功能分支全部提交（原0/374待快进状态已关闭）。未推 QuantumNous upstream，未线上部署。详见 `PROJECT_PROGRESS.md`。 |
-| Docker 部署 | 进行中 | `docker-compose.yml` 使用 `qq1371446705/julong-api:latest`，包含 Postgres、Redis，宿主端口 `3388`。 |
+| Docker 部署 | 进行中 | `docker-compose.yml` 使用 `qq1371446705/julong-api:latest`，包含 Postgres、Redis，宿主端口 `3388`。Dockerfile 前端构建固定使用已验证的 `oven/bun:1.4.1` digest。 |
 | 代理功能 | 已实现，仍需持续 QA | 代理折扣、代理生成兑换码、代理所属用户、代理充值链接、退款日志等。 |
 | 错误反馈工单 | 已实现 | 500 页面跳转 `/error-report`，管理员/root 在 `/error-reports` 查看。 |
 | 用户详情、IP 与请求内容审计 | 已实现 | 后台用户详情显示登录 IP 历史并支持多选封禁/解封；用户列表标记共享 IP 和已封 IP；管理员/root 可按用户开启新请求的上下文与提示词记录。 |
@@ -1579,6 +1579,19 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 - 任务日志“查看视频”弹窗的下载按钮不再使用 artifact key 作为文件名：前端为视频卡片生成生命周期内稳定的随机文件名并固定 .mp4 后缀，同时在下载链接上增加受既有签名 URL 保护的 download=video 标记。图片、音频和普通文件仍使用原有下载行为。
 - controller.TaskArtifactContent 只在已确认 artifact 类型为 video 时允许该标记触发下载响应；controller.VideoProxy 的视频路径保留同样能力。代理继续流式转发原始字节，保留 Range/HEAD/CSP/鉴权；仅在下载上下文覆盖上游 Content-Disposition，避免上游文件名覆盖随机 .mp4 文件名。不存在下载标记时仍按播放响应处理。
 - 回归：视频任务组件下载属性 8/8；控制器随机 MP4 Content-Disposition、Range 与 data URL GET/HEAD 定向测试通过；未修改数据库、计费或视频内容生命周期。
+
+### 2026-10-17 Docker 前端依赖解包修复（B20）
+
+- Docker 前端阶段从 `oven/bun:1.4.0` 升级到固定 digest 的 `oven/bun:1.4.1`。同一份 `web/package.json` 与 `web/bun.lock` 在 Bun 1.4.0 中解包 `oxlint` 失败，但在 1.4.1 中完整安装 1202 个包成功；未修改业务依赖版本或锁文件。
+- 失败原因不是 lockfile 内容错误：`oxlint@1.74.0` 的 npm 官方 tarball SHA512 与 `web/bun.lock` 一致。Bun 1.4.0 的 Docker 安装阶段在 optional native package 解包时出现 `IntegrityCheckFailed`，并先后表现为 `@fontsource-variable/lora`、`ai`、`oxfmt`、`oxlint`，符合旧 Bun 解包/缓存路径不稳定，而不是单一依赖损坏。
+- 验证：相同锁文件在 Bun 1.4.1 中安装 1202 个依赖成功，前端 Rsbuild 构建和 Go 编译通过。复跑 `docker build --progress=plain -t julong-api:docker-fix-test .`，Docker 29.4.0/29.4.0 退出码 0；本轮 BuildKit 复用已验证的 Bun 安装与前端构建缓存，重新完成 Go 编译（186.4 秒）并导出镜像。镜像 ID `sha256:de80bc9ccd7e6613f165c5e5dd2f572c9e3a6596349e1da9105222d3cd770498`，标签 `julong-api:docker-fix-test`；未推送镜像仓库或部署线上。
+
+### 2026-10-17 本地构建垃圾清理（B21）
+
+- 清理确认无当前源码引用的旧前端目录和缓存：`web/default/`、`web/classic/`、`web/node_modules/.ignored`、`web/node_modules/.tmp`、`web/node_modules/.vite`、`web/node_modules/.vite-temp`。`web/dist/` 是 Go `embed` 使用的当前前端产物，继续保留；数据库、站点上传资源、源码和四项既有未跟踪文件未触碰。
+- 清理采用先移至 `/tmp/julong-cleanup-20261017/` 的可恢复方式；移出 `.ignored` 后 `bun run typecheck` 与 `bun run build` 通过，说明当前依赖链接不依赖该缓存目录。Go 构建和本地健康检查完成后，临时备份目录已删除。
+- 删除无容器引用的本地测试镜像 `julong-api:docker-fix-test` 与旧 `oven/bun:1.4.0`。保留当前 Dockerfile 使用的 `oven/bun:1.4.1`、`qq1371446705/julong-api:latest` 以及其他项目运行中的资源。
+- 没有执行全局 Docker prune，也没有清理 `julong-publisher` 的 BuildKit 缓存；该缓存约 15.22GB，但无法仅凭缓存元数据安全确认全部属于本项目。
 
 ### 2026-10-15 模型文档模板（B08，验证结果见 PROJECT_PROGRESS.md）
 

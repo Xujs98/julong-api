@@ -4,7 +4,7 @@
 > 详细 API、路由、配置和数据模型以 [DEVELOPMENT.md](./DEVELOPMENT.md) 为技术登记入口。
 > 代码与实际命令输出优先于旧文档、历史回复和截图；“代码已写”“本地可用”“已提交”“已上线”必须分开。
 
-最后更新：2026-10-16 21:17（Asia/Shanghai）
+最后更新：2026-10-17（Asia/Tokyo）
 项目根目录：`/Users/xujs/.docker_dir/new-api`
 
 ## 1. 新对话接续入口（必须先读）
@@ -22,7 +22,7 @@
 
 | 项目 | 状态（截至最后更新时间） | 依据与边界 |
 | --- | --- | --- |
-| 当前分支 / HEAD | main / B17功能1466080e7已推送（实际HEAD以git为准） | 使用日志权限、在线统计与Root状态隐藏已验证；四项既有未跟踪内容保留 |
+| 当前分支 / HEAD | main / B19交付提交8919baf6c；B20 Docker 修复与B21清理待提交（实际HEAD以git为准） | Bun 1.4.1 digest 完整 Docker 构建已通过；本地构建垃圾已移出项目；四项既有未跟踪内容保留 |
 | 上游整合 | main已包含此前功能分支提交 | 实际git和远端对比已纠正旧“尚待合并”快照，保留历史批次记录 |
 | 用户 GitHub 仓库 | origin = https://github.com/Xujs98/julong-api.git | upstream = https://github.com/QuantumNous/new-api.git，仅跟踪上游；不得把用户改动推到 upstream |
 | 本地服务 | B19最新前端嵌入Go产物，PID52263监听3000 | localhost、127.0.0.1、[::1] 首页与 /api/status 均返回200；真实管理员浏览器登录未实测 |
@@ -33,7 +33,7 @@
 | 禁用账户全站防护 | B15本地已完成，功能已推origin/main | 全站IP/可信身份拦截、自动追封、SSRF页独立入站名单、登录IP记录；三库与登录追加回归通过，人机验证需真实密钥，未上线 |
 | 使用日志权限与在线统计 | B16功能已推；B17网站/API独立在线已完成（本地） | 登录/网站交互与API独立300秒窗口，自动轮询不续在线；双活跃发光，卡片移除排除说明；三库、前端10项、构建/重启通过 |
 | 项目进度入口 | 已完成（文档本地） | 本文 + AGENTS.md 必读入口；持续按批次更新 |
-| Git 提交 / 线上发布 | B17功能1466080e7已推origin/main；最终回执另存 | 不推upstream；api.julongkj.top未部署 |
+| Git 提交 / 线上发布 | B19已推origin/main；B20/B21待提交和推送 | 不推upstream；测试镜像和旧Bun镜像已移除，未推送镜像仓库、未部署线上 |
 
 ## 3. 状态口径
 
@@ -46,6 +46,21 @@
 - **需补证 / 外部阻塞**：写清缺失条件和下一步，不得标完成。
 
 ## 4. 分批进度
+
+### B21：安全清理本地构建垃圾（2026-10-17，已完成本地）
+
+- 仅处理确认无源码引用的旧前端产物和构建缓存：`web/default/`、`web/classic/`、`web/node_modules/.ignored`、`web/node_modules/.tmp`、`web/node_modules/.vite`、`web/node_modules/.vite-temp`。这些内容先移到 `/tmp/julong-cleanup-20261017/` 作为可恢复备份，未触碰源码、数据库、`site-assets/`、当前 `web/dist/` 或四项既有未跟踪文件。
+- `web/node_modules/.ignored` 移出项目后，`bun run typecheck` 和 `bun run build` 均通过；构建生成的必要 `web/dist/` 保留，重新生成后本地服务首页仍引用 `index.47b35d5a6f.js` 与 `index.d2caa090c3.css`。
+- 已移除无容器使用的本地测试镜像 `julong-api:docker-fix-test` 和不再被 Dockerfile 使用的 `oven/bun:1.4.0`；保留 `qq1371446705/julong-api:latest`、`oven/bun:1.4.1`、`oven/bun:1.4.2` 及所有正在使用的其他项目镜像/容器/卷。
+- 未执行全局 `docker system prune`，也未清理 `julong-publisher` 的 15.22GB BuildKit 缓存，因为该构建器的缓存归属不能仅凭当前仓库安全区分，避免影响其他项目。
+- 清理前项目约 `3.4G`，移出项目后约 `2.8G`；约 `575M` 临时备份在 Go 构建和健康检查完成后已删除。`one-api.db`、`tmp/dev-one-api.db`、`site-assets/`、`web/dist/` 和运行中的本地服务均保留。
+
+### B20：修复 Docker 前端依赖解包失败（2026-10-17，本地构建已验证，Git待交付）
+
+- 用户授权可升级 Docker 中的 Bun。Dockerfile 的前端构建基础镜像由 Bun 1.4.0 改为固定 digest 的 Bun 1.4.1；没有改 `web/package.json`、`web/bun.lock` 或业务代码。
+- 根因验证：Bun 1.4.0 在 Docker 安装阶段解包 optional native packages 时先后出现 `IntegrityCheckFailed`（包括 `@fontsource-variable/lora`、`ai`、`oxfmt`、`oxlint`）。`oxlint@1.74.0` npm 官方 tarball SHA512 与锁文件一致；Bun 1.4.1 对相同锁文件完成 1202 个依赖安装，前端构建和 Go 编译成功。结论指向 Bun 1.4.0 的包解包路径，不是网络或锁文件损坏。
+- 复跑 `docker build --progress=plain -t julong-api:docker-fix-test .`，Docker 29.4.0/29.4.0，退出码 0；日志 `/tmp/julong-docker-build-20261017.log`。本轮 BuildKit 复用已验证的 Bun 安装与前端构建缓存，Go 编译步骤完成（186.4 秒），并成功导出镜像。镜像 ID `sha256:de80bc9ccd7e6613f165c5e5dd2f572c9e3a6596349e1da9105222d3cd770498`，本地 tag `julong-api:docker-fix-test`。
+- 本批只改 Docker 构建基础镜像和文档，无后端/路由/嵌入静态资源变更，不需重启本地开发服务。镜像未登录/推送至生产仓库，未部署线上。Git 交付待完成；既有 `controller/media_asset.go.bak`、`site-assets/`、`web/pnpm-lock.yaml`、`web/src/features/usage-logs/components/media-assets-table.tsx.bak` 必须保留且不纳入本批提交。
 
 ### B17：区分网站操作与 API 在线（2026-10-16，已完成本地/已推送）
 
