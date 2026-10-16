@@ -22,10 +22,10 @@
 
 | 项目 | 状态（截至最后更新时间） | 依据与边界 |
 | --- | --- | --- |
-| 当前分支 / HEAD | main / HEAD `650844181`；清理提交 `7d5bc78f5` 已本地保存 | Bun 1.4.1 digest 完整 Docker 构建已通过；本地构建垃圾已移出项目；四项既有未跟踪内容保留 |
+| 当前分支 / HEAD | main / HEAD `3818879e7`；B23 前端改动尚未提交 | B22 文本替换交付提交已推送；本批可视化编辑器、概览活跃卡片和文档改动仍在工作区；四项既有未跟踪内容保留 |
 | 上游整合 | main已包含此前功能分支提交 | 实际git和远端对比已纠正旧“尚待合并”快照，保留历史批次记录 |
 | 用户 GitHub 仓库 | origin = https://github.com/Xujs98/julong-api.git | upstream = https://github.com/QuantumNous/new-api.git，仅跟踪上游；不得把用户改动推到 upstream |
-| 本地服务 | B22文本替换最新Go产物，PID29600监听3000 | `http://127.0.0.1:3000` 的 `/api/status` 返回200且 `success=true`，版本 `v1.0.0-julong.1`；真实管理员浏览器登录未实测 |
+| 本地服务 | B23最新Go产物 PID41372 监听3000 | `/api/status` 返回200且 `success=true`；首页主 JS/CSS 与最新 `web/dist` SHA256一致；真实管理员浏览器登录未实测 |
 | 模型广场按秒/按次价格 | 当前代码已实现，历史交付有验证记录 | 两项都有价格同时显示；只配一项只显示该项；模型名及分辨率价格区规则一致 |
 | 视频输入素材 | 已完成本地实现/定向回归、三库复验、浏览器预览和视频直链、最终重启 | SQLite3.50.4/MySQL5.7.44/PostgreSQL16.15最终矩阵8/8无Skip；图片及嵌入视频/音频正常、素材视频直链可播放；Safari/原生音频直链/线上公网未实测 |
 | 成品列阴影与滚轮 | 已完成（本地）；17项通过，Chromium已验证并激活；Safari待人工复核 | 独立复核10/10，主任务4文件17/17；Chromium明暗阴影、全列固定、滚轮/splitHeader已验；首页资源与dist一致，Safari无连接未实测 |
@@ -33,7 +33,7 @@
 | 禁用账户全站防护 | B15本地已完成，功能已推origin/main | 全站IP/可信身份拦截、自动追封、SSRF页独立入站名单、登录IP记录；三库与登录追加回归通过，人机验证需真实密钥，未上线 |
 | 使用日志权限与在线统计 | B16功能已推；B17网站/API独立在线已完成（本地） | 登录/网站交互与API独立300秒窗口，自动轮询不续在线；双活跃发光，卡片移除排除说明；三库、前端10项、构建/重启通过 |
 | 项目进度入口 | 已完成（文档本地） | 本文 + AGENTS.md 必读入口；持续按批次更新 |
-| Git 提交 / 线上发布 | B22提交 `f5d5be1cdf31b5110aba700112ba50c911590774` 已推送 `origin/main`，远端 SHA 已核对一致 | 不推upstream；本地服务已启动，生产未部署 |
+| Git 提交 / 线上发布 | B22提交 `f5d5be1cdf31b5110aba700112ba50c911590774` 已推送 `origin/main`；B23待提交推送 | 不推upstream；本地服务需在B23构建后重启，生产未部署 |
 
 ## 3. 状态口径
 
@@ -463,3 +463,11 @@ B08：MD/DOCX 后端、管理 UI、模型绑定与广场调用文档已实现。
 - 实际验证：`gofmt -d` 无输出；`go test ./relay/common ./relay/helper ./model ./relay -count=1` 通过；`cd relaykit && GOWORK=off go test ./... -count=1` 通过；`cd relaykit && GOWORK=off go build ./...` 通过；前端文本替换 Vitest 3/3、`bun run typecheck`、目标文件 `oxfmt --check`、`bun run build`、根模块 `go build -o /tmp/julong-api-runtime/new-api-text-replacement .` 和 `git diff --check` 均通过。
 - 本地服务已由文本替换最新产物启动：PID `29600` 监听 `*:3000`，`GET http://127.0.0.1:3000/api/status` 返回 HTTP 200、`success=true`、版本 `v1.0.0-julong.1`；未部署生产。
 - 本批已提交为 `f5d5be1cdf31b5110aba700112ba50c911590774` 并成功推送 `origin/main`，`git ls-remote` 已核对远端 SHA 一致；既有未跟踪内容 `controller/media_asset.go.bak`、`site-assets/`、`web/pnpm-lock.yaml`、`web/src/features/usage-logs/components/media-assets-table.tsx.bak` 保留，未纳入本批提交。
+
+### B23：文本替换可视化编辑器与概览活跃人数卡片（2026-10-17，已实现待最终交付）
+
+- 渠道和模型编辑抽屉已接入共享 `TextReplacementEditor`：Request/Response 规则支持逐行可视化编辑，也可切换 JSON 模式；两种模式双向同步，非法结构会提示并阻止切回可视化模式。
+- 概览页已将“当日日活人数”和“在线人数”放入独立卡片容器，保留管理员/root 权限、原数据接口和刷新策略；七种语言文案已同步。
+- 前端验证已完成：文本替换编辑器与概览测试 12/12；`tsgo -b`、目标文件 `oxlint`、`oxfmt --check`、`bun run i18n:sync` 和 Rsbuild 构建通过。已编译 `/tmp/julong-api-runtime/new-api-b23`，停止旧 PID29600 后以 PID41372 启动；`/api/status` HTTP 200 且 `success=true`，首页主 JS/CSS 与 `web/dist` SHA256一致。首页 HTML 含运行时注入内容，未要求与静态 `web/dist/index.html` 字节级相同。
+- 当前仍需范围提交并推送 `origin/main`；生产环境未部署，真实管理员浏览器登录未实测。
+- 本批继续保留既有未跟踪内容 `controller/media_asset.go.bak`、`site-assets/`、`web/pnpm-lock.yaml`、`web/src/features/usage-logs/components/media-assets-table.tsx.bak`，不得纳入提交。

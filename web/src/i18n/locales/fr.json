@@ -7958,6 +7958,9 @@
     "Zhipu": "Zhipu",
     "Zhipu GLM": "Zhipu GLM",
     "Zhipu V4": "Zhipu V4",
-    "Zoom": "Zoom"
+    "Zoom": "Zoom",
+    "Rules applied before sending the request upstream.": "Règles appliquées avant l'envoi de la requête au fournisseur amont.",
+    "Rules applied before returning the response to the client.": "Règles appliquées avant de renvoyer la réponse au client.",
+    "Text to replace": "Texte à remplacer"
   }
 }

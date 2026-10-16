@@ -68,6 +68,7 @@ import { JsonEditor } from '@/components/json-editor'
 import { LearnMore } from '@/components/learn-more'
 import { LoadingState } from '@/components/loading-state'
 import { MultiSelect } from '@/components/multi-select'
+import { TextReplacementEditor } from '@/components/text-replacement-editor'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -4730,7 +4731,7 @@ export function ChannelMutateDrawer({
                     </FormDescription>
                   </div>
                   <FormControl>
-                    <JsonCodeEditor
+                    <TextReplacementEditor
                       value={field.value || ''}
                       onChange={field.onChange}
                       name={field.name}

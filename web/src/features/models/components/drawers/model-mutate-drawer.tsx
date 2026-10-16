@@ -33,11 +33,11 @@ import {
   sideDrawerSwitchItemClassName,
 } from '@/components/drawer-layout'
 import { ErrorState } from '@/components/error-state'
-import { JsonCodeEditor } from '@/components/json-code-editor'
 import { JsonEditor } from '@/components/json-editor'
 import { LoadingState } from '@/components/loading-state'
 import { LobeIconField } from '@/components/lobe-icon-field'
 import { TagInput } from '@/components/tag-input'
+import { TextReplacementEditor } from '@/components/text-replacement-editor'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Combobox } from '@/components/ui/combobox'
@@ -580,7 +580,7 @@ function ModelMutateDrawerContent(props: ModelMutateDrawerProps) {
                           <FormItem>
                             <FormLabel>{t('Text Replacement Rules')}</FormLabel>
                             <FormControl>
-                              <JsonCodeEditor
+                              <TextReplacementEditor
                                 value={field.value || ''}
                                 onChange={field.onChange}
                                 name={field.name}

@@ -7958,6 +7958,9 @@
     "Zhipu": "Zhipu",
     "Zhipu GLM": "Zhipu GLM",
     "Zhipu V4": "Zhipu V 4",
-    "Zoom": "ズーム"
+    "Zoom": "ズーム",
+    "Rules applied before sending the request upstream.": "上流へリクエストを送信する前に適用するルール。",
+    "Rules applied before returning the response to the client.": "クライアントへレスポンスを返す前に適用するルール。",
+    "Text to replace": "置換するテキスト"
   }
 }

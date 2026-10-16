@@ -7958,6 +7958,9 @@
     "Zhipu": "智谱",
     "Zhipu GLM": "智谱GLM",
     "Zhipu V4": "智谱 V4",
-    "Zoom": "缩放"
+    "Zoom": "缩放",
+    "Rules applied before sending the request upstream.": "请求发送到上游前应用的替换规则。",
+    "Rules applied before returning the response to the client.": "返回给客户端前应用的替换规则。",
+    "Text to replace": "要替换的文本"
   }
 }

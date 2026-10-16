@@ -7958,6 +7958,9 @@
     "Zhipu": "Zhipu",
     "Zhipu GLM": "Zhipu GLM",
     "Zhipu V4": "Zhipu V4",
-    "Zoom": "Zoom"
+    "Zoom": "Zoom",
+    "Rules applied before sending the request upstream.": "Quy tắc áp dụng trước khi gửi yêu cầu lên hệ thống upstream.",
+    "Rules applied before returning the response to the client.": "Quy tắc áp dụng trước khi trả phản hồi về máy khách.",
+    "Text to replace": "Văn bản cần thay thế"
   }
 }

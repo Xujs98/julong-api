@@ -47,6 +47,26 @@ it.each([10, 100])(
     expect(screen.queryByText(/excluding Root/i)).not.toBeInTheDocument()
   }
 )
+it('renders activity metrics inside the responsive overview card container', async () => {
+  vi.spyOn(api, 'get').mockResolvedValue({
+    data: {
+      success: true,
+      data: { daily_active_users: 23, online_users: 7 },
+    },
+  })
+  showCards(100)
+
+  const group = await screen.findByRole('group', {
+    name: 'Daily active users / Online users',
+  })
+  expect(group).toHaveClass('bg-card', 'rounded-2xl', 'border', 'shadow-xs')
+  expect(group.firstElementChild).toHaveClass(
+    'grid',
+    'grid-cols-1',
+    'sm:grid-cols-2'
+  )
+  expect(group.firstElementChild?.children.length).toBe(2)
+})
 it('does not fetch or expose site activity to ordinary users', () => {
   const get = vi.spyOn(api, 'get')
   const { container } = showCards(1)

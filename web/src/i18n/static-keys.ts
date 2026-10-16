@@ -623,6 +623,9 @@ export const STATIC_I18N_KEYS = [
   'Replace configured text in request and response content. Model rules override channel rules.',
   'Text replacement rules must be valid JSON with request and response arrays',
   'Model rules replace the channel rules for this model when configured.',
+  'Rules applied before sending the request upstream.',
+  'Rules applied before returning the response to the client.',
+  'Text to replace',
   '{"request":[{"from":"source","to":"upstream"}],"response":[{"from":"upstream","to":"source"}]}',
 
   // Misc

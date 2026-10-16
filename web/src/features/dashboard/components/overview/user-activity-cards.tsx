@@ -44,26 +44,42 @@ export function UserActivityCards() {
   })
   if (!allowed) return null
   return (
-    <div className='grid grid-cols-1 gap-4 sm:grid-cols-2'>
-      <StatCard
-        title={t('Daily active users')}
-        value={
-          query.data ? formatNumber(query.data.daily_active_users, locale) : '-'
-        }
-        description={t('Unique active accounts today (UTC+8)')}
-        icon={Users}
-        loading={query.isLoading}
-        error={query.isError}
-      />
-      <StatCard
-        title={t('Online users')}
-        value={query.data ? formatNumber(query.data.online_users, locale) : '-'}
-        description={t('Active in the last 5 minutes')}
-        icon={Activity}
-        tone='accent-2'
-        loading={query.isLoading}
-        error={query.isError}
-      />
+    <div
+      role='group'
+      aria-label={`${t('Daily active users')} / ${t('Online users')}`}
+      className='bg-card overflow-hidden rounded-2xl border shadow-xs'
+    >
+      <div className='grid grid-cols-1 gap-2.5 p-3 sm:grid-cols-2 sm:gap-3 sm:p-5'>
+        <div className='bg-background/60 rounded-lg border px-2 py-1.5 sm:rounded-xl sm:p-3'>
+          <StatCard
+            title={t('Daily active users')}
+            value={
+              query.data
+                ? formatNumber(query.data.daily_active_users, locale)
+                : '-'
+            }
+            description={t('Unique active accounts today (UTC+8)')}
+            icon={Users}
+            loading={query.isLoading}
+            error={query.isError}
+            compactMobile
+          />
+        </div>
+        <div className='bg-background/60 rounded-lg border px-2 py-1.5 sm:rounded-xl sm:p-3'>
+          <StatCard
+            title={t('Online users')}
+            value={
+              query.data ? formatNumber(query.data.online_users, locale) : '-'
+            }
+            description={t('Active in the last 5 minutes')}
+            icon={Activity}
+            tone='accent-2'
+            loading={query.isLoading}
+            error={query.isError}
+            compactMobile
+          />
+        </div>
+      </div>
     </div>
   )
 }
