@@ -1765,3 +1765,5 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 - 认证控制依据：已查阅 OWASP ASVS 5.0.0、Authentication Cheat Sheet、Session Management Cheat Sheet；复用既有认证，不接收客户端身份/时钟。回归覆盖会话允许、匿名/过期/篡改拒绝、PAT不能上报网站活动及轮询不延续网站在线。不声称整体 ASVS 合规，未改变密码/会话协议。
 - 后端实测：`python3 /tmp/julong-presence-sources-20261016/run-matrix.py`，内部 `go test ./controller -run '^TestAdminLogPermissionsMatrix$' -count=1 -v`；SQLite3.50.4/MySQL5.7.44/PostgreSQL16.15真实主/独立日志库无Skip，覆盖fresh/旧结构升级两次、原记录保留、双来源/300秒边界/未来时间、筛选/汇总一致与Root隐私。`go test ./service -run 'Test(UserPresence|ReEnablingUserPresence)' -count=1 -v` 6项通过；middleware/router定向身份/路由回归通过。backend-first曾因正则错误无匹配测试，仅作编译记录，已由真实测试补齐。
 - 前端2文件10项通过，typecheck、8个TS/TSX文件oxlint、保护版权头的9文件oxfmt及七语言同步通过。前后端构建/重启/Git交付见 PROJECT_PROGRESS.md B17；未运行全量Go或真实管理员浏览器验收，未部署生产。
+
+- B17最终交付：前后端构建、健康/6资源SHA256、来源列迁移与匿名GET/POST拒绝检查通过；本地PID43688监听3000，备份quick_check及关键表行数核对通过。功能提交 `1466080e7e10cfd2fc0d3c2dcd034f4ca8132c9b` 的28个本批文件首次推送 `origin/main` 成功，远端SHA一致；四项历史未跟踪内容保留，生产未部署。
