@@ -1592,7 +1592,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 - 清理采用先移至 `/tmp/julong-cleanup-20261017/` 的可恢复方式；移出 `.ignored` 后 `bun run typecheck` 与 `bun run build` 通过，说明当前依赖链接不依赖该缓存目录。Go 构建和本地健康检查完成后，临时备份目录已删除。
 - 删除无容器引用的本地测试镜像 `julong-api:docker-fix-test` 与旧 `oven/bun:1.4.0`。保留当前 Dockerfile 使用的 `oven/bun:1.4.1`、`qq1371446705/julong-api:latest` 以及其他项目运行中的资源。
 - 没有执行全局 Docker prune，也没有清理 `julong-publisher` 的 BuildKit 缓存；该缓存约 15.22GB，但无法仅凭缓存元数据安全确认全部属于本项目。
-- 本批已提交为 `7d5bc78f565e73e60b7b77a79f1aff66c32c6235`，目标分支为 `origin/main`；两次推送均因无法连接 `github.com:443` 失败，当前仅完成本地 Git 交付，未完成远端推送。
+- 本批已提交为 `7d5bc78f565e73e60b7b77a79f1aff66c32c6235`，目标分支为 `origin/main`；推送尝试均因无法连接 `github.com:443` 失败，当前仅完成本地 Git 交付，未完成远端推送。
 
 ### 2026-10-15 模型文档模板（B08，验证结果见 PROJECT_PROGRESS.md）
 

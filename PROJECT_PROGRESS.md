@@ -22,7 +22,7 @@
 
 | 项目 | 状态（截至最后更新时间） | 依据与边界 |
 | --- | --- | --- |
-| 当前分支 / HEAD | main / B21本地提交7d5bc78f5（实际HEAD以git为准） | Bun 1.4.1 digest 完整 Docker 构建已通过；本地构建垃圾已移出项目；四项既有未跟踪内容保留 |
+| 当前分支 / HEAD | main / HEAD `650844181`；清理提交 `7d5bc78f5` 已本地保存 | Bun 1.4.1 digest 完整 Docker 构建已通过；本地构建垃圾已移出项目；四项既有未跟踪内容保留 |
 | 上游整合 | main已包含此前功能分支提交 | 实际git和远端对比已纠正旧“尚待合并”快照，保留历史批次记录 |
 | 用户 GitHub 仓库 | origin = https://github.com/Xujs98/julong-api.git | upstream = https://github.com/QuantumNous/new-api.git，仅跟踪上游；不得把用户改动推到 upstream |
 | 本地服务 | B19最新前端嵌入Go产物，PID52263监听3000 | localhost、127.0.0.1、[::1] 首页与 /api/status 均返回200；真实管理员浏览器登录未实测 |
@@ -33,7 +33,7 @@
 | 禁用账户全站防护 | B15本地已完成，功能已推origin/main | 全站IP/可信身份拦截、自动追封、SSRF页独立入站名单、登录IP记录；三库与登录追加回归通过，人机验证需真实密钥，未上线 |
 | 使用日志权限与在线统计 | B16功能已推；B17网站/API独立在线已完成（本地） | 登录/网站交互与API独立300秒窗口，自动轮询不续在线；双活跃发光，卡片移除排除说明；三库、前端10项、构建/重启通过 |
 | 项目进度入口 | 已完成（文档本地） | 本文 + AGENTS.md 必读入口；持续按批次更新 |
-| Git 提交 / 线上发布 | B21本地提交 `7d5bc78f5`；推送被网络阻塞，origin/main仍为 `8919baf6c` | 不推upstream；测试镜像和旧Bun镜像已移除，未推送镜像仓库、未部署线上 |
+| Git 提交 / 线上发布 | 本地领先 `origin/main` 3 个提交（HEAD `650844181`）；推送被网络阻塞，origin/main仍为 `8919baf6c` | 不推upstream；测试镜像和旧Bun镜像已移除，未推送镜像仓库、未部署线上 |
 
 ## 3. 状态口径
 
@@ -54,7 +54,7 @@
 - 已移除无容器使用的本地测试镜像 `julong-api:docker-fix-test` 和不再被 Dockerfile 使用的 `oven/bun:1.4.0`；保留 `qq1371446705/julong-api:latest`、`oven/bun:1.4.1`、`oven/bun:1.4.2` 及所有正在使用的其他项目镜像/容器/卷。
 - 未执行全局 `docker system prune`，也未清理 `julong-publisher` 的 15.22GB BuildKit 缓存，因为该构建器的缓存归属不能仅凭当前仓库安全区分，避免影响其他项目。
 - 清理前项目约 `3.4G`，移出项目后约 `2.8G`；约 `575M` 临时备份在 Go 构建和健康检查完成后已删除。`one-api.db`、`tmp/dev-one-api.db`、`site-assets/`、`web/dist/` 和运行中的本地服务均保留。
-- 本批变更已提交为 `7d5bc78f565e73e60b7b77a79f1aff66c32c6235`，目标为 `origin/main`；两次推送尝试均因无法连接 `github.com:443` 失败，未声称已远端交付。下次任务需先重试该待推送提交。
+- 本批变更已提交为 `7d5bc78f565e73e60b7b77a79f1aff66c32c6235`，目标为 `origin/main`；推送尝试均因无法连接 `github.com:443` 失败，未声称已远端交付。下次任务需先重试该待推送提交。
 
 ### B20：修复 Docker 前端依赖解包失败（2026-10-17，本地构建已验证，待远端推送）
 
