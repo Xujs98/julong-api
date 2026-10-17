@@ -7,7 +7,7 @@
 ## 维护规则
 
 - 本站线上视频客户端文档：`全站通用视频接口文档.md`（域名 `https://api.julongkj.top/`），区分 Bearer 内容路径与签名成品链接、face 配置默认值、Base64 素材及过期、Python 轮询/流式下载和部署检查；`视频生成使用指南.md` 保留管理员配置与本地示例。文档完成不等于线上部署完成。
-- 分批进度、当前任务和新对话交接入口：PROJECT_PROGRESS.md（绝对路径 /Users/xujs/.docker_dir/new-api/PROJECT_PROGRESS.md）。每批开始、重要进展、阻塞和交付时同步更新；详细 API/路由/模型仍登记在本文档。
+- 分批进度、当前任务和新对话交接入口：PROJECT_PROGRESS.md（绝对路径 /Users/xujs/.docker_dir/new-api/PROJECT_PROGRESS.md）。采用压缩快照：每批只保留当前状态、最新批次、未完成项、验证和交付边界；旧批次压缩为索引，不无限追加；详细 API/路由/模型仍登记在本文档。
 - 每次任务完成同步按批记录进度、提交本地 Git 并只向 Xujs98/julong-api 的已核实 origin 推送。推送失败只重试一次，仍失败记录待推送，下次任务再试；历史工作范围先确认，不 force-push。详细规则见 AGENTS.md。
 - 当前代码是唯一事实来源。如果本文档和代码不一致，必须先按当前代码修正文档，再继续开发。
 - 每次 API 变更必须同步更新 API 清单、请求/响应说明、权限说明和变更日志。
