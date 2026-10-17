@@ -22,6 +22,7 @@ import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
+import { PageSizeSelect } from '@/components/data-table'
 import { SectionPageLayout } from '@/components/layout'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -71,13 +72,12 @@ import { LedgerExportMenu } from './components/ledger-export-menu'
 import { LedgerSummaryCards } from './components/ledger-summary-cards'
 import type { LedgerEntry, LedgerListParams, LedgerMutation } from './types'
 
-const PAGE_SIZE = 20
-
 export function Ledger() {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
   const user = useAuthStore((state) => state.auth.user)
   const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(20)
   const [range, setRange] = useState(() => ({
     start: dayjs().startOf('day').toDate(),
     end: dayjs().endOf('day').toDate(),
@@ -101,11 +101,11 @@ export function Ledger() {
   const params = useMemo<LedgerListParams>(
     () => ({
       p: page,
-      page_size: PAGE_SIZE,
+      page_size: pageSize,
       start_timestamp: Math.floor(range.start.getTime() / 1000),
       end_timestamp: Math.floor(range.end.getTime() / 1000),
     }),
-    [page, range.end, range.start]
+    [page, pageSize, range.end, range.start]
   )
   const summaryParams = useMemo(
     () => ({
@@ -189,7 +189,7 @@ export function Ledger() {
 
   const entries = entriesQuery.data?.items ?? []
   const total = entriesQuery.data?.total ?? 0
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
+  const totalPages = Math.max(1, Math.ceil(total / pageSize))
   const currentIds = entries.map((entry) => entry.id)
   const selectedCurrentCount = currentIds.filter((id) =>
     selectedIds.has(id)
@@ -465,31 +465,41 @@ export function Ledger() {
                 )}
               </div>
 
-              <div className='mt-3 flex items-center justify-between gap-3'>
+              <div className='mt-3 flex flex-wrap items-center justify-between gap-3'>
                 <span className='text-muted-foreground text-xs'>
                   {t('Page {{page}} of {{total}}', { page, total: totalPages })}
                 </span>
-                <div className='flex gap-2'>
-                  <Button
-                    size='sm'
-                    variant='outline'
-                    disabled={page <= 1}
-                    onClick={() =>
-                      setPage((current) => Math.max(1, current - 1))
-                    }
-                  >
-                    {t('Previous')}
-                  </Button>
-                  <Button
-                    size='sm'
-                    variant='outline'
-                    disabled={page >= totalPages}
-                    onClick={() =>
-                      setPage((current) => Math.min(totalPages, current + 1))
-                    }
-                  >
-                    {t('Next')}
-                  </Button>
+                <div className='flex flex-wrap items-center gap-3'>
+                  <PageSizeSelect
+                    value={pageSize}
+                    onValueChange={(value) => {
+                      setPageSize(value)
+                      setPage(1)
+                      setSelectedIds(new Set())
+                    }}
+                  />
+                  <div className='flex gap-2'>
+                    <Button
+                      size='sm'
+                      variant='outline'
+                      disabled={page <= 1}
+                      onClick={() =>
+                        setPage((current) => Math.max(1, current - 1))
+                      }
+                    >
+                      {t('Previous')}
+                    </Button>
+                    <Button
+                      size='sm'
+                      variant='outline'
+                      disabled={page >= totalPages}
+                      onClick={() =>
+                        setPage((current) => Math.min(totalPages, current + 1))
+                      }
+                    >
+                      {t('Next')}
+                    </Button>
+                  </div>
                 </div>
               </div>
             </section>

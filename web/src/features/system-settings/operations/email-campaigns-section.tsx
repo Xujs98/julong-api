@@ -33,6 +33,7 @@ import { useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
+import { PageSizeSelect } from '@/components/data-table'
 import { Dialog } from '@/components/dialog'
 import { HtmlContent } from '@/components/html-content'
 import { Badge } from '@/components/ui/badge'
@@ -76,9 +77,6 @@ import {
   type EmailTemplate,
   type EmailTemplatePreview,
 } from './email-templates-api'
-
-const PAGE_SIZE = 20
-const DELIVERY_PAGE_SIZE = 50
 
 type CampaignForm = {
   name: string
@@ -166,19 +164,21 @@ export function EmailCampaignsSection() {
   const [templatePreviewing, setTemplatePreviewing] = useState(false)
   const [selected, setSelected] = useState<EmailCampaign | null>(null)
   const [deliveryPage, setDeliveryPage] = useState(1)
+  const [pageSize, setPageSize] = useState(20)
+  const [deliveryPageSize, setDeliveryPageSize] = useState(50)
   const [deleting, setDeleting] = useState<EmailCampaign | null>(null)
 
   const campaignsQuery = useQuery({
-    queryKey: ['email-campaigns', page],
+    queryKey: ['email-campaigns', page, pageSize],
     queryFn: async () => {
-      const response = await listEmailCampaigns(page, PAGE_SIZE)
+      const response = await listEmailCampaigns(page, pageSize)
       if (!response.success) {
         throw new Error(response.message || t('Failed to load email campaigns'))
       }
       return (
         response.data || {
           page,
-          page_size: PAGE_SIZE,
+          page_size: pageSize,
           total: 0,
           items: [],
         }
@@ -188,14 +188,19 @@ export function EmailCampaignsSection() {
   })
 
   const deliveriesQuery = useQuery({
-    queryKey: ['email-campaign-deliveries', selected?.id, deliveryPage],
+    queryKey: [
+      'email-campaign-deliveries',
+      selected?.id,
+      deliveryPage,
+      deliveryPageSize,
+    ],
     enabled: selected !== null,
     queryFn: async () => {
       if (!selected) return null
       const response = await listEmailDeliveries(
         selected.id,
         deliveryPage,
-        DELIVERY_PAGE_SIZE
+        deliveryPageSize
       )
       if (!response.success) {
         throw new Error(
@@ -239,11 +244,11 @@ export function EmailCampaignsSection() {
 
   const totalPages = Math.max(
     1,
-    Math.ceil((campaignsQuery.data?.total || 0) / PAGE_SIZE)
+    Math.ceil((campaignsQuery.data?.total || 0) / pageSize)
   )
   const deliveryPages = Math.max(
     1,
-    Math.ceil((deliveriesQuery.data?.total || 0) / DELIVERY_PAGE_SIZE)
+    Math.ceil((deliveriesQuery.data?.total || 0) / deliveryPageSize)
   )
   const statusLabel = (status: EmailCampaignStatus | string) => {
     const labels: Record<string, string> = {
@@ -661,30 +666,39 @@ export function EmailCampaignsSection() {
             <span className='text-muted-foreground text-sm'>
               {t('Total')} {campaignsQuery.data?.total || 0}
             </span>
-            <div className='flex items-center gap-2'>
-              <Button
-                type='button'
-                variant='outline'
-                size='icon-sm'
-                aria-label={t('Previous')}
-                disabled={page <= 1}
-                onClick={() => setPage((value) => Math.max(1, value - 1))}
-              >
-                <ChevronLeft className='size-4' />
-              </Button>
-              <span className='text-muted-foreground min-w-14 text-center text-sm'>
-                {page} / {totalPages}
-              </span>
-              <Button
-                type='button'
-                variant='outline'
-                size='icon-sm'
-                aria-label={t('Next')}
-                disabled={page >= totalPages}
-                onClick={() => setPage((value) => value + 1)}
-              >
-                <ChevronRight className='size-4' />
-              </Button>
+            <div className='flex flex-wrap items-center gap-3'>
+              <PageSizeSelect
+                value={pageSize}
+                onValueChange={(value) => {
+                  setPageSize(value)
+                  setPage(1)
+                }}
+              />
+              <div className='flex items-center gap-2'>
+                <Button
+                  type='button'
+                  variant='outline'
+                  size='icon-sm'
+                  aria-label={t('Previous')}
+                  disabled={page <= 1}
+                  onClick={() => setPage((value) => Math.max(1, value - 1))}
+                >
+                  <ChevronLeft className='size-4' />
+                </Button>
+                <span className='text-muted-foreground min-w-14 text-center text-sm'>
+                  {page} / {totalPages}
+                </span>
+                <Button
+                  type='button'
+                  variant='outline'
+                  size='icon-sm'
+                  aria-label={t('Next')}
+                  disabled={page >= totalPages}
+                  onClick={() => setPage((value) => value + 1)}
+                >
+                  <ChevronRight className='size-4' />
+                </Button>
+              </div>
             </div>
           </div>
         </div>
@@ -1043,32 +1057,41 @@ export function EmailCampaignsSection() {
                 </TableHeader>
                 <TableBody>{deliveryRows}</TableBody>
               </Table>
-              <div className='bg-muted/30 flex items-center justify-end gap-2 border-t p-3'>
-                <Button
-                  type='button'
-                  variant='outline'
-                  size='icon-sm'
-                  aria-label={t('Previous')}
-                  disabled={deliveryPage <= 1}
-                  onClick={() =>
-                    setDeliveryPage((value) => Math.max(1, value - 1))
-                  }
-                >
-                  <ChevronLeft className='size-4' />
-                </Button>
-                <span className='text-muted-foreground min-w-14 text-center text-sm'>
-                  {deliveryPage} / {deliveryPages}
-                </span>
-                <Button
-                  type='button'
-                  variant='outline'
-                  size='icon-sm'
-                  aria-label={t('Next')}
-                  disabled={deliveryPage >= deliveryPages}
-                  onClick={() => setDeliveryPage((value) => value + 1)}
-                >
-                  <ChevronRight className='size-4' />
-                </Button>
+              <div className='bg-muted/30 flex flex-wrap items-center justify-end gap-3 border-t p-3'>
+                <PageSizeSelect
+                  value={deliveryPageSize}
+                  onValueChange={(value) => {
+                    setDeliveryPageSize(value)
+                    setDeliveryPage(1)
+                  }}
+                />
+                <div className='flex items-center gap-2'>
+                  <Button
+                    type='button'
+                    variant='outline'
+                    size='icon-sm'
+                    aria-label={t('Previous')}
+                    disabled={deliveryPage <= 1}
+                    onClick={() =>
+                      setDeliveryPage((value) => Math.max(1, value - 1))
+                    }
+                  >
+                    <ChevronLeft className='size-4' />
+                  </Button>
+                  <span className='text-muted-foreground min-w-14 text-center text-sm'>
+                    {deliveryPage} / {deliveryPages}
+                  </span>
+                  <Button
+                    type='button'
+                    variant='outline'
+                    size='icon-sm'
+                    aria-label={t('Next')}
+                    disabled={deliveryPage >= deliveryPages}
+                    onClick={() => setDeliveryPage((value) => value + 1)}
+                  >
+                    <ChevronRight className='size-4' />
+                  </Button>
+                </div>
               </div>
             </div>
           </div>

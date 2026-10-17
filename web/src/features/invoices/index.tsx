@@ -52,7 +52,6 @@ import type {
   InvoiceStatus,
 } from './types'
 
-const PAGE_SIZE = 20
 const DEFAULT_INVOICE_SOURCES: InvoiceCredit['source'][] = [
   'online_recharge',
   'redemption',
@@ -67,6 +66,7 @@ export function Invoices() {
   const [creditPage, setCreditPage] = useState(1)
   const [applicationPage, setApplicationPage] = useState(1)
   const [adminPage, setAdminPage] = useState(1)
+  const [pageSize, setPageSize] = useState(20)
   const [selected, setSelected] = useState(new Map<string, InvoiceCredit>())
   const [applyingOpen, setApplyingOpen] = useState(false)
   const [managedApplication, setManagedApplication] =
@@ -75,12 +75,12 @@ export function Invoices() {
     useState<InvoiceApplication | null>(null)
 
   const invoiceQuery = useQuery({
-    queryKey: ['invoice', creditPage, applicationPage],
-    queryFn: () => getInvoiceInfo(creditPage, applicationPage, PAGE_SIZE),
+    queryKey: ['invoice', creditPage, applicationPage, pageSize],
+    queryFn: () => getInvoiceInfo(creditPage, applicationPage, pageSize),
   })
   const adminQuery = useQuery({
-    queryKey: ['invoice', 'admin', adminPage],
-    queryFn: () => getAdminInvoiceApplications(adminPage, PAGE_SIZE),
+    queryKey: ['invoice', 'admin', adminPage, pageSize],
+    queryFn: () => getAdminInvoiceApplications(adminPage, pageSize),
     enabled: isAdmin,
   })
   const applyMutation = useMutation({
@@ -209,6 +209,12 @@ export function Invoices() {
       ),
     [allowedSources, selected]
   )
+  const handlePageSizeChange = (value: number) => {
+    setPageSize(value)
+    setCreditPage(1)
+    setApplicationPage(1)
+    setAdminPage(1)
+  }
 
   if (eligibleSelected.size !== selected.size) {
     setSelected(eligibleSelected)
@@ -308,7 +314,7 @@ export function Invoices() {
                   credits={data?.credits ?? []}
                   total={data?.credits_total ?? 0}
                   page={creditPage}
-                  pageSize={data?.page_size ?? PAGE_SIZE}
+                  pageSize={data?.page_size ?? pageSize}
                   unit={data?.unit ?? 'USD'}
                   minimumAmount={data?.minimum_amount ?? 0}
                   enabled={data?.enabled ?? false}
@@ -321,6 +327,7 @@ export function Invoices() {
                   onApply={() => setApplyingOpen(true)}
                   onRefresh={() => invoiceQuery.refetch()}
                   onPageChange={setCreditPage}
+                  onPageSizeChange={handlePageSizeChange}
                 />
 
                 <ApplicationsTable
@@ -331,8 +338,9 @@ export function Invoices() {
                   applications={data?.applications ?? []}
                   total={data?.applications_total ?? 0}
                   page={applicationPage}
-                  pageSize={data?.page_size ?? PAGE_SIZE}
+                  pageSize={data?.page_size ?? pageSize}
                   onPageChange={setApplicationPage}
+                  onPageSizeChange={handlePageSizeChange}
                   onCancel={setCancellingApplication}
                   onDownload={(application) =>
                     downloadMutation.mutate(application)
@@ -358,9 +366,10 @@ export function Invoices() {
                     applications={adminData.items}
                     total={adminData.total}
                     page={adminPage}
-                    pageSize={adminData.page_size ?? PAGE_SIZE}
+                    pageSize={adminData.page_size ?? pageSize}
                     admin
                     onPageChange={setAdminPage}
+                    onPageSizeChange={handlePageSizeChange}
                     onManage={setManagedApplication}
                     onDownload={(application) =>
                       downloadMutation.mutate(application)

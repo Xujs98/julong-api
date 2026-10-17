@@ -22,6 +22,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { PageSizeSelect } from '@/components/data-table'
 import { StatusBadge } from '@/components/status-badge'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
@@ -83,7 +84,6 @@ import { UserRiskPanel } from './user-risk-panel'
 import { useUsers } from './users-provider'
 
 const RECENT_LOG_LIMIT = 20
-const QUOTA_DETAIL_PAGE_SIZE = 10
 const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000
 
 function getDaysSinceLastLogin(timestamp?: number) {
@@ -176,17 +176,18 @@ function getQuotaSourceLabel(source: string, t: TFunction) {
 function QuotaDetailsPanel(props: { userId?: number }) {
   const { t } = useTranslation()
   const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
   const query = useQuery({
-    queryKey: ['admin-user-quota-increases', props.userId, page],
+    queryKey: ['admin-user-quota-increases', props.userId, page, pageSize],
     enabled: Boolean(props.userId),
     queryFn: async () => {
       if (!props.userId) {
-        return { items: [], total: 0, page, page_size: QUOTA_DETAIL_PAGE_SIZE }
+        return { items: [], total: 0, page, page_size: pageSize }
       }
       const result = await getUserQuotaIncreaseLogs(
         props.userId,
         page,
-        QUOTA_DETAIL_PAGE_SIZE
+        pageSize
       )
       if (!result.success) throw new Error(result.message || 'Load failed')
       return (
@@ -194,17 +195,14 @@ function QuotaDetailsPanel(props: { userId?: number }) {
           items: [],
           total: 0,
           page,
-          page_size: QUOTA_DETAIL_PAGE_SIZE,
+          page_size: pageSize,
         }
       )
     },
     placeholderData: (previousData) => previousData,
   })
   const records = query.data?.items || []
-  const totalPages = Math.max(
-    1,
-    Math.ceil((query.data?.total || 0) / QUOTA_DETAIL_PAGE_SIZE)
-  )
+  const totalPages = Math.max(1, Math.ceil((query.data?.total || 0) / pageSize))
 
   if (query.isLoading) {
     return (
@@ -268,33 +266,42 @@ function QuotaDetailsPanel(props: { userId?: number }) {
         </Table>
       </div>
       {totalPages > 1 && (
-        <div className='flex items-center justify-end gap-2'>
-          <span className='text-muted-foreground text-xs tabular-nums'>
-            {t('Page {{current}} of {{total}}', {
-              current: page,
-              total: totalPages,
-            })}
-          </span>
-          <Button
-            size='icon-sm'
-            variant='outline'
-            disabled={page <= 1 || query.isFetching}
-            aria-label={t('Previous')}
-            onClick={() => setPage((current) => Math.max(1, current - 1))}
-          >
-            <ChevronLeft />
-          </Button>
-          <Button
-            size='icon-sm'
-            variant='outline'
-            disabled={page >= totalPages || query.isFetching}
-            aria-label={t('Next')}
-            onClick={() =>
-              setPage((current) => Math.min(totalPages, current + 1))
-            }
-          >
-            <ChevronRight />
-          </Button>
+        <div className='flex flex-wrap items-center justify-end gap-3'>
+          <PageSizeSelect
+            value={pageSize}
+            onValueChange={(value) => {
+              setPageSize(value)
+              setPage(1)
+            }}
+          />
+          <div className='flex items-center gap-2'>
+            <span className='text-muted-foreground text-xs tabular-nums'>
+              {t('Page {{current}} of {{total}}', {
+                current: page,
+                total: totalPages,
+              })}
+            </span>
+            <Button
+              size='icon-sm'
+              variant='outline'
+              disabled={page <= 1 || query.isFetching}
+              aria-label={t('Previous')}
+              onClick={() => setPage((current) => Math.max(1, current - 1))}
+            >
+              <ChevronLeft />
+            </Button>
+            <Button
+              size='icon-sm'
+              variant='outline'
+              disabled={page >= totalPages || query.isFetching}
+              aria-label={t('Next')}
+              onClick={() =>
+                setPage((current) => Math.min(totalPages, current + 1))
+              }
+            >
+              <ChevronRight />
+            </Button>
+          </div>
         </div>
       )}
     </div>

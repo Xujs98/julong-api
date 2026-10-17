@@ -3,6 +3,7 @@ import { Bug, ChevronLeft, ChevronRight, Eye } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { PageSizeSelect } from '@/components/data-table'
 import { SectionPageLayout } from '@/components/layout'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -26,8 +27,6 @@ import { formatTimestampToDate } from '@/lib/format'
 import { getErrorReport, getErrorReports } from './api'
 import type { ErrorReport } from './types'
 
-const PAGE_SIZE = 20
-
 function getReportTitle(report: ErrorReport, fallback: string) {
   return report.title || report.message.slice(0, 60) || fallback
 }
@@ -50,16 +49,17 @@ function DetailRow({
 export function ErrorReports() {
   const { t } = useTranslation()
   const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(20)
   const [selectedId, setSelectedId] = useState<number | null>(null)
 
   const { data, isLoading, isFetching } = useQuery({
-    queryKey: ['error-reports', page],
+    queryKey: ['error-reports', page, pageSize],
     queryFn: async () => {
-      const result = await getErrorReports({ p: page, page_size: PAGE_SIZE })
+      const result = await getErrorReports({ p: page, page_size: pageSize })
       if (!result.success) {
         throw new Error(result.message || t('Failed to load error reports.'))
       }
-      return result.data || { items: [], total: 0, page, page_size: PAGE_SIZE }
+      return result.data || { items: [], total: 0, page, page_size: pageSize }
     },
     placeholderData: (previousData) => previousData,
   })
@@ -79,7 +79,7 @@ export function ErrorReports() {
 
   const reports = data?.items || []
   const total = data?.total || 0
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
+  const totalPages = Math.max(1, Math.ceil(total / pageSize))
   const selectedReport = detailQuery.data
   let reportRows: ReactNode
   if (isLoading) {
@@ -159,7 +159,14 @@ export function ErrorReports() {
                 {t('Total')} {total}
                 {isFetching ? ` · ${t('Refreshing...')}` : ''}
               </div>
-              <div className='flex items-center justify-end gap-2'>
+              <div className='flex flex-wrap items-center justify-end gap-3'>
+                <PageSizeSelect
+                  value={pageSize}
+                  onValueChange={(value) => {
+                    setPageSize(value)
+                    setPage(1)
+                  }}
+                />
                 <Button
                   variant='outline'
                   size='sm'

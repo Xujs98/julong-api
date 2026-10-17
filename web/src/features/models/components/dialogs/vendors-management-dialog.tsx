@@ -20,7 +20,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { StaticDataTable } from '@/components/data-table'
+import { PageSizeSelect, StaticDataTable } from '@/components/data-table'
 import { Dialog } from '@/components/dialog'
 import { ErrorState } from '@/components/error-state'
 import { LoadingState } from '@/components/loading-state'
@@ -41,13 +41,18 @@ export function VendorsManagementDialog(props: {
   const { t } = useTranslation()
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(20)
   const [editing, setEditing] = useState(false)
   const [vendor, setVendor] = useState<Vendor | null>(null)
   const keyword = useDebounce(search, 250)
   const query = useQuery({
-    queryKey: vendorsQueryKeys.list({ keyword, p: page }),
+    queryKey: vendorsQueryKeys.list({ keyword, p: page, page_size: pageSize }),
     queryFn: async () => {
-      const response = await searchVendors({ keyword, p: page, page_size: 20 })
+      const response = await searchVendors({
+        keyword,
+        p: page,
+        page_size: pageSize,
+      })
       if (!response.success || !response.data) {
         throw createServerError(response, t('Failed to load vendors'))
       }
@@ -57,7 +62,9 @@ export function VendorsManagementDialog(props: {
   })
   useEffect(() => {
     if (props.open) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSearch('')
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setPage(1)
     }
   }, [props.open])
@@ -135,24 +142,33 @@ export function VendorsManagementDialog(props: {
               ]}
             />
           )}
-          <div className='flex items-center justify-end gap-3'>
-            <Button
-              variant='outline'
-              size='sm'
-              disabled={page === 1}
-              onClick={() => setPage(page - 1)}
-            >
-              {t('Previous')}
-            </Button>
-            <span className='text-sm'>{page}</span>
-            <Button
-              variant='outline'
-              size='sm'
-              disabled={page * 20 >= (query.data?.total ?? 0)}
-              onClick={() => setPage(page + 1)}
-            >
-              {t('Next')}
-            </Button>
+          <div className='flex flex-wrap items-center justify-end gap-3'>
+            <PageSizeSelect
+              value={pageSize}
+              onValueChange={(value) => {
+                setPageSize(value)
+                setPage(1)
+              }}
+            />
+            <div className='flex items-center gap-3'>
+              <Button
+                variant='outline'
+                size='sm'
+                disabled={page === 1}
+                onClick={() => setPage(page - 1)}
+              >
+                {t('Previous')}
+              </Button>
+              <span className='text-sm'>{page}</span>
+              <Button
+                variant='outline'
+                size='sm'
+                disabled={page * pageSize >= (query.data?.total ?? 0)}
+                onClick={() => setPage(page + 1)}
+              >
+                {t('Next')}
+              </Button>
+            </div>
           </div>
         </div>
       </Dialog>

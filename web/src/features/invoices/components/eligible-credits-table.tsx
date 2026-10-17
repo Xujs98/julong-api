@@ -58,6 +58,7 @@ export function EligibleCreditsTable(props: {
   onApply: () => void
   onRefresh: () => void
   onPageChange: (page: number) => void
+  onPageSizeChange?: (pageSize: number) => void
 }) {
   const { t } = useTranslation()
   const [now, setNow] = useState(() => Math.floor(Date.now() / 1000))
@@ -244,6 +245,7 @@ export function EligibleCreditsTable(props: {
           pageSize={props.pageSize}
           total={props.total}
           onPageChange={props.onPageChange}
+          onPageSizeChange={props.onPageSizeChange}
         />
       </CardContent>
     </Card>

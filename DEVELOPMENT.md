@@ -1284,7 +1284,7 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 | 分组 | 文件 | 用途 | 依赖 | 状态 |
 | --- | --- | --- | --- | --- |
 | UI primitives | `ui/accordion.tsx`、`alert-dialog.tsx`、`alert.tsx`、`aspect-ratio.tsx`、`avatar.tsx`、`badge.tsx`、`breadcrumb.tsx`、`button.tsx`、`button-group.tsx`、`calendar.tsx`、`card.tsx`、`carousel.tsx`、`chart.tsx`、`checkbox.tsx`、`collapsible.tsx`、`combobox.tsx`、`combobox-input.tsx`、`command.tsx`、`context-menu.tsx`、`dialog.tsx`、`drawer.tsx`、`empty.tsx`、`field.tsx`、`form.tsx`、`hover-card.tsx`、`input.tsx`、`input-group.tsx`、`input-otp.tsx`、`item.tsx`、`kbd.tsx`、`label.tsx`、`markdown.tsx`、`menubar.tsx`、`native-select.tsx`、`navigation-menu.tsx`、`pagination.tsx`、`popover.tsx`、`progress.tsx`、`radio-group.tsx`、`resizable.tsx`、`scroll-area.tsx`、`select.tsx`、`separator.tsx`、`sheet.tsx`、`sidebar.tsx`、`skeleton.tsx`、`slider.tsx`、`sonner.tsx`、`spinner.tsx`、`switch.tsx`、`table.tsx`、`tabs.tsx`、`textarea.tsx`、`titled-card.tsx`、`toggle.tsx`、`toggle-group.tsx`、`tooltip.tsx` | 可复用设计系统 primitives。关键参数通常透传到底层 Base UI/Radix-like primitive 并支持 `className`；Button 支持 variants/sizes/render/nativeButton。 | Base UI、Hugeicons/lucide、Tailwind、`cn` | 完成 |
-| Data table | `data-table/core/*`、`data-table/layout/*`、`data-table/toolbar/*`、`data-table/hooks/*`、`data-table/static/*` | 响应式表格系统：桌面表格、移动卡片、分页、工具栏、过滤器、筛选项后扩展位、视图模式、批量操作。 | TanStack Table、media query hooks、UI primitives | 完成 |
+| Data table | `data-table/core/*`、`data-table/layout/*`、`data-table/toolbar/*`、`data-table/hooks/*`、`data-table/static/*` | 响应式表格系统：桌面表格、移动卡片、分页、工具栏、过滤器、筛选项后扩展位、视图模式、批量操作；`DataTablePagination` 和 `PageSizeSelect` 统一读取系统 `PageSizeOptions`。 | TanStack Table、media query hooks、UI primitives | 完成 |
 | Layout | `layout/components/*`、`layout/config/*`、`layout/lib/*`、`layout/types.ts` | 登录后/公开布局、侧边栏、顶部导航、SectionPageLayout、系统品牌。 | TanStack Router、sidebar config hooks、auth store | 完成 |
 | AI elements | `ai-elements/*` | Playground/chat 响应渲染、prompt input、artifact、reasoning、tool、sources、code block。 | React、markdown/shiki、AI SDK 风格组件 | 完成 |
 | Utility widgets | `announcement-popup.tsx`、`copy-button.tsx`、`confirm-dialog.tsx`、`date-picker.tsx`、`datetime-picker.tsx`、`empty-state.tsx`、`error-state.tsx`、`group-badge.tsx`、`json-editor.tsx`、`json-code-editor.tsx`、`language-switcher.tsx`、`long-text.tsx`、`masked-value-display.tsx`、`model-group-selector.tsx`、`multi-select.tsx`、`password-input.tsx`、`profile-dropdown.tsx`、`provider-badge.tsx`、`status-badge.tsx`、`table-id.tsx`、`tag-input.tsx`、`text-replacement-editor.tsx`、`theme-switch.tsx`、`turnstile.tsx` | 跨功能控件和显示组件；`AnnouncementPopup` 读取 `/api/announcements`，仅弹出 `notificationMode=popup` 的公告，并按登录用户和公告内容签名在 localStorage 记录关闭状态；`TextReplacementEditor` 提供 request/response 规则的可视化逐行编辑、JSON 编辑和结构校验。 | UI primitives、React Query、auth store、i18n、本地格式化工具 | 完成 |
@@ -1598,6 +1598,13 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 ```
 
 ## 变更日志
+
+### 2026-10-17 PageSizeOptions 分页组件回归与构建核对（B27）
+
+- 共享 `DataTablePagination` 的普通和 compact 布局均显示系统配置的每页行数选择器；新增共享 `PageSizeSelect` 供发票、账本、模型、邮件、封禁 IP、用户额度明细和定价列表复用。
+- 发票申请、账本和多 Key 管理继续沿用 `/api/status.page_size_options`，无效的当前页大小回退到配置首项；保留旧发票分页调用的兼容行为。
+- 无新增 API、数据库表或迁移；组件清单与前端功能模块已同步。
+- 验证：受影响的 17 个 TS/TSX 文件 `oxlint` 通过，定向 Vitest 31 项、`pnpm run typecheck` 和 Rsbuild 生产构建通过；全量 Go 的既有计费矩阵失败与生产未部署边界记录在 `PROJECT_PROGRESS.md`。
 
 ### 2026-10-17 全局每页行数配置（B26）
 

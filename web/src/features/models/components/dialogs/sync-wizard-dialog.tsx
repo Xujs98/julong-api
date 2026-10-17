@@ -20,7 +20,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { StaticDataTable } from '@/components/data-table'
+import { PageSizeSelect, StaticDataTable } from '@/components/data-table'
 import { Dialog } from '@/components/dialog'
 import { EmptyState } from '@/components/empty-state'
 import { ErrorState } from '@/components/error-state'
@@ -73,8 +73,6 @@ const STEPS = [
   'Confirm changes',
   'Sync results',
 ]
-const PAGE_SIZE = 20
-
 function isMetadataSyncable(item: MetadataSyncCandidate) {
   return item.kind === 'create' || item.kind === 'update'
 }
@@ -92,6 +90,7 @@ export function SyncWizardDialog(props: {
   const [onlySyncable, setOnlySyncable] = useState(false)
   const [step, setStep] = useState(0)
   const [page, setPage] = useState(0)
+  const [pageSize, setPageSize] = useState(20)
   const [selection, setSelection] = useState<
     Record<string, MetadataSyncField[]>
   >({})
@@ -181,11 +180,11 @@ export function SyncWizardDialog(props: {
     () => new Set(candidates.map((item) => item.model_name)),
     [candidates]
   )
-  const pageCount = Math.max(1, Math.ceil(candidates.length / PAGE_SIZE))
+  const pageCount = Math.max(1, Math.ceil(candidates.length / pageSize))
   const currentPage = Math.min(page, pageCount - 1)
   const pageCandidates = candidates.slice(
-    currentPage * PAGE_SIZE,
-    (currentPage + 1) * PAGE_SIZE
+    currentPage * pageSize,
+    (currentPage + 1) * pageSize
   )
   const pageSyncable = pageCandidates.filter(isMetadataSyncable)
   const pageSelectedCount = pageSyncable.filter((item) =>
@@ -626,7 +625,14 @@ export function SyncWizardDialog(props: {
                   },
                 ]}
               />
-              <div className='flex items-center justify-end gap-3 text-sm'>
+              <div className='flex flex-wrap items-center justify-end gap-3 text-sm'>
+                <PageSizeSelect
+                  value={pageSize}
+                  onValueChange={(value) => {
+                    setPageSize(value)
+                    setPage(0)
+                  }}
+                />
                 <span>
                   {t('{{count}} models', { count: candidates.length })}
                 </span>

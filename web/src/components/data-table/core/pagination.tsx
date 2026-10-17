@@ -83,6 +83,29 @@ export function DataTablePagination<TData>({
           {t('Total:')} {totalRows.toLocaleString()}
         </span>
         <div className='flex items-center gap-2'>
+          <Select
+            items={pageSizeSelectItems}
+            value={`${effectivePageSize}`}
+            onValueChange={(value) => {
+              table.setPageSize(Number(value))
+            }}
+          >
+            <SelectTrigger
+              aria-label={t('Rows per page')}
+              className='text-foreground h-8 w-[64px] font-medium tabular-nums'
+            >
+              <SelectValue placeholder={pageSize} />
+            </SelectTrigger>
+            <SelectContent side='top' alignItemWithTrigger={false}>
+              <SelectGroup>
+                {pageSizeOptions.map((option) => (
+                  <SelectItem key={option} value={`${option}`}>
+                    {option}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
           <Button
             variant='outline'
             size='icon'

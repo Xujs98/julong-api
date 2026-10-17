@@ -21,6 +21,7 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { ConfirmDialog } from '@/components/confirm-dialog'
+import { PageSizeSelect } from '@/components/data-table'
 import { EmptyState } from '@/components/empty-state'
 import { ErrorState } from '@/components/error-state'
 import { LoadingState } from '@/components/loading-state'
@@ -33,12 +34,12 @@ import { requireServerSuccess } from '@/lib/server-error-message'
 type BlockedIP = { id: number; ip: string; user_id: number; reason: string }
 type BlockPage = { items: BlockedIP[]; total: number }
 const queryKey = ['site-blocked-ips'] as const
-const pageSize = 20
 
 export function SiteBlockedIPs() {
   const { t } = useTranslation()
   const client = useQueryClient()
   const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(20)
   const [input, setInput] = useState('')
   const [search, setSearch] = useState('')
   const [pending, setPending] = useState<{
@@ -46,7 +47,7 @@ export function SiteBlockedIPs() {
     blocked: boolean
   } | null>(null)
   const list = useQuery({
-    queryKey: [...queryKey, page, search],
+    queryKey: [...queryKey, page, pageSize, search],
     queryFn: async () => {
       const response = await api.get('/api/option/site_blocked_ips', {
         params: { p: page, page_size: pageSize, ip: search },
@@ -162,25 +163,36 @@ export function SiteBlockedIPs() {
           ))}
         </ul>
       )}
-      <div className='flex justify-end gap-2'>
-        <Button
-          type='button'
-          variant='outline'
-          disabled={page === 1 || list.isFetching}
-          onClick={() => setPage((current) => current - 1)}
-        >
-          {t('Previous')}
-        </Button>
-        <Button
-          type='button'
-          variant='outline'
-          disabled={
-            !list.data || page * pageSize >= list.data.total || list.isFetching
-          }
-          onClick={() => setPage((current) => current + 1)}
-        >
-          {t('Next')}
-        </Button>
+      <div className='flex flex-wrap items-center justify-end gap-3'>
+        <PageSizeSelect
+          value={pageSize}
+          onValueChange={(value) => {
+            setPageSize(value)
+            setPage(1)
+          }}
+        />
+        <div className='flex gap-2'>
+          <Button
+            type='button'
+            variant='outline'
+            disabled={page === 1 || list.isFetching}
+            onClick={() => setPage((current) => current - 1)}
+          >
+            {t('Previous')}
+          </Button>
+          <Button
+            type='button'
+            variant='outline'
+            disabled={
+              !list.data ||
+              page * pageSize >= list.data.total ||
+              list.isFetching
+            }
+            onClick={() => setPage((current) => current + 1)}
+          >
+            {t('Next')}
+          </Button>
+        </div>
       </div>
       <ConfirmDialog
         open={pending !== null}

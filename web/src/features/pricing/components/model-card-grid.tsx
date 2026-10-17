@@ -21,6 +21,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { memo, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { PageSizeSelect } from '@/components/data-table'
 import { Button } from '@/components/ui/button'
 import { getPerfMetricsSummary } from '@/features/performance-metrics/api'
 import { requireServerSuccess } from '@/lib/server-error-message'
@@ -45,7 +46,7 @@ export const ModelCardGrid = memo(function ModelCardGrid(
 ) {
   const { t } = useTranslation()
   const [page, setPage] = useState(1)
-  const pageSize = DEFAULT_PRICING_PAGE_SIZE
+  const [pageSize, setPageSize] = useState(DEFAULT_PRICING_PAGE_SIZE)
   const tokenUnit = props.tokenUnit ?? DEFAULT_TOKEN_UNIT
   const totalPages = Math.max(1, Math.ceil(props.models.length / pageSize))
   const currentPage = Math.min(page, totalPages)
@@ -117,31 +118,40 @@ export const ModelCardGrid = memo(function ModelCardGrid(
               total: totalPages,
             })}
           </p>
-          <div className='flex items-center gap-2'>
-            <Button
-              type='button'
-              variant='outline'
-              size='sm'
-              onClick={() => setPage((current) => Math.max(1, current - 1))}
-              disabled={currentPage <= 1}
-              className='gap-1.5'
-            >
-              <ChevronLeft className='size-4' />
-              {t('Previous page')}
-            </Button>
-            <Button
-              type='button'
-              variant='outline'
-              size='sm'
-              onClick={() =>
-                setPage((current) => Math.min(totalPages, current + 1))
-              }
-              disabled={currentPage >= totalPages}
-              className='gap-1.5'
-            >
-              {t('Next page')}
-              <ChevronRight className='size-4' />
-            </Button>
+          <div className='flex flex-wrap items-center justify-center gap-3'>
+            <PageSizeSelect
+              value={pageSize}
+              onValueChange={(value) => {
+                setPageSize(value)
+                setPage(1)
+              }}
+            />
+            <div className='flex items-center gap-2'>
+              <Button
+                type='button'
+                variant='outline'
+                size='sm'
+                onClick={() => setPage((current) => Math.max(1, current - 1))}
+                disabled={currentPage <= 1}
+                className='gap-1.5'
+              >
+                <ChevronLeft className='size-4' />
+                {t('Previous page')}
+              </Button>
+              <Button
+                type='button'
+                variant='outline'
+                size='sm'
+                onClick={() =>
+                  setPage((current) => Math.min(totalPages, current + 1))
+                }
+                disabled={currentPage >= totalPages}
+                className='gap-1.5'
+              >
+                {t('Next page')}
+                <ChevronRight className='size-4' />
+              </Button>
+            </div>
           </div>
         </div>
       )}

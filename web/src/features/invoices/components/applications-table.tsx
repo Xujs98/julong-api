@@ -53,6 +53,7 @@ export function ApplicationsTable(props: {
   pageSize: number
   admin?: boolean
   onPageChange: (page: number) => void
+  onPageSizeChange?: (pageSize: number) => void
   onManage?: (application: InvoiceApplication) => void
   onCancel?: (application: InvoiceApplication) => void
   onDownload?: (application: InvoiceApplication) => void
@@ -172,6 +173,7 @@ export function ApplicationsTable(props: {
           pageSize={props.pageSize}
           total={props.total}
           onPageChange={props.onPageChange}
+          onPageSizeChange={props.onPageSizeChange}
         />
       </CardContent>
     </Card>

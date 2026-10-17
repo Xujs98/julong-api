@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
+import { PageSizeSelect } from '@/components/data-table'
 import { Button } from '@/components/ui/button'
 
 export function InvoicePagination(props: {
@@ -26,6 +27,7 @@ export function InvoicePagination(props: {
   pageSize: number
   total: number
   onPageChange: (page: number) => void
+  onPageSizeChange?: (pageSize: number) => void
 }) {
   const { t } = useTranslation()
   const pageCount = Math.max(1, Math.ceil(props.total / props.pageSize))
@@ -41,28 +43,36 @@ export function InvoicePagination(props: {
           total: props.total,
         })}
       </p>
-      <div className='flex items-center gap-1'>
-        <Button
-          variant='outline'
-          size='icon-sm'
-          aria-label={t('Previous page')}
-          disabled={props.page <= 1}
-          onClick={() => props.onPageChange(props.page - 1)}
-        >
-          <ChevronLeft />
-        </Button>
-        <span className='border-primary text-primary flex h-8 min-w-10 items-center justify-center border px-2 text-sm'>
-          {props.page}
-        </span>
-        <Button
-          variant='outline'
-          size='icon-sm'
-          aria-label={t('Next page')}
-          disabled={props.page >= pageCount}
-          onClick={() => props.onPageChange(props.page + 1)}
-        >
-          <ChevronRight />
-        </Button>
+      <div className='flex flex-wrap items-center gap-3'>
+        {props.onPageSizeChange && (
+          <PageSizeSelect
+            value={props.pageSize}
+            onValueChange={props.onPageSizeChange}
+          />
+        )}
+        <div className='flex items-center gap-1'>
+          <Button
+            variant='outline'
+            size='icon-sm'
+            aria-label={t('Previous page')}
+            disabled={props.page <= 1}
+            onClick={() => props.onPageChange(props.page - 1)}
+          >
+            <ChevronLeft />
+          </Button>
+          <span className='border-primary text-primary flex h-8 min-w-10 items-center justify-center border px-2 text-sm'>
+            {props.page}
+          </span>
+          <Button
+            variant='outline'
+            size='icon-sm'
+            aria-label={t('Next page')}
+            disabled={props.page >= pageCount}
+            onClick={() => props.onPageChange(props.page + 1)}
+          >
+            <ChevronRight />
+          </Button>
+        </div>
       </div>
     </div>
   )

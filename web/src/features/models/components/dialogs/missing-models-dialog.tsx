@@ -21,6 +21,7 @@ import { ChevronLeft, ChevronRight, Plus, Search } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { PageSizeSelect } from '@/components/data-table'
 import { Dialog } from '@/components/dialog'
 import { ErrorState } from '@/components/error-state'
 import { LoadingState } from '@/components/loading-state'
@@ -57,6 +58,7 @@ export function MissingModelsDialog({
   const isMobile = useIsMobile()
   const [searchTerm, setSearchTerm] = useState('')
   const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
 
   const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: modelsQueryKeys.missing(),
@@ -71,7 +73,6 @@ export function MissingModelsDialog({
   })
 
   const missingModels = useMemo(() => data?.data || [], [data?.data])
-  const pageSize = DEFAULT_PAGE_SIZE
 
   const handleConfigureModel = (modelName: string) => {
     setCurrentRow({ model_name: modelName } as unknown as Model)
@@ -213,41 +214,52 @@ export function MissingModelsDialog({
                 ))}
               </div>
 
-              <div className='bg-muted/40 flex items-center justify-between border-t px-3 py-2 text-sm'>
+              <div className='bg-muted/40 flex flex-wrap items-center justify-between gap-3 border-t px-3 py-2 text-sm'>
                 <div className='text-muted-foreground text-sm'>
                   {t('Page {{current}} of {{total}}', {
                     current: currentPage,
                     total: totalPages,
                   })}
                 </div>
-                {showPagination && (
-                  <div className='flex items-center gap-2'>
-                    <Button
-                      variant='outline'
-                      size='icon'
-                      className='h-8 w-8'
-                      onClick={() =>
-                        setCurrentPage((prev) => Math.max(1, prev - 1))
-                      }
-                      disabled={currentPage === 1}
-                      aria-label={t('Previous page')}
-                    >
-                      <ChevronLeft className='h-4 w-4' />
-                    </Button>
-                    <Button
-                      variant='outline'
-                      size='icon'
-                      className='h-8 w-8'
-                      onClick={() =>
-                        setCurrentPage((prev) => Math.min(totalPages, prev + 1))
-                      }
-                      disabled={currentPage === totalPages}
-                      aria-label={t('Next page')}
-                    >
-                      <ChevronRight className='h-4 w-4' />
-                    </Button>
-                  </div>
-                )}
+                <div className='flex flex-wrap items-center gap-3'>
+                  <PageSizeSelect
+                    value={pageSize}
+                    onValueChange={(value) => {
+                      setPageSize(value)
+                      setCurrentPage(1)
+                    }}
+                  />
+                  {showPagination && (
+                    <div className='flex items-center gap-2'>
+                      <Button
+                        variant='outline'
+                        size='icon'
+                        className='h-8 w-8'
+                        onClick={() =>
+                          setCurrentPage((prev) => Math.max(1, prev - 1))
+                        }
+                        disabled={currentPage === 1}
+                        aria-label={t('Previous page')}
+                      >
+                        <ChevronLeft className='h-4 w-4' />
+                      </Button>
+                      <Button
+                        variant='outline'
+                        size='icon'
+                        className='h-8 w-8'
+                        onClick={() =>
+                          setCurrentPage((prev) =>
+                            Math.min(totalPages, prev + 1)
+                          )
+                        }
+                        disabled={currentPage === totalPages}
+                        aria-label={t('Next page')}
+                      >
+                        <ChevronRight className='h-4 w-4' />
+                      </Button>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           )}

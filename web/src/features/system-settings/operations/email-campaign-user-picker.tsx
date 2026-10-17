@@ -27,6 +27,7 @@ import {
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { PageSizeSelect } from '@/components/data-table'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -52,7 +53,6 @@ import {
   type EmailCampaignUserOption,
 } from './email-campaigns-api'
 
-const USER_PAGE_SIZE = 20
 const MAX_VISIBLE_SELECTED_USERS = 8
 const EMPTY_USERS: EmailCampaignUserOption[] = []
 
@@ -75,6 +75,7 @@ export function EmailCampaignUserPicker(props: EmailCampaignUserPickerProps) {
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(20)
   const debouncedSearch = useDebounce(search.trim(), 300)
   const queryKeyPrefix = props.queryKeyPrefix ?? 'email-campaign'
   const searchUsersFn = props.searchUsers ?? searchEmailCampaignUsers
@@ -86,21 +87,22 @@ export function EmailCampaignUserPicker(props: EmailCampaignUserPickerProps) {
   )
 
   const searchQuery = useQuery({
-    queryKey: [`${queryKeyPrefix}-user-search`, debouncedSearch, page],
+    queryKey: [
+      `${queryKeyPrefix}-user-search`,
+      debouncedSearch,
+      page,
+      pageSize,
+    ],
     enabled: open,
     queryFn: async () => {
-      const response = await searchUsersFn(
-        debouncedSearch,
-        page,
-        USER_PAGE_SIZE
-      )
+      const response = await searchUsersFn(debouncedSearch, page, pageSize)
       if (!response.success) {
         throw new Error(response.message || t('Failed to search users'))
       }
       return (
         response.data || {
           page,
-          page_size: USER_PAGE_SIZE,
+          page_size: pageSize,
           total: 0,
           items: [],
         }
@@ -130,7 +132,7 @@ export function EmailCampaignUserPicker(props: EmailCampaignUserPickerProps) {
   }, [searchUsers, selectedUsersQuery.data])
   const totalPages = Math.max(
     1,
-    Math.ceil((searchQuery.data?.total || 0) / USER_PAGE_SIZE)
+    Math.ceil((searchQuery.data?.total || 0) / pageSize)
   )
 
   const toggleUser = (userID: number) => {
@@ -252,30 +254,39 @@ export function EmailCampaignUserPicker(props: EmailCampaignUserPickerProps) {
             <span className='text-muted-foreground text-xs'>
               {t('Total')} {searchQuery.data?.total || 0}
             </span>
-            <div className='flex items-center gap-2'>
-              <Button
-                type='button'
-                variant='outline'
-                size='icon-sm'
-                aria-label={t('Previous')}
-                disabled={page <= 1 || searchQuery.isFetching}
-                onClick={() => setPage((value) => Math.max(1, value - 1))}
-              >
-                <ChevronLeft className='size-4' />
-              </Button>
-              <span className='text-muted-foreground min-w-14 text-center text-xs tabular-nums'>
-                {page} / {totalPages}
-              </span>
-              <Button
-                type='button'
-                variant='outline'
-                size='icon-sm'
-                aria-label={t('Next')}
-                disabled={page >= totalPages || searchQuery.isFetching}
-                onClick={() => setPage((value) => value + 1)}
-              >
-                <ChevronRight className='size-4' />
-              </Button>
+            <div className='flex flex-wrap items-center gap-3'>
+              <PageSizeSelect
+                value={pageSize}
+                onValueChange={(value) => {
+                  setPageSize(value)
+                  setPage(1)
+                }}
+              />
+              <div className='flex items-center gap-2'>
+                <Button
+                  type='button'
+                  variant='outline'
+                  size='icon-sm'
+                  aria-label={t('Previous')}
+                  disabled={page <= 1 || searchQuery.isFetching}
+                  onClick={() => setPage((value) => Math.max(1, value - 1))}
+                >
+                  <ChevronLeft className='size-4' />
+                </Button>
+                <span className='text-muted-foreground min-w-14 text-center text-xs tabular-nums'>
+                  {page} / {totalPages}
+                </span>
+                <Button
+                  type='button'
+                  variant='outline'
+                  size='icon-sm'
+                  aria-label={t('Next')}
+                  disabled={page >= totalPages || searchQuery.isFetching}
+                  onClick={() => setPage((value) => value + 1)}
+                >
+                  <ChevronRight className='size-4' />
+                </Button>
+              </div>
             </div>
           </div>
         </PopoverContent>
