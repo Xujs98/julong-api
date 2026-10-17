@@ -36,6 +36,7 @@ import {
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
+import { isValidPageSizeOptionsString } from '@/lib/page-size-options'
 
 import { deleteSiteLogo, uploadSiteLogo } from '../api'
 import { FormDirtyIndicator } from '../components/form-dirty-indicator'
@@ -72,6 +73,7 @@ const _systemInfoSchema = z.object({
       message: 'Invalid task public address',
     }),
   ServerAddress: z.string().optional(),
+  PageSizeOptions: z.string().refine(isValidPageSizeOptionsString),
   Logo: z.string().refine(isValidLogoURL),
   Footer: z.string().optional(),
   About: z.string().optional(),
@@ -102,11 +104,11 @@ export function SystemInfoSection({ defaultValues }: SystemInfoSectionProps) {
   const logoFileInputRef = useRef<HTMLInputElement>(null)
   const [pendingLogoFile, setPendingLogoFile] = useState<File | null>(null)
   const [pendingLogoPreview, setPendingLogoPreview] = useState('')
-  const [logoPreviewFailed, setLogoPreviewFailed] = useState(false)
 
   const normalizedDefaults: SystemInfoFormValues = {
     SystemName: normalizeValue(defaultValues.SystemName),
     ServerAddress: normalizeValue(defaultValues.ServerAddress),
+    PageSizeOptions: normalizeValue(defaultValues.PageSizeOptions),
     TaskPublicAddress: normalizeValue(defaultValues.TaskPublicAddress),
     Logo: normalizeValue(defaultValues.Logo),
     Footer: normalizeValue(defaultValues.Footer),
@@ -131,6 +133,9 @@ export function SystemInfoSection({ defaultValues }: SystemInfoSectionProps) {
         message: t('Invalid task public address'),
       }),
     ServerAddress: z.string().optional(),
+    PageSizeOptions: z.string().refine(isValidPageSizeOptionsString, {
+      error: () => t('Use unique comma-separated integers from 1 to 100.'),
+    }),
     Logo: z.string().refine(isValidLogoURL, {
       error: () => t('Enter a valid URL or upload an image'),
     }),
@@ -207,17 +212,20 @@ export function SystemInfoSection({ defaultValues }: SystemInfoSectionProps) {
 
   useEffect(() => {
     if (!pendingLogoFile) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- preview state follows the external object URL lifecycle.
       setPendingLogoPreview('')
       return
     }
     const objectURL = URL.createObjectURL(pendingLogoFile)
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- preview state follows the external object URL lifecycle.
     setPendingLogoPreview(objectURL)
     return () => URL.revokeObjectURL(objectURL)
   }, [pendingLogoFile])
 
-  useEffect(() => {
-    setLogoPreviewFailed(false)
-  }, [logoPreviewURL])
+  const [logoPreviewErrorURL, setLogoPreviewErrorURL] = useState<string | null>(
+    null
+  )
+  const logoPreviewFailed = logoPreviewErrorURL === logoPreviewURL
 
   const handleLogoFileChange = (file: File | undefined) => {
     if (!file) return
@@ -314,6 +322,25 @@ export function SystemInfoSection({ defaultValues }: SystemInfoSectionProps) {
 
               <FormField
                 control={form.control}
+                name='PageSizeOptions'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t('Page size options')}</FormLabel>
+                    <FormControl>
+                      <Input placeholder='10,20,50,100' {...field} />
+                    </FormControl>
+                    <FormDescription>
+                      {t(
+                        'Comma-separated page sizes from 1 to 100. Values must be unique.'
+                      )}
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
                 name='Logo'
                 render={({ field }) => (
                   <FormItem>
@@ -325,7 +352,9 @@ export function SystemInfoSection({ defaultValues }: SystemInfoSectionProps) {
                             src={logoPreviewURL}
                             alt={t('Logo preview')}
                             className='size-full object-contain p-2'
-                            onError={() => setLogoPreviewFailed(true)}
+                            onError={() =>
+                              setLogoPreviewErrorURL(logoPreviewURL)
+                            }
                           />
                         ) : (
                           <ImageIcon

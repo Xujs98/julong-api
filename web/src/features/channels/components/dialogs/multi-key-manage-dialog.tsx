@@ -36,12 +36,14 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
+import { usePageSizeOptions } from '@/hooks/use-page-size-options'
 import {
   ADMIN_PERMISSION_ACTIONS,
   ADMIN_PERMISSION_RESOURCES,
   hasPermission,
 } from '@/lib/admin-permissions'
 import { handleServerError } from '@/lib/handle-server-error'
+import { resolvePageSize } from '@/lib/page-size-options'
 import { getServerMessage } from '@/lib/server-error-message'
 import { useAuthStore } from '@/stores/auth-store'
 
@@ -79,6 +81,7 @@ export function MultiKeyManageDialog({
   const { t } = useTranslation()
   const { currentRow } = useChannels()
   const queryClient = useQueryClient()
+  const pageSizeOptions = usePageSizeOptions()
   const currentUser = useAuthStore((s) => s.auth.user)
   const canEditSensitive = hasPermission(
     currentUser,
@@ -90,7 +93,9 @@ export function MultiKeyManageDialog({
   const [isLoading, setIsLoading] = useState(false)
   const [keys, setKeys] = useState<KeyStatus[]>([])
   const [currentPage, setCurrentPage] = useState(1)
-  const [pageSize, setPageSize] = useState(10)
+  const [pageSize, setPageSize] = useState(() =>
+    resolvePageSize(10, pageSizeOptions)
+  )
   const [total, setTotal] = useState(0)
   const [totalPages, setTotalPages] = useState(0)
   const [enabledCount, setEnabledCount] = useState(0)
@@ -103,15 +108,21 @@ export function MultiKeyManageDialog({
     useState<MultiKeyConfirmAction | null>(null)
   const [isPerformingAction, setIsPerformingAction] = useState(false)
 
+  useEffect(() => {
+    setPageSize((current) => resolvePageSize(current, pageSizeOptions))
+  }, [pageSizeOptions])
+
   // Reset and load data when dialog opens
   useEffect(() => {
     if (open && currentRow) {
       setCurrentPage(1)
       setStatusFilter(null)
-      loadKeyStatus(1, pageSize, null)
+      const nextPageSize = resolvePageSize(pageSize, pageSizeOptions)
+      setPageSize(nextPageSize)
+      loadKeyStatus(1, nextPageSize, null)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, currentRow?.id])
+  }, [open, currentRow?.id, pageSizeOptions])
 
   const loadKeyStatus = async (
     page: number = currentPage,
@@ -133,7 +144,9 @@ export function MultiKeyManageDialog({
         setKeys(response.data.keys || [])
         setTotal(response.data.total || 0)
         setCurrentPage(response.data.page || 1)
-        setPageSize(response.data.page_size || 10)
+        setPageSize(
+          resolvePageSize(response.data.page_size || pageSize, pageSizeOptions)
+        )
         setTotalPages(response.data.total_pages || 0)
         setEnabledCount(response.data.enabled_count || 0)
         setManualDisabledCount(response.data.manual_disabled_count || 0)

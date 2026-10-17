@@ -7961,6 +7961,10 @@
     "Zoom": "Zoom",
     "Rules applied before sending the request upstream.": "Règles appliquées avant l'envoi de la requête au fournisseur amont.",
     "Rules applied before returning the response to the client.": "Règles appliquées avant de renvoyer la réponse au client.",
-    "Text to replace": "Texte à remplacer"
+    "Text to replace": "Texte à remplacer",
+    "Page size options": "Options de taille de page",
+    "Comma-separated page sizes from 1 to 100. Values must be unique.": "Tailles de page séparées par des virgules de 1 à 100. Les valeurs doivent être uniques.",
+    "Use unique comma-separated integers from 1 to 100.": "Utilisez des entiers uniques de 1 à 100 séparés par des virgules.",
+    "{{count}} / page": "{{count}} / page"
   }
 }

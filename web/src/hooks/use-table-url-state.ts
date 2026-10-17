@@ -23,6 +23,9 @@ import type {
 } from '@tanstack/react-table'
 import { useEffect, useMemo, useState } from 'react'
 
+import { usePageSizeOptions } from '@/hooks/use-page-size-options'
+import { resolvePageSize } from '@/lib/page-size-options'
+
 type SearchRecord = Record<string, unknown>
 
 // Page size persists globally under the established storage key (raw number
@@ -31,7 +34,10 @@ const PAGE_SIZE_STORAGE_KEY = 'page-size'
 
 function getStoredPageSize(): number | undefined {
   try {
-    const n = parseInt(localStorage.getItem(PAGE_SIZE_STORAGE_KEY) ?? '', 10)
+    const n = Number.parseInt(
+      localStorage.getItem(PAGE_SIZE_STORAGE_KEY) ?? '',
+      10
+    )
     return n > 0 ? n : undefined // n > 0 also rejects NaN
   } catch {
     return undefined
@@ -119,6 +125,7 @@ export function useTableUrlState(
   const pageSizeKey = paginationCfg?.pageSizeKey ?? ('pageSize' as string)
   const defaultPage = paginationCfg?.defaultPage ?? 1
   const defaultPageSize = paginationCfg?.defaultPageSize ?? 20
+  const pageSizeOptions = usePageSizeOptions()
 
   const globalFilterKey = globalFilterCfg?.key ?? ('filter' as string)
   const globalFilterEnabled = globalFilterCfg?.enabled ?? true
@@ -159,17 +166,25 @@ export function useTableUrlState(
     const rawPage = (search as SearchRecord)[pageKey]
     const rawPageSize = (search as SearchRecord)[pageSizeKey]
     const pageNum = typeof rawPage === 'number' ? rawPage : defaultPage
-    const pageSizeNum =
+    const preferredPageSize =
       typeof rawPageSize === 'number'
         ? rawPageSize
         : (getStoredPageSize() ?? defaultPageSize)
+    const pageSizeNum = resolvePageSize(preferredPageSize, pageSizeOptions)
     return { pageIndex: Math.max(0, pageNum - 1), pageSize: pageSizeNum }
-  }, [search, pageKey, pageSizeKey, defaultPage, defaultPageSize])
+  }, [
+    search,
+    pageKey,
+    pageSizeKey,
+    defaultPage,
+    defaultPageSize,
+    pageSizeOptions,
+  ])
 
   const onPaginationChange: OnChangeFn<PaginationState> = (updater) => {
     const next = typeof updater === 'function' ? updater(pagination) : updater
     const nextPage = next.pageIndex + 1
-    const nextPageSize = next.pageSize
+    const nextPageSize = resolvePageSize(next.pageSize, pageSizeOptions)
     if (nextPageSize !== pagination.pageSize) setStoredPageSize(nextPageSize)
     navigate({
       search: (prev) => ({
@@ -222,7 +237,7 @@ export function useTableUrlState(
           value.trim() !== '' ? serialize(value) : undefined
       } else {
         const value = Array.isArray(found?.value)
-          ? (found!.value as unknown[])
+          ? (found?.value as unknown[])
           : []
         patch[cfg.searchKey] = value.length > 0 ? serialize(value) : undefined
       }

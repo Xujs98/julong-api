@@ -46,6 +46,7 @@
 | 系统设置权限 | 已实现 | root 可按一级菜单及二级设置页面逐项授权管理员（本次新增请求策略授权项，保留原授权项兼容）；菜单、路由、通用配置键和专用 API 均执行权限校验。 |
 | 客服联系 | 已实现 | 已登录顶部搜索框与公告图标之间展示客服入口；root 可授权管理员维护 QQ、微信、手机、QQ群、微信群，群二维码支持选择、预览、删除并随配置保存。 |
 | 站点徽标上传 | 已实现 | 系统信息支持 PNG/JPG/WebP 本地选择、保存前预览、移除和保存后应用；Docker 文件持久化在 `/data/site-assets`。 |
+| 全局分页选项 | 已实现 | 系统信息可配置 `PageSizeOptions`，默认 `10,20,50,100`；后端校验 1-100 的唯一正整数，`/api/status` 下发规范化选项，所有共享分页与账单/多 Key 分页读取并回退非法值。 |
 | 文档纪律 | 新增 | 以后每次代码改动都必须同步维护本文档。 |
 
 ## 仓库结构
@@ -99,6 +100,7 @@
 - 表格：TanStack Table + 共享表格系统 `web/src/components/data-table`。
 - 样式：Tailwind CSS 4、Base UI、本地 shadcn 风格 primitives。
 - i18n：`react-i18next`，语言文件位于 `web/src/i18n/locales`。
+- 分页：`web/src/hooks/use-page-size-options.ts` 和 `web/src/lib/page-size-options.ts` 统一解析 `/api/status.page_size_options`；共享表格、账单历史和多 Key 管理使用系统配置并对 URL/localStorage 中的非法页大小回退首项。
 
 ## 本地开发
 
@@ -213,6 +215,7 @@ docker compose up -d
 | `UserQuotaSummaryExcludedUserIDs` | `common/constants.go`、`model/user_quota_summary.go`、`user-quota-summary-control.tsx` | 用户页“剩余总配额”不统计用户名单 | 默认 `[]`；管理员/root 可在用户筛选栏“不统计用户”弹窗中多选普通用户、管理员、root 或已删除用户。名单全局持久化，被排除用户仍显示在列表中，只从剩余总配额和匹配人数中移除。 |
 | `EmailTemplates` | `service/email_template.go`、`controller/email_template.go`、`email-template-settings-section.tsx` | 自定义系统邮件模板 JSON | 中文兼容旧键 `{event:{subject,content}}`，英文使用 `{event::en:{subject,content}}`，无需迁移。12 个事件包含原有通知、验证、订阅、余额、渠道、报表、风控、在线状态、额度调整，以及电子发票交付 `invoice.delivered`；每个事件提供 `zh/en` 图片式卡片 UI。主题最长 255 字节且禁止换行，HTML 最长 200000 字节，只允许事件声明占位符。 |
 | `Logo` | `model/option.go`、`controller/site_asset.go`、`system-info-section.tsx` | 站点徽标 URL | 可继续填写 HTTP/HTTPS 或根路径 URL；本地上传成功后保存为 `/api/site-assets/logo/<随机文件名>`。只有通用 Option 保存成功才会正式应用，新地址通过 `/api/status.logo` 下发，替换/清空时自动删除旧的本地徽标。 |
+| `PageSizeOptions` | `common/constants.go`、`model/option.go`、`controller/system_settings_access.go`、`system-info-section.tsx` | 全局分页下拉选项 | 默认 `10,20,50,100`；保存时必须是逗号分隔、1-100 的唯一正整数，保留输入顺序。非法运行时值回退默认值；规范化选项通过 `/api/status.page_size_options` 公开给前端。 |
 | `SITE_ASSET_STORAGE_DIR` | `controller/site_asset.go` | 覆盖站点上传资源目录 | 默认 `site-assets`；Docker `WORKDIR /data` 下对应持久化卷 `/data/site-assets`。徽标文件使用 32 位随机十六进制文件名、`0640` 权限和同目录原子重命名。 |
 
 ## 架构
@@ -272,7 +275,7 @@ type ApiResponse<T> = {
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | GET | `/api/setup` | `controller.GetSetup` | 读取安装/初始化状态 | 无 | setup 元数据 | 公开 | 完成 |
 | POST | `/api/setup` | `controller.PostSetup` | 初始化安装 | setup payload | success | 公开 + body limit | 完成 |
-| GET | `/api/status` | `controller.GetStatus` | 系统状态/健康检查 | 无 | status 对象；`version` 与 `julong_version` 返回当前 Julong 构建版本，`upstream_version`/`upstream_commit` 返回已合并 New API 版本与提交；另含 `custom_endpoints`、`image_generation_log_polling_interval_seconds`，公告启用时仅含当前有效且面向所有用户的 `announcements` 和 `announcements_enabled` | 公开 | 完成 |
+| GET | `/api/status` | `controller.GetStatus` | 系统状态/健康检查 | 无 | status 对象；`version` 与 `julong_version` 返回当前 Julong 构建版本，`upstream_version`/`upstream_commit` 返回已合并 New API 版本与提交；另含 `custom_endpoints`、`page_size_options`、`image_generation_log_polling_interval_seconds`，公告启用时仅含当前有效且面向所有用户的 `announcements` 和 `announcements_enabled` | 公开 | 完成 |
 | GET | `/api/announcements` | `controller.GetUserAnnouncements` | 获取当前用户可见公告 | 无 | 已展示、时间有效且命中套餐/余额 OR-AND 条件的 `Announcement[]` | 登录用户 | 完成 |
 | GET | `/api/uptime/status` | `controller.GetUptimeKumaStatus` | Uptime Kuma 集成 | 无 | uptime 状态 | 公开 | 完成 |
 | GET | `/api/notice` | `controller.GetNotice` | 站点公告 | 无 | 内容 | 公开 | 完成 |
@@ -1595,6 +1598,13 @@ Relay 路由注册在 `router/relay-router.go`，使用 API key 鉴权 `middlewa
 ```
 
 ## 变更日志
+
+### 2026-10-17 全局每页行数配置（B26）
+
+- 系统设置 → 系统信息新增 `PageSizeOptions`，默认 `10,20,50,100`；后端保存与运行时读取均校验 1-100 的唯一正整数并保留输入顺序，非法值回退默认值。
+- `/api/status` 新增 `page_size_options`；共享表格分页、账单历史和多 Key 管理统一读取该字段，并校正 URL/localStorage/初始状态中的非法页大小。
+- 前端新增分页选项解析 hook/工具、系统设置字段、七语言文案和回归测试；未新增数据库表或迁移。
+- 验证与本地重启、Git 交付结果记录在 `PROJECT_PROGRESS.md` B26；生产环境未部署。
 
 ### 2026-10-17 文本替换可视化编辑器与概览活跃人数卡片（B23）
 

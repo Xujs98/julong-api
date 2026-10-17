@@ -7961,6 +7961,10 @@
     "Zoom": "Zoom",
     "Rules applied before sending the request upstream.": "Quy tắc áp dụng trước khi gửi yêu cầu lên hệ thống upstream.",
     "Rules applied before returning the response to the client.": "Quy tắc áp dụng trước khi trả phản hồi về máy khách.",
-    "Text to replace": "Văn bản cần thay thế"
+    "Text to replace": "Văn bản cần thay thế",
+    "Page size options": "Tùy chọn kích thước trang",
+    "Comma-separated page sizes from 1 to 100. Values must be unique.": "Kích thước trang từ 1 đến 100, cách nhau bằng dấu phẩy. Các giá trị phải là duy nhất.",
+    "Use unique comma-separated integers from 1 to 100.": "Sử dụng các số nguyên duy nhất từ 1 đến 100, được phân cách bằng dấu phẩy.",
+    "{{count}} / page": "{{count}} / trang"
   }
 }

@@ -7961,6 +7961,10 @@
     "Zoom": "Zoom",
     "Rules applied before sending the request upstream.": "Rules applied before sending the request upstream.",
     "Rules applied before returning the response to the client.": "Rules applied before returning the response to the client.",
-    "Text to replace": "Text to replace"
+    "Text to replace": "Text to replace",
+    "Page size options": "Page size options",
+    "Comma-separated page sizes from 1 to 100. Values must be unique.": "Comma-separated page sizes from 1 to 100. Values must be unique.",
+    "Use unique comma-separated integers from 1 to 100.": "Use unique comma-separated integers from 1 to 100.",
+    "{{count}} / page": "{{count}} / page"
   }
 }

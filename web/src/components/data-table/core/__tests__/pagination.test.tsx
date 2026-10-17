@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 /*
 Copyright (C) 2023-2026 QuantumNous
 
@@ -31,6 +32,13 @@ const rows = [{ id: 1 }, { id: 2 }, { id: 3 }]
 const emptyRows: { id: number }[] = []
 
 function Fixture(props: { empty?: boolean; compact?: boolean }) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  })
+  queryClient.setQueryData(['status'], {
+    page_size_options: [2, 10, 20, 50, 100],
+  })
+  // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Table creates the table instance for this test fixture.
   const table = useReactTable({
     data: props.empty ? emptyRows : rows,
     columns: [{ accessorKey: 'id' }],
@@ -38,7 +46,11 @@ function Fixture(props: { empty?: boolean; compact?: boolean }) {
     getPaginationRowModel: getPaginationRowModel(),
     initialState: { pagination: { pageIndex: 0, pageSize: 2 } },
   })
-  return <DataTablePagination table={table} compact={props.compact} />
+  return (
+    <QueryClientProvider client={queryClient}>
+      <DataTablePagination table={table} compact={props.compact} />
+    </QueryClientProvider>
+  )
 }
 it('moves between pages in compact mode and disables the boundary actions', async () => {
   const user = userEvent.setup()

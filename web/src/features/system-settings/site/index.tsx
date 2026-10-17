@@ -32,6 +32,7 @@ const defaultSiteSettings: SiteSettings = {
   About: '',
   HomePageContent: '',
   ServerAddress: '',
+  PageSizeOptions: '10,20,50,100',
   TaskPublicAddress: '',
   'general_setting.docs_link': '',
   'legal.user_agreement': '',

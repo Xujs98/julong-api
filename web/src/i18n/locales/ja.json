@@ -7961,6 +7961,10 @@
     "Zoom": "ズーム",
     "Rules applied before sending the request upstream.": "上流へリクエストを送信する前に適用するルール。",
     "Rules applied before returning the response to the client.": "クライアントへレスポンスを返す前に適用するルール。",
-    "Text to replace": "置換するテキスト"
+    "Text to replace": "置換するテキスト",
+    "Page size options": "ページサイズの選択肢",
+    "Comma-separated page sizes from 1 to 100. Values must be unique.": "1〜100のページサイズをカンマ区切りで入力してください。値は重複できません。",
+    "Use unique comma-separated integers from 1 to 100.": "1〜100の一意な整数をカンマ区切りで入力してください。",
+    "{{count}} / page": "{{count}}件 / ページ"
   }
 }

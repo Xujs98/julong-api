@@ -7961,6 +7961,10 @@
     "Zoom": "Zoom",
     "Rules applied before sending the request upstream.": "Правила, применяемые перед отправкой запроса провайдеру.",
     "Rules applied before returning the response to the client.": "Правила, применяемые перед возвратом ответа клиенту.",
-    "Text to replace": "Текст для замены"
+    "Text to replace": "Текст для замены",
+    "Page size options": "Варианты размера страницы",
+    "Comma-separated page sizes from 1 to 100. Values must be unique.": "Размеры страниц от 1 до 100, разделённые запятыми. Значения должны быть уникальными.",
+    "Use unique comma-separated integers from 1 to 100.": "Используйте уникальные целые числа от 1 до 100, разделённые запятыми.",
+    "{{count}} / page": "{{count}} / стр."
   }
 }

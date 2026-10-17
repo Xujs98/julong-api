@@ -7961,6 +7961,10 @@
     "Zoom": "縮放",
     "Rules applied before sending the request upstream.": "傳送請求至上游前套用的替換規則。",
     "Rules applied before returning the response to the client.": "返回回應給用戶端前套用的替換規則。",
-    "Text to replace": "要替換的文字"
+    "Text to replace": "要替換的文字",
+    "Page size options": "每頁筆數選項",
+    "Comma-separated page sizes from 1 to 100. Values must be unique.": "使用逗號分隔的 1 到 100 的每頁筆數。數值必須唯一。",
+    "Use unique comma-separated integers from 1 to 100.": "請使用 1 到 100 之間以逗號分隔且不重複的整數。",
+    "{{count}} / page": "每頁 {{count}} 筆"
   }
 }

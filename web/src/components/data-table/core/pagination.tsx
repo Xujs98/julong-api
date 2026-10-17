@@ -23,6 +23,7 @@ import {
   ChevronsLeft as DoubleArrowLeftIcon,
   ChevronsRight as DoubleArrowRightIcon,
 } from 'lucide-react'
+import { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { Button } from '@/components/ui/button'
@@ -34,6 +35,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { usePageSizeOptions } from '@/hooks/use-page-size-options'
 import { cn, getPageNumbers } from '@/lib/utils'
 
 type DataTablePaginationProps<TData> = {
@@ -41,20 +43,22 @@ type DataTablePaginationProps<TData> = {
   compact?: boolean
 }
 
-const PAGE_SIZE_OPTIONS = [10, 20, 30, 40, 50, 100] as const
-const PAGE_SIZE_SELECT_ITEMS = PAGE_SIZE_OPTIONS.map((pageSize) => ({
-  value: `${pageSize}`,
-  label: pageSize,
-}))
-
 export function DataTablePagination<TData>({
   table,
   compact = false,
 }: DataTablePaginationProps<TData>) {
   const { t } = useTranslation()
+  const pageSizeOptions = usePageSizeOptions()
   const pagination = table.getState().pagination
   const currentPage = pagination.pageIndex + 1
   const pageSize = pagination.pageSize
+  const effectivePageSize = pageSizeOptions.includes(pageSize)
+    ? pageSize
+    : (pageSizeOptions[0] ?? 10)
+  const pageSizeSelectItems = pageSizeOptions.map((option) => ({
+    value: `${option}`,
+    label: option,
+  }))
   const totalPages = table.getPageCount()
   const totalRows = table.getRowCount()
   const pageNumbers = getPageNumbers(currentPage, totalPages)
@@ -62,6 +66,12 @@ export function DataTablePagination<TData>({
     page,
     key: page === '...' ? `gap-after-${pageNumbers[index - 1]}` : String(page),
   }))
+
+  useEffect(() => {
+    if (effectivePageSize !== pageSize) {
+      table.setPageSize(effectivePageSize)
+    }
+  }, [effectivePageSize, pageSize, table])
 
   if (compact) {
     return (
@@ -121,8 +131,8 @@ export function DataTablePagination<TData>({
             {t('Rows per page')}
           </p>
           <Select
-            items={PAGE_SIZE_SELECT_ITEMS}
-            value={`${pageSize}`}
+            items={pageSizeSelectItems}
+            value={`${effectivePageSize}`}
             onValueChange={(value) => {
               table.setPageSize(Number(value))
             }}
@@ -132,9 +142,9 @@ export function DataTablePagination<TData>({
             </SelectTrigger>
             <SelectContent side='top' alignItemWithTrigger={false}>
               <SelectGroup>
-                {PAGE_SIZE_OPTIONS.map((pageSize) => (
-                  <SelectItem key={pageSize} value={`${pageSize}`}>
-                    {pageSize}
+                {pageSizeOptions.map((option) => (
+                  <SelectItem key={option} value={`${option}`}>
+                    {option}
                   </SelectItem>
                 ))}
               </SelectGroup>

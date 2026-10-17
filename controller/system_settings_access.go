@@ -43,7 +43,7 @@ func optionAllowedForSystemSettingsAction(key, action string) bool {
 		return true
 	}
 	allowed := map[string][]string{
-		"site.system-info": {"theme.frontend", "SystemName", "Logo", "Footer", "About", "HomePageContent", "ServerAddress", "legal.user_agreement", "legal.privacy_policy"},
+		"site.system-info": {"theme.frontend", "SystemName", "Logo", "Footer", "About", "HomePageContent", "ServerAddress", "PageSizeOptions", "legal.user_agreement", "legal.privacy_policy"},
 		"site.notice":      {"Notice"}, "site.header-navigation": {"HeaderNavModules"}, "site.sidebar-modules": {"SidebarModulesAdmin"},
 		"auth.basic-auth":            {"PasswordLoginEnabled", "PasswordRegisterEnabled", "EmailVerificationEnabled", "RegisterEnabled", "PasswordLoginEncryptionEnabled", "security.login_verification_policy", "security.account_operation_verification_policy", "EmailDomainRestrictionEnabled", "EmailAliasRestrictionEnabled", "EmailDomainWhitelist", "ServerAddress"},
 		"auth.oauth":                 {"GitHubOAuthEnabled", "GitHubClientId", "GitHubClientSecret", "TelegramOAuthEnabled", "TelegramBotToken", "TelegramBotName", "LinuxDOOAuthEnabled", "LinuxDOClientId", "LinuxDOClientSecret", "LinuxDOMinimumTrustLevel", "WeChatAuthEnabled", "WeChatServerAddress", "WeChatServerToken", "WeChatAccountQRCodeImageURL", "discord.enabled", "discord.client_id", "discord.client_secret", "oidc.enabled", "oidc.client_id", "oidc.client_secret", "oidc.well_known", "oidc.authorization_endpoint", "oidc.token_endpoint", "oidc.user_info_endpoint"},

@@ -70,6 +70,7 @@ export function BillingHistoryDialog({
     total,
     page,
     pageSize,
+    pageSizeOptions,
     keyword,
     loading,
     completing,
@@ -120,12 +121,10 @@ export function BillingHistoryDialog({
               />
             </div>
             <Select
-              items={[
-                { value: '10', label: t('10 / page') },
-                { value: '20', label: t('20 / page') },
-                { value: '50', label: t('50 / page') },
-                { value: '100', label: t('100 / page') },
-              ]}
+              items={pageSizeOptions.map((option) => ({
+                value: String(option),
+                label: t('{{count}} / page', { count: option }),
+              }))}
               value={pageSize.toString()}
               onValueChange={(value) =>
                 value !== null && handlePageSizeChange(Number.parseInt(value))
@@ -136,10 +135,11 @@ export function BillingHistoryDialog({
               </SelectTrigger>
               <SelectContent alignItemWithTrigger={false}>
                 <SelectGroup>
-                  <SelectItem value='10'>{t('10 / page')}</SelectItem>
-                  <SelectItem value='20'>{t('20 / page')}</SelectItem>
-                  <SelectItem value='50'>{t('50 / page')}</SelectItem>
-                  <SelectItem value='100'>{t('100 / page')}</SelectItem>
+                  {pageSizeOptions.map((option) => (
+                    <SelectItem key={option} value={String(option)}>
+                      {t('{{count}} / page', { count: option })}
+                    </SelectItem>
+                  ))}
                 </SelectGroup>
               </SelectContent>
             </Select>

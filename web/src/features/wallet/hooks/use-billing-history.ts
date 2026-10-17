@@ -22,7 +22,9 @@ import { toast } from 'sonner'
 
 import { useIsAdmin } from '@/hooks/use-admin'
 import { useDebounce } from '@/hooks/use-debounce'
+import { usePageSizeOptions } from '@/hooks/use-page-size-options'
 import { handleServerError } from '@/lib/handle-server-error'
+import { resolvePageSize } from '@/lib/page-size-options'
 
 import {
   getUserBillingHistory,
@@ -46,16 +48,20 @@ interface UseBillingHistoryOptions {
 export function useBillingHistory(options: UseBillingHistoryOptions = {}) {
   const { initialPage = 1, initialPageSize = 10 } = options
   const isAdmin = useIsAdmin()
+  const pageSizeOptions = usePageSizeOptions()
 
   const [records, setRecords] = useState<TopupRecord[]>([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(initialPage)
-  const [pageSize, setPageSize] = useState(initialPageSize)
+  const [pageSize, setPageSize] = useState(() =>
+    resolvePageSize(initialPageSize, pageSizeOptions)
+  )
   const [keyword, setKeyword] = useState('')
   const debouncedKeyword = useDebounce(keyword)
   const requestIdRef = useRef(0)
   const [loading, setLoading] = useState(false)
   const [completing, setCompleting] = useState(false)
+  const effectivePageSize = resolvePageSize(pageSize, pageSizeOptions)
 
   /**
    * Fetch billing history
@@ -65,8 +71,8 @@ export function useBillingHistory(options: UseBillingHistoryOptions = {}) {
     setLoading(true)
     try {
       const response = isAdmin
-        ? await getAllBillingHistory(page, pageSize, debouncedKeyword)
-        : await getUserBillingHistory(page, pageSize, debouncedKeyword)
+        ? await getAllBillingHistory(page, effectivePageSize, debouncedKeyword)
+        : await getUserBillingHistory(page, effectivePageSize, debouncedKeyword)
 
       if (requestId !== requestIdRef.current) return
 
@@ -88,7 +94,7 @@ export function useBillingHistory(options: UseBillingHistoryOptions = {}) {
         setLoading(false)
       }
     }
-  }, [debouncedKeyword, isAdmin, page, pageSize])
+  }, [debouncedKeyword, effectivePageSize, isAdmin, page])
 
   /**
    * Complete a pending order (admin only)
@@ -132,10 +138,14 @@ export function useBillingHistory(options: UseBillingHistoryOptions = {}) {
   /**
    * Change page size
    */
-  const handlePageSizeChange = useCallback((newPageSize: number) => {
-    setPageSize(newPageSize)
-    setPage(1) // Reset to first page when changing page size
-  }, [])
+  const handlePageSizeChange = useCallback(
+    (newPageSize: number) => {
+      if (!pageSizeOptions.includes(newPageSize)) return
+      setPageSize(newPageSize)
+      setPage(1) // Reset to first page when changing page size
+    },
+    [pageSizeOptions]
+  )
 
   /**
    * Search by keyword
@@ -150,6 +160,7 @@ export function useBillingHistory(options: UseBillingHistoryOptions = {}) {
   useEffect(() => {
     if (keyword !== debouncedKeyword) return
 
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- the fetch synchronizes loading and records with the external API.
     fetchBillingHistory()
   }, [debouncedKeyword, fetchBillingHistory, keyword])
 
@@ -157,7 +168,8 @@ export function useBillingHistory(options: UseBillingHistoryOptions = {}) {
     records,
     total,
     page,
-    pageSize,
+    pageSize: effectivePageSize,
+    pageSizeOptions,
     keyword,
     loading,
     completing,

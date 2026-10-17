@@ -34,6 +34,7 @@ func AllOption() ([]*Option, error) {
 func InitOptionMap() {
 	common.OptionMapRWMutex.Lock()
 	common.OptionMap = make(map[string]string)
+	common.PageSizeOptions = common.DefaultPageSizeOptions
 
 	// 添加原有的系统配置
 	common.OptionMap["FileUploadPermission"] = strconv.Itoa(common.FileUploadPermission)
@@ -123,6 +124,7 @@ func InitOptionMap() {
 	common.OptionMap["SystemName"] = common.SystemName
 	common.OptionMap["Logo"] = common.Logo
 	common.OptionMap["ServerAddress"] = ""
+	common.OptionMap[common.PageSizeOptionsOptionKey] = common.DefaultPageSizeOptions
 	common.OptionMap["TaskPublicAddress"] = system_setting.TaskPublicAddress
 	common.OptionMap["MediaAssetRetentionDays"] = strconv.Itoa(common.MediaAssetRetentionDays)
 	common.OptionMap["WorkerUrl"] = system_setting.WorkerUrl
@@ -292,7 +294,21 @@ func validateOptionValue(key string, value string) error {
 	if key == "MaxTokenAutoGroups" {
 		return setting.ValidateMaxTokenAutoGroups(value)
 	}
+	if key == common.PageSizeOptionsOptionKey {
+		_, err := common.NormalizePageSizeOptions(value)
+		return err
+	}
 	return nil
+}
+
+func normalizeOptionValue(key string, value string) (string, error) {
+	if key == common.PageSizeOptionsOptionKey {
+		return common.NormalizePageSizeOptions(value)
+	}
+	if err := validateOptionValue(key, value); err != nil {
+		return "", err
+	}
+	return value, nil
 }
 
 func UpdateOption(key string, value string) error {
@@ -306,7 +322,9 @@ func UpdateOption(key string, value string) error {
 	if IsModelPricingOption(key) {
 		return UpdateModelPricingOptions(map[string]string{key: value})
 	}
-	if err := validateOptionValue(key, value); err != nil {
+	var err error
+	value, err = normalizeOptionValue(key, value)
+	if err != nil {
 		return err
 	}
 	// Save to database first
@@ -343,18 +361,21 @@ func UpdateOptionsBulk(values map[string]string) error {
 			return err
 		}
 	}
+	normalizedValues := make(map[string]string, len(values))
 	for key, value := range values {
-		if err := validateOptionValue(key, value); err != nil {
+		normalizedValue, err := normalizeOptionValue(key, value)
+		if err != nil {
 			return err
 		}
+		normalizedValues[key] = normalizedValue
 	}
 	var policySnapshot *RequestPolicySnapshot
-	for key := range values {
+	for key := range normalizedValues {
 		if IsRequestPolicyOption(key) {
 			requestPolicyOptionMutex.Lock()
 			defer requestPolicyOptionMutex.Unlock()
 			options := maps.Clone(CurrentRequestPolicy().Options)
-			for key, value := range values {
+			for key, value := range normalizedValues {
 				if IsRequestPolicyOption(key) {
 					options[key] = value
 				}
@@ -369,7 +390,7 @@ func UpdateOptionsBulk(values map[string]string) error {
 	}
 
 	err := DB.Transaction(func(tx *gorm.DB) error {
-		for k, v := range values {
+		for k, v := range normalizedValues {
 			option := Option{Key: k}
 			if err := tx.FirstOrCreate(&option, Option{Key: k}).Error; err != nil {
 				return err
@@ -384,7 +405,7 @@ func UpdateOptionsBulk(values map[string]string) error {
 	if err != nil {
 		return err
 	}
-	for k, v := range values {
+	for k, v := range normalizedValues {
 		if err := updateOptionMap(k, v); err != nil {
 			return err
 		}
@@ -404,6 +425,15 @@ func updateOptionMap(key string, value string) (err error) {
 	}
 	common.OptionMapRWMutex.Lock()
 	defer common.OptionMapRWMutex.Unlock()
+	if key == common.PageSizeOptionsOptionKey {
+		normalized, normalizeErr := common.NormalizePageSizeOptions(value)
+		if normalizeErr != nil {
+			normalized = common.DefaultPageSizeOptions
+		}
+		common.OptionMap[key] = normalized
+		common.PageSizeOptions = normalized
+		return nil
+	}
 	common.OptionMap[key] = value
 
 	// 检查是否是模型配置 - 使用更规范的方式处理

@@ -4,6 +4,9 @@ import (
 	"crypto/tls"
 	//"os"
 	//"strconv"
+	"errors"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -22,6 +25,56 @@ var SystemName = "矩龙-API"
 var Footer = ""
 var Logo = ""
 var TopUpLink = ""
+
+const (
+	PageSizeOptionsOptionKey = "PageSizeOptions"
+	DefaultPageSizeOptions   = "10,20,50,100"
+)
+
+var PageSizeOptions = DefaultPageSizeOptions
+
+var errInvalidPageSizeOptions = errors.New("page size options must be comma-separated unique integers between 1 and 100")
+
+// NormalizePageSizeOptions validates and canonicalizes the administrator's
+// comma-separated page size list while preserving the configured order.
+func NormalizePageSizeOptions(value string) (string, error) {
+	parts := strings.Split(value, ",")
+	if len(parts) == 0 {
+		return "", errInvalidPageSizeOptions
+	}
+
+	seen := make(map[int]struct{}, len(parts))
+	normalized := make([]string, 0, len(parts))
+	for _, part := range parts {
+		trimmed := strings.TrimSpace(part)
+		pageSize, err := strconv.Atoi(trimmed)
+		if err != nil || pageSize < 1 || pageSize > 100 {
+			return "", errInvalidPageSizeOptions
+		}
+		if _, exists := seen[pageSize]; exists {
+			return "", errInvalidPageSizeOptions
+		}
+		seen[pageSize] = struct{}{}
+		normalized = append(normalized, strconv.Itoa(pageSize))
+	}
+	return strings.Join(normalized, ","), nil
+}
+
+// ParsePageSizeOptions returns a safe runtime list and falls back to the
+// built-in defaults if a legacy or externally supplied value is invalid.
+func ParsePageSizeOptions(value string) []int {
+	normalized, err := NormalizePageSizeOptions(value)
+	if err != nil {
+		normalized = DefaultPageSizeOptions
+	}
+	parts := strings.Split(normalized, ",")
+	result := make([]int, 0, len(parts))
+	for _, part := range parts {
+		pageSize, _ := strconv.Atoi(part)
+		result = append(result, pageSize)
+	}
+	return result
+}
 
 // var ChatLink = ""
 // var ChatLink2 = ""
