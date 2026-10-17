@@ -15,11 +15,11 @@
 
 | 项目 | 当前事实 | 边界/下一步 |
 | --- | --- | --- |
-| Git | `main`；PageSizeOptions 代码与文档提交 `bbbccb89d` 已创建，当前进度文档待提交；`origin/main` 仍为 b3ad0adf8，远端为 `https://github.com/Xujs98/julong-api.git` | 本批进度提交后只推送 `origin`，不推 `upstream` |
+| Git | `main`；PageSizeOptions 代码提交 `bbbccb89d`、进度提交 `871082cc8` 已推送，`origin/main` 已核对同 SHA；远端为 `https://github.com/Xujs98/julong-api.git` | 只推 `origin`，不推 `upstream` |
 | 上游 | `upstream = https://github.com/QuantumNous/new-api.git`；主分支已包含既有整合提交 | 不重复合并，不覆盖 Julong 实现 |
 | 本地服务 | 使用当前源码和最新 `web/dist` 重建 `/tmp/julong-api-runtime/page-size-20261017/new-api`，PID `15316` 监听 `3000`；`GET /api/status` 返回 200、`success=true`、`page_size_options=[10,20,50,100]`；重启前备份 `one-api-before-b27.db`，`PRAGMA quick_check=ok` | 本地服务保持运行；生产未部署 |
 | 既有未跟踪文件 | `controller/media_asset.go.bak`、`site-assets/`、`web/pnpm-lock.yaml`、`web/src/features/usage-logs/components/media-assets-table.tsx.bak` | 必须保留，不纳入无关提交 |
-| 当前用户需求 | `PageSizeOptions` 已实现：系统设置→系统信息增加字符串配置，默认 `10,20,50,100`，统一共享表格、账单历史和多 Key 管理的“每页行数”；本批补齐共享 compact 分页和自定义分页组件 | B27 本地验证完成，代码提交 `bbbccb89d` 已创建，待推送 `origin`；生产未部署 |
+| 当前用户需求 | `PageSizeOptions` 已实现：系统设置→系统信息增加字符串配置，默认 `10,20,50,100`，统一共享表格、账单历史和多 Key 管理的“每页行数”；本批补齐共享 compact 分页和自定义分页组件 | B27 已验证、提交并推送 `origin/main`；生产未部署 |
 | 生产 | 未部署线上 | 本地构建/启动不能写成生产发布 |
 
 ## 未完成项与限制
@@ -82,8 +82,8 @@
 - `pnpm run typecheck`、17 个受影响 TS/TSX 文件 `oxlint`、17 个文件 `oxfmt --check` 和 Rsbuild 生产构建通过。此前 B27 定向 QA 的 5 个 Vitest 文件、31 项测试也已通过；全量 Vitest 曾显示既有失败后中断，未作为本批全量通过。
 - `go test ./...` 已执行但仍受既有服务计费 SQLite 矩阵失败阻塞（`TestFixedPriceBillingDatabaseMatrix`）；同时出现已有测试夹具缺少 `user_presences` 表的日志，未归因于 PageSizeOptions。
 - 本地服务已用当前源码重建并重启，PID `15316` 监听 `3000`；重启前 SQLite 备份 `one-api-before-b27.db` 的 `PRAGMA quick_check` 为 `ok`；`GET /api/status` 返回 `200`、`success=true`、`page_size_options=[10,20,50,100]`。生产未部署。
-- `DEVELOPMENT.md` 已登记共享 `PageSizeSelect`、compact 分页和本批验证结果；当前相关代码与文档尚未提交。
-- PageSizeOptions 代码与 DEVELOPMENT/PROJECT_PROGRESS 修改已提交为 `bbbccb89d`；四项既有未跟踪文件未纳入提交，当前待推送 `origin/main`。
+- `DEVELOPMENT.md` 已登记共享 `PageSizeSelect`、compact 分页和本批验证结果。
+- PageSizeOptions 代码与 DEVELOPMENT 修改提交为 `bbbccb89d`，进度提交为 `871082cc8`，已推送并用 `git ls-remote` 核对 `origin/main`；四项既有未跟踪文件未纳入提交。
 
 ### B26：全局每页行数配置（2026-10-17，已完成并推送）
 
@@ -119,4 +119,4 @@
 - Git/部署：commit、remote/branch、push 结果、生产状态。
 - 下一步：只写仍需执行的动作。
 
-当前:PageSizeOptions / 功能、定向前端回归、lint/格式、生产构建、本地重启与健康检查完成，代码提交 bbbccb89d；全量 Go 仍有既有计费矩阵失败，进度文档待提交并推送 / 下一步推送 origin 后继续真实管理员浏览器、ClickHouse、Safari 与生产验收，生产未部署
+当前:PageSizeOptions / 功能、定向前端回归、lint/格式、生产构建、本地重启与健康检查完成，提交 bbbccb89d 与 871082cc8 已推送并核对 origin/main；全量 Go 仍有既有计费矩阵失败 / 下一步真实管理员浏览器、ClickHouse、Safari 与生产验收，生产未部署
