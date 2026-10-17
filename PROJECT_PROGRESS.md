@@ -15,7 +15,7 @@
 
 | 项目 | 当前事实 | 边界/下一步 |
 | --- | --- | --- |
-| Git | `main` / `HEAD 0b9d519d8`；`origin/main` 同 SHA，远端为 `https://github.com/Xujs98/julong-api.git` | 只推 `origin`，不推 `upstream`；本批文档改动需重新提交并推送 |
+| Git | `main` / `HEAD 74f722cd3`；`origin/main` 同 SHA，远端为 `https://github.com/Xujs98/julong-api.git` | 本批文档压缩已提交并推送；只推 `origin`，不推 `upstream` |
 | 上游 | `upstream = https://github.com/QuantumNous/new-api.git`；主分支已包含既有整合提交 | 不重复合并，不覆盖 Julong 实现 |
 | 本地服务 | B24 曾以 PID 51076 验证监听 `3000`、`/api/status` 200；本次复核当前无监听 | 旧启动记录不等于当前运行；涉及后端改动时按规则重启并复核 |
 | 既有未跟踪文件 | `controller/media_asset.go.bak`、`site-assets/`、`web/pnpm-lock.yaml`、`web/src/features/usage-logs/components/media-assets-table.tsx.bak` | 必须保留，不纳入无关提交 |
@@ -77,6 +77,12 @@
 | B17 | 网站操作与 API 在线分离 | 本地完成并推送；全量 Go、真实浏览器、生产未验收 |
 | B18/B19 | 清理 IPv4/IPv6 本机封禁 | SQLite 备份、删除、quick_check、重启和本地健康通过 |
 
+### B25：压缩开发规则与项目进度（2026-10-17，已完成并推送）
+
+- `AGENTS.md` 从 214 行压缩为 63 行，保留进度门禁、三数据库、认证、计费、插件、前端、i18n、测试、Git、保护标识和 issue/PR 规则；`PROJECT_PROGRESS.md` 从 481 行压缩为 99 行，旧批次改为索引。
+- `DEVELOPMENT.md` 仅同步压缩快照维护规则；四项既有未跟踪文件保留，未改业务代码、API、数据库、前端资源或本地服务。
+- `git diff --check` 通过。提交 `74f722cd3` 已推送 `origin/main`，`git ls-remote` 已核对同一 SHA；生产未部署。
+
 ## 验证口径
 
 - 已有三库记录：SQLite 3.50.4、MySQL 5.7.44、PostgreSQL 16.15；涉及 schema/数据库行为时必须按 `AGENTS.md` 重新运行真实 fresh/upgrade/idempotency 矩阵。
@@ -96,4 +102,4 @@
 - Git/部署：commit、remote/branch、push 结果、生产状态。
 - 下一步：只写仍需执行的动作。
 
-当前:文档压缩 / AGENTS.md 与 PROJECT_PROGRESS.md 已重写为精简规则和快照，业务功能未改 / 下一步校验文档、提交并推送 origin
+当前:文档压缩 / 规则和进度已压缩，B25 已提交并推送 origin/main，业务功能未改 / 下一步按压缩模板记录并实现 PageSizeOptions
