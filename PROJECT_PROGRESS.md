@@ -15,7 +15,7 @@
 
 | 项目 | 当前事实 | 边界/下一步 |
 | --- | --- | --- |
-| Git | `main` / `HEAD badc6c3f8`；`origin/main` 同 SHA，远端为 `https://github.com/Xujs98/julong-api.git` | B26 已完成本地验证，待提交并推送；只推 `origin`，不推 `upstream` |
+| Git | `main` / `HEAD 19f7da642`；`origin/main` 同 SHA，远端为 `https://github.com/Xujs98/julong-api.git` | B26 提交 `19f7da642` 已推送并核对 `origin/main`；只推 `origin`，不推 `upstream` |
 | 上游 | `upstream = https://github.com/QuantumNous/new-api.git`；主分支已包含既有整合提交 | 不重复合并，不覆盖 Julong 实现 |
 | 本地服务 | B26 使用当前源码构建的 `/tmp/julong-api-runtime/page-size-20261017/new-api`，PID `90306` 监听 `3000`；`GET /api/status` 返回 200、`success=true`、`page_size_options=[10,20,50,100]` | 本地服务保持运行；生产未部署 |
 | 既有未跟踪文件 | `controller/media_asset.go.bak`、`site-assets/`、`web/pnpm-lock.yaml`、`web/src/features/usage-logs/components/media-assets-table.tsx.bak` | 必须保留，不纳入无关提交 |
@@ -76,14 +76,14 @@
 | B17 | 网站操作与 API 在线分离 | 本地完成并推送；全量 Go、真实浏览器、生产未验收 |
 | B18/B19 | 清理 IPv4/IPv6 本机封禁 | SQLite 备份、删除、quick_check、重启和本地健康通过 |
 
-### B26：全局每页行数配置（2026-10-17，已完成本地验证，待 Git 交付）
+### B26：全局每页行数配置（2026-10-17，已完成并推送）
 
 - 用户目标：系统设置→系统信息增加 `PageSizeOptions` 字符串配置，默认 `10,20,50,100`；所有表格分页选项读取该配置。
 - 完成：后端配置校验与规范化、系统设置权限、`/api/status.page_size_options`、共享分页/账单/多 Key 联动、URL/localStorage 回退、七语言与回归测试均已实现；未新增数据库表或迁移。
 - 实际验证：`go test ./common ./model -count=1` 通过；`go test ./controller -run '^$' -count=1`、`go build ./...`、`cd relaykit && GOWORK=off go build ./...` 通过；前端受影响 Vitest 2 文件 6 项通过，`pnpm run typecheck`、目标 `oxlint`、目标 `oxfmt --check`、`pnpm run i18n:sync` 和 Rsbuild 生产构建通过。全量 controller 测试仍有既有 SQLite/fixture 失败，未作为本批通过。
 - 重启/健康：启动前备份 `/tmp/julong-api-runtime/page-size-20261017/one-api-before.db`，权限 `0600`，SQLite `PRAGMA quick_check` 返回 `ok`；PID `90306` 监听 `3000`，`GET http://127.0.0.1:3000/api/status` 为 HTTP 200、`success=true`、`page_size_options=[10,20,50,100]`、版本 `v1.0.0-julong.1`。
-- Git/部署：当前工作树待提交并推送到已核验的 `origin/main`；生产环境未部署。
-- 下一步：提交本批相关文件并推送 `origin/main`，保留四项既有未跟踪文件。
+- Git/部署：提交 `19f7da64275ce8e0b59dbd2690a95de73e43bf68` 已推送 `origin/main`，`git ls-remote` 已核对同一 SHA；生产环境未部署。
+- 下一步：继续按既有边界进行全量 Go、真实管理员浏览器、ClickHouse、Safari 和生产验收；保留四项既有未跟踪文件。
 
 ### B25：压缩开发规则与项目进度（2026-10-17，已完成并推送）
 
@@ -110,4 +110,4 @@
 - Git/部署：commit、remote/branch、push 结果、生产状态。
 - 下一步：只写仍需执行的动作。
 
-当前:PageSizeOptions / 功能、测试、构建、本地重启与健康检查完成，Git 交付待完成 / 下一步提交并推送 origin/main
+当前:PageSizeOptions / 功能、测试、构建、本地重启与健康检查完成，已提交并推送 origin/main / 下一步按既有边界继续 QA，生产未部署
